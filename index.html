@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Витан-К | Просчет мебели</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <svg class="liquid-filter" aria-hidden="true" focusable="false">
+      <filter id="liquid-glass-filter" x="-24%" y="-24%" width="148%" height="148%" color-interpolation-filters="sRGB">
+        <feImage id="liquid-displacement-source" x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="displacement_map" />
+        <feDisplacementMap in="SourceGraphic" in2="displacement_map" scale="34" xChannelSelector="R" yChannelSelector="G" result="refracted" />
+        <feColorMatrix in="refracted" type="matrix" values="1.02 0 0 0 0  0 1.02 0 0 0  0 0 1.04 0 0  0 0 0 1 0" result="base_refracted" />
+        <feOffset in="refracted" dx="-0.55" dy="0" result="red_shift" />
+        <feColorMatrix in="red_shift" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .18 0" result="red_edge" />
+        <feOffset in="refracted" dx="0.55" dy="0" result="blue_shift" />
+        <feColorMatrix in="blue_shift" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 .14 0" result="blue_edge" />
+        <feBlend in="base_refracted" in2="red_edge" mode="screen" result="with_red_edge" />
+        <feBlend in="with_red_edge" in2="blue_edge" mode="screen" result="chromatic_refracted" />
+        <feColorMatrix in="chromatic_refracted" type="saturate" values="1.12" result="saturated" />
+        <feComponentTransfer in="saturated">
+          <feFuncA type="table" tableValues="0 1" />
+        </feComponentTransfer>
+      </filter>
+    </svg>
+    <div id="app"></div>
+
+    <template id="print-template">
+      <html>
+        <head>
+          <title>Печать</title>
+          <link rel="stylesheet" href="styles.css">
+        </head>
+        <body class="print-body"></body>
+      </html>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
