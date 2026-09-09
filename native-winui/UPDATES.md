@@ -6,6 +6,6 @@ Vitan-Cut reads the newest GitHub Release on startup. The release tag must be a 
 
 1. Raise `Version`, `AssemblyVersion`, `FileVersion`, and `InformationalVersion` together in `VitanCut.WinUI.csproj`.
 2. Run `powershell -ExecutionPolicy Bypass -File native-winui/package-portable.ps1 -Version 1.0.1`.
-3. Create a public GitHub Release with tag `v1.0.1` and upload `dist/VitanCut-portable-win-x64-1.0.1.zip`.
+3. Push the matching tag, for example `git push origin v1.0.1`. GitHub Actions builds the archive and creates the public GitHub Release automatically.
 
-The application checks `https://github.com/gmmbcrimea/Vitan-K-Furniture-App/releases`. If the repository is moved, change `RepositoryOwner` and `RepositoryName` in `Services/AppUpdateService.cs` before publishing the next version.
+The application checks `https://github.com/gmmbcrimea/VitanCut/releases`. If the repository is moved, change `RepositoryOwner` and `RepositoryName` in `Services/AppUpdateService.cs` before publishing the next version.

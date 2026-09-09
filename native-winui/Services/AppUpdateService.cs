@@ -29,7 +29,7 @@ public sealed class AppUpdateService
 {
     // Keep the feed location in one place so a future repository move does not affect the UI.
     public const string RepositoryOwner = "gmmbcrimea";
-    public const string RepositoryName = "Vitan-K-Furniture-App";
+    public const string RepositoryName = "VitanCut";
     public static string ReleasesPageUrl => $"https://github.com/{RepositoryOwner}/{RepositoryName}/releases";
 
     private static readonly HttpClient Client = CreateClient();
