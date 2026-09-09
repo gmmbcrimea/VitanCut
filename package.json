@@ -1,8 +1,58 @@
 {
-  "name": "vitan-furniture-calculator",
-  "version": "0.1.0",
+  "name": "vitan-cut",
+  "version": "0.2.0-test",
+  "description": "Vitan-Cut furniture detailing and cutting app",
   "private": true,
+  "main": "electron-main.js",
+  "author": "Mikey Snow",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "desktop": "electron .",
+    "pack:win": "electron-builder --win --dir",
+    "dist:win": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^32.3.3",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "ru.mikeysnow.vitancut",
+    "productName": "Vitan-Cut",
+    "artifactName": "Vitan-Cut-Setup-${version}.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.html",
+      "app.js",
+      "styles.css",
+      "server.js",
+      "desktop-database.js",
+      "electron-main.js",
+      "preload.js",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/app-icon.ico",
+      "executableName": "Vitan-Cut"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Vitan-Cut",
+      "installerIcon": "assets/app-icon.ico",
+      "uninstallerIcon": "assets/app-icon.ico",
+      "installerLanguages": [
+        "ru_RU"
+      ],
+      "language": "1049",
+      "runAfterFinish": true
+    }
   }
 }

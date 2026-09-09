@@ -1,0 +1,517 @@
+<Window
+    x:Class="VitanCut.WinUI.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:VitanCut.WinUI.Models"
+    Title="Расчёт мебели">
+
+  <Window.SystemBackdrop>
+    <DesktopAcrylicBackdrop />
+  </Window.SystemBackdrop>
+
+  <Grid x:Name="Root" Background="{StaticResource GlassChromeBrush}">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="44" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="104" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+
+    <Grid x:Name="AppTitleBar" Grid.ColumnSpan="2" Background="Transparent">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="24" />
+        <ColumnDefinition Width="260" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><TextBlock Text="VITAN-CUT" FontWeight="Bold"/><TextBlock Text="Расчёт мебели" Opacity="0.65"/></StackPanel>
+      <Grid x:Name="TitleDragRegion" Grid.Column="2" />
+    </Grid>
+
+    <Border Grid.Row="1" Background="Transparent">
+      <Grid Padding="8,12" RowSpacing="24">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Image Width="80" Height="64" Source="Assets/logo.png" Stretch="Uniform" />
+        <StackPanel Grid.Row="1" Spacing="10">
+          <Button x:Name="ProjectsTabButton" Content="Проекты" Tag="projects" Click="TopTabClick" Style="{StaticResource TopNavButtonStyle}" />
+          <Button x:Name="CustomersTabButton" Content="Заказчики" Tag="customers" Click="TopTabClick" Style="{StaticResource TopNavButtonStyle}" />
+          <Button x:Name="MaterialsTabButton" Content="Материалы" Tag="materials" Click="TopTabClick" Style="{StaticResource TopNavButtonStyle}" />
+          <Button x:Name="CatalogTabButton" Content="Каталог" Tag="catalog" Click="TopTabClick" Style="{StaticResource TopNavButtonStyle}" />
+        </StackPanel>
+
+        <Button x:Name="SettingsTabButton"
+                Grid.Row="2"
+                Tag="settings"
+                Click="TopTabClick"
+                Style="{StaticResource SettingsTopNavButtonStyle}"
+                ToolTipService.ToolTip="Настройки">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <SymbolIcon Symbol="Setting" />
+            <TextBlock Text="Настройки" />
+          </StackPanel>
+        </Button>
+      </Grid>
+    </Border>
+
+    <Grid x:Name="ContentHost" Grid.Row="1" Grid.Column="1" Padding="16,8,16,16">
+      <Grid x:Name="ProjectsPage" ColumnSpacing="20">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="340" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border x:Name="ProjectListPane" Style="{StaticResource SidebarSurfaceStyle}" Shadow="{StaticResource SurfaceShadow}" Translation="0,0,12">
+          <Grid Padding="16" RowSpacing="12">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="Проекты" Style="{StaticResource SectionTitleTextBlockStyle}" />
+
+            <Grid Grid.Row="1" ColumnSpacing="10">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Сортировка" VerticalAlignment="Center" Style="{StaticResource MutedTextBlockStyle}" />
+              <ComboBox x:Name="SortBox"
+                        Grid.Column="1"
+                        HorizontalAlignment="Stretch"
+                        SelectionChanged="SortChanged"
+                        SelectedIndex="1">
+                <ComboBoxItem Content="Дата создания" Tag="created" />
+                <ComboBoxItem Content="Дата изменения" Tag="updated" />
+                <ComboBoxItem Content="Имя" Tag="name" />
+                <ComboBoxItem Content="Заказчик" Tag="counterparty" />
+              </ComboBox>
+            </Grid>
+
+            <Grid Grid.Row="2">
+              <Border Style="{StaticResource ListSurfaceStyle}">
+                <ListView x:Name="ProjectsList"
+                          SelectionMode="Single"
+                          SelectionChanged="ProjectsSelectionChanged"
+                          RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
+                  <ListView.ContextFlyout>
+                    <MenuFlyout>
+                      <MenuFlyoutItem Text="Добавить" Click="AddProjectClick" />
+                      <MenuFlyoutItem Text="Изменить" Click="EditProjectClick" />
+                      <MenuFlyoutItem Text="Удалить" Click="DeleteProjectClick" />
+                    </MenuFlyout>
+                  </ListView.ContextFlyout>
+                  <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="models:Project">
+                      <Grid Padding="12" RowSpacing="4">
+                        <Grid.RowDefinitions>
+                          <RowDefinition Height="Auto" />
+                          <RowDefinition Height="Auto" />
+                          <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Row="1" Text="{x:Bind Counterparty}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Row="2" Text="{x:Bind Address}" Opacity="0.56" TextTrimming="CharacterEllipsis" />
+                      </Grid>
+                    </DataTemplate>
+                  </ListView.ItemTemplate>
+                </ListView>
+              </Border>
+
+              <StackPanel x:Name="NoProjectsPanel"
+                          Visibility="Collapsed"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Width="240"
+                          Spacing="10">
+                <TextBlock Text="Проектов пока нет" Style="{StaticResource CardTitleTextBlockStyle}" TextAlignment="Center" />
+                <TextBlock Text="Создайте первый проект для расчета." Style="{StaticResource MutedTextBlockStyle}" TextAlignment="Center" />
+              </StackPanel>
+            </Grid>
+
+            <Button Grid.Row="3"
+                    Content="Создать проект"
+                    Click="AddProjectClick"
+                    Style="{StaticResource AccentButtonStyle}"
+                    HorizontalAlignment="Stretch" />
+          </Grid>
+        </Border>
+
+        <Border x:Name="ProjectDetailPane" Grid.Column="1" Style="{StaticResource PaneSurfaceStyle}">
+          <Grid Padding="28">
+            <StackPanel x:Name="EmptyStatePanel"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Width="440"
+                        Spacing="12">
+              <TextBlock Text="Выберите проект" Style="{StaticResource SectionTitleTextBlockStyle}" TextAlignment="Center" />
+              <TextBlock Text="Справа появятся данные проекта, итоговые значения, изделия и добавленная зарплата."
+                         TextAlignment="Center"
+                         Style="{StaticResource MutedTextBlockStyle}" />
+            </StackPanel>
+
+            <ScrollViewer x:Name="ProjectPanel" Visibility="Collapsed">
+              <StackPanel Spacing="24">
+                <Button x:Name="BackToProjectsButton"
+                        Content="Назад к проектам"
+                        Click="BackToProjectsClick"
+                        HorizontalAlignment="Left"
+                        Visibility="Collapsed" />
+
+                <Grid ColumnSpacing="16" RowSpacing="16">
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+
+                  <StackPanel Spacing="4">
+                    <TextBlock x:Name="ProjectTitleText" FontSize="30" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ProjectCustomerText" FontSize="15" Opacity="0.82" />
+                    <TextBlock x:Name="ProjectAddressText" FontSize="15" Opacity="0.72" TextWrapping="Wrap" />
+                  </StackPanel>
+
+                  <StackPanel Grid.Row="1" Grid.ColumnSpan="2"
+                              Orientation="Horizontal"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Top"
+                              Spacing="8">
+                    <Button Content="Создать деталировку"
+                            Click="CreateDetailingClick" />
+                    <Button Content="Создать карту кроя"
+                            Click="CreateCutMapClick"
+                            Style="{StaticResource AccentButtonStyle}" />
+                  </StackPanel>
+                </Grid>
+
+                <Grid x:Name="MetricsGrid" ColumnSpacing="12" RowSpacing="12">
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <Border x:Name="MetricAreaCard" Style="{StaticResource MetricSurfaceStyle}" Padding="14" BorderBrush="{StaticResource MetricAreaBrush}" BorderThickness="0,0,3,0">
+                    <StackPanel>
+                      <Grid ColumnSpacing="8" MinHeight="32"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><SymbolIcon Symbol="Crop" Foreground="{StaticResource MetricAreaBrush}"/><TextBlock Grid.Column="1" Text="Общая квадратура" Style="{StaticResource MutedTextBlockStyle}" VerticalAlignment="Center" /></Grid>
+                      <TextBlock x:Name="MetricAreaText" FontSize="26" FontWeight="SemiBold" />
+                      <TextBlock Text="м²" Style="{StaticResource MutedTextBlockStyle}" />
+                    </StackPanel>
+                  </Border>
+                  <Border x:Name="MetricMaterialsCard" Grid.Column="1" Style="{StaticResource MetricSurfaceStyle}" Padding="14" BorderBrush="{StaticResource MetricMaterialBrush}" BorderThickness="0,0,3,0">
+                    <StackPanel>
+                      <Grid ColumnSpacing="8" MinHeight="32"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><SymbolIcon Symbol="Library" Foreground="{StaticResource MetricMaterialBrush}"/><TextBlock Grid.Column="1" Text="Себестоимость материалов" Style="{StaticResource MutedTextBlockStyle}" VerticalAlignment="Center" /></Grid>
+                      <TextBlock x:Name="MetricMaterialsText" FontSize="26" FontWeight="SemiBold" />
+                      <TextBlock Text="руб." Style="{StaticResource MutedTextBlockStyle}" />
+                    </StackPanel>
+                  </Border>
+                  <Border x:Name="MetricPayrollCard" Grid.Column="2" Style="{StaticResource MetricSurfaceStyle}" Padding="14" BorderBrush="{StaticResource MetricPayrollBrush}" BorderThickness="0,0,3,0">
+                    <StackPanel>
+                      <Grid ColumnSpacing="8" MinHeight="32"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><SymbolIcon Symbol="Contact" Foreground="{StaticResource MetricPayrollBrush}"/><TextBlock Grid.Column="1" Text="Сумма ЗП" Style="{StaticResource MutedTextBlockStyle}" VerticalAlignment="Center" /></Grid>
+                      <TextBlock x:Name="MetricPayrollText" FontSize="26" FontWeight="SemiBold" />
+                      <TextBlock Text="руб." Style="{StaticResource MutedTextBlockStyle}" />
+                    </StackPanel>
+                  </Border>
+                  <Border x:Name="MetricTotalCard" Grid.Column="3" Style="{StaticResource MetricSurfaceStyle}" Padding="14" Background="{StaticResource AccentSurfaceBrush}" BorderBrush="{StaticResource AccentEdgeBrush}" BorderThickness="1">
+                    <StackPanel>
+                      <Grid ColumnSpacing="8" MinHeight="32"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><SymbolIcon Symbol="Calculator" Foreground="{StaticResource AppOnAccentBrush}"/><TextBlock Grid.Column="1" Text="Общая стоимость" Foreground="{StaticResource AppOnAccentBrush}" TextWrapping="Wrap" VerticalAlignment="Center" /></Grid>
+                      <TextBlock x:Name="MetricTotalText" Foreground="{StaticResource AppOnAccentBrush}" FontSize="26" FontWeight="SemiBold" />
+                      <TextBlock Text="руб." Foreground="{StaticResource AppOnAccentBrush}" />
+                    </StackPanel>
+                  </Border>
+                </Grid>
+
+                <Grid RowSpacing="10">
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <TextBlock Text="Изделия" Style="{StaticResource SectionTitleTextBlockStyle}" />
+                  <Grid Grid.Row="1" MinHeight="150">
+                    <Border Style="{StaticResource ListSurfaceStyle}">
+                      <ListView x:Name="ProductsList"
+                                MaxHeight="220"
+                                DoubleTapped="ProductsListDoubleTapped"
+                                RightTapped="ListViewRightTappedSelectItem"
+                                IsRightTapEnabled="True"
+                                ScrollViewer.VerticalScrollMode="Enabled"
+                                ScrollViewer.VerticalScrollBarVisibility="Hidden">
+                        <ListView.ContextFlyout>
+                          <MenuFlyout>
+                            <MenuFlyoutItem Text="Добавить" Click="AddProductClick" />
+                            <MenuFlyoutItem Text="Изменить" Click="EditProductClick" />
+                            <MenuFlyoutItem Text="Удалить" Click="DeleteProductClick" />
+                          </MenuFlyout>
+                        </ListView.ContextFlyout>
+                        <ListView.ItemTemplate>
+                          <DataTemplate x:DataType="models:Product">
+                            <Grid Padding="12,8" ColumnSpacing="10">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                              </Grid.ColumnDefinitions>
+                              <Image Width="56" Height="56" Stretch="Uniform" Tag="{x:Bind Image}" Loaded="ProductThumbnailLoaded" />
+                              <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{x:Bind SizeText}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+                              </StackPanel>
+                            </Grid>
+                          </DataTemplate>
+                        </ListView.ItemTemplate>
+                      </ListView>
+                    </Border>
+                    <StackPanel x:Name="NoProductsPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                      <TextBlock Text="Изделий пока нет" Style="{StaticResource CardTitleTextBlockStyle}" TextAlignment="Center" />
+                      <TextBlock Text="Добавьте изделие, чтобы начать деталировку." Style="{StaticResource MutedTextBlockStyle}" TextAlignment="Center" />
+                    </StackPanel>
+                  </Grid>
+                  <Button Grid.Row="2" Content="Добавить изделие" Click="AddProductClick" HorizontalAlignment="Left" />
+                </Grid>
+
+                <Grid RowSpacing="10">
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <TextBlock Text="ЗП" Style="{StaticResource SectionTitleTextBlockStyle}" />
+                  <Grid Grid.Row="1" MinHeight="130">
+                    <Border Style="{StaticResource ListSurfaceStyle}">
+                      <ListView x:Name="PayrollsList"
+                                MaxHeight="180"
+                                RightTapped="ListViewRightTappedSelectItem"
+                                ScrollViewer.VerticalScrollMode="Enabled"
+                                ScrollViewer.VerticalScrollBarVisibility="Hidden">
+                        <ListView.ContextFlyout>
+                          <MenuFlyout>
+                            <MenuFlyoutItem Text="Добавить" Click="AddPayrollClick" />
+                            <MenuFlyoutItem Text="Изменить" Click="EditPayrollClick" />
+                            <MenuFlyoutItem Text="Удалить" Click="DeletePayrollClick" />
+                          </MenuFlyout>
+                        </ListView.ContextFlyout>
+                      </ListView>
+                    </Border>
+                    <StackPanel x:Name="NoPayrollsPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                      <TextBlock Text="ЗП пока не добавлена" Style="{StaticResource CardTitleTextBlockStyle}" TextAlignment="Center" />
+                      <TextBlock Text="Добавьте строку зарплаты для проекта." Style="{StaticResource MutedTextBlockStyle}" TextAlignment="Center" />
+                    </StackPanel>
+                  </Grid>
+                  <Button Grid.Row="2" Content="Добавить ЗП" Click="AddPayrollClick" HorizontalAlignment="Left" />
+                </Grid>
+              </StackPanel>
+            </ScrollViewer>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <Grid x:Name="CustomersPage" Visibility="Collapsed" ColumnSpacing="20">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="280" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Border Style="{StaticResource PaneSurfaceStyle}">
+          <Grid Padding="16" RowSpacing="12">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="Заказчики" Style="{StaticResource SectionTitleTextBlockStyle}" />
+            <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
+              <ListView x:Name="CustomersList" SelectionChanged="CustomersSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
+                <ListView.ContextFlyout>
+                  <MenuFlyout>
+                    <MenuFlyoutItem Text="Добавить" Click="AddCustomerClick" />
+                    <MenuFlyoutItem Text="Изменить" Click="EditCustomerClick" />
+                    <MenuFlyoutItem Text="Удалить" Click="DeleteCustomerClick" />
+                  </MenuFlyout>
+                </ListView.ContextFlyout>
+              </ListView>
+            </Border>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+              <Button Content="Добавить" Click="AddCustomerClick" Style="{StaticResource AccentButtonStyle}" />
+              <Button Content="Удалить" Click="DeleteCustomerClick" />
+            </StackPanel>
+          </Grid>
+        </Border>
+        <Border Grid.Column="1" Style="{StaticResource PaneSurfaceStyle}">
+          <Grid Padding="20" RowSpacing="12">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="CustomerProjectsTitle" Text="Проекты заказчика" Style="{StaticResource SectionTitleTextBlockStyle}" />
+              <TextBlock x:Name="CustomerProjectsSubtitle" Text="Выберите заказчика слева." Style="{StaticResource MutedTextBlockStyle}" />
+            </StackPanel>
+            <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
+              <ListView x:Name="CustomerProjectsList"
+                        DoubleTapped="CustomerProjectsDoubleTapped"
+                        RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
+                <ListView.ContextFlyout>
+                  <MenuFlyout>
+                    <MenuFlyoutItem Text="Добавить" Click="AddProjectClick" />
+                    <MenuFlyoutItem Text="Изменить" Click="OpenCustomerProjectClick" />
+                    <MenuFlyoutItem Text="Удалить" Click="DeleteProjectClick" />
+                  </MenuFlyout>
+                </ListView.ContextFlyout>
+                <ListView.ItemTemplate>
+                  <DataTemplate x:DataType="models:CustomerProductItem">
+                    <Grid Padding="12" RowSpacing="4">
+                      <Grid.RowDefinitions>
+                          <RowDefinition Height="Auto" />
+                          <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                      </Grid.RowDefinitions>
+                      <TextBlock Text="{x:Bind ProductName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Row="1" Text="{x:Bind ProjectName}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Row="2" Text="{x:Bind SizeText}" Opacity="0.56" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                  </DataTemplate>
+                </ListView.ItemTemplate>
+              </ListView>
+            </Border>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <Grid x:Name="MaterialsPage" Visibility="Collapsed" ColumnSpacing="20">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="200" />
+          <ColumnDefinition Width="280" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Border Style="{StaticResource PaneSurfaceStyle}">
+          <Grid Padding="16" RowSpacing="12">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="Категории" Style="{StaticResource SectionTitleTextBlockStyle}" />
+            <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
+              <ListView x:Name="MaterialCategoriesList" SelectionChanged="MaterialCategoriesSelectionChanged" />
+            </Border>
+          </Grid>
+        </Border>
+        <Border Grid.Column="1" Style="{StaticResource PaneSurfaceStyle}">
+          <Grid Padding="16" RowSpacing="12">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="Материалы" Style="{StaticResource SectionTitleTextBlockStyle}" />
+            <Grid Grid.Row="1">
+              <Border Style="{StaticResource ListSurfaceStyle}">
+                <ListView x:Name="MaterialsList" SelectionChanged="MaterialsSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
+                <ListView.ContextFlyout>
+                  <MenuFlyout>
+                    <MenuFlyoutItem Text="Добавить" Click="AddMaterialClick" />
+                    <MenuFlyoutItem Text="Изменить" Click="SaveMaterialClick" />
+                    <MenuFlyoutItem Text="Удалить" Click="DeleteMaterialClick" />
+                  </MenuFlyout>
+                </ListView.ContextFlyout>
+              </ListView>
+            </Border>
+            <StackPanel x:Name="MaterialListEmptyPanel"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Width="240"
+                        Spacing="8">
+              <TextBlock Text="Материалов пока нет" Style="{StaticResource CardTitleTextBlockStyle}" TextAlignment="Center" />
+              <TextBlock Text="Добавьте материал в выбранную категорию." Style="{StaticResource MutedTextBlockStyle}" TextAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+          </Grid>
+          <Button Grid.Row="2"
+                  Content="Добавить материал"
+                  Click="AddMaterialClick"
+                  Style="{StaticResource AccentButtonStyle}"
+                  HorizontalAlignment="Stretch" />
+          </Grid>
+        </Border>
+        <Border Grid.Column="2" Style="{StaticResource PaneSurfaceStyle}">
+          <Grid Padding="20">
+            <StackPanel x:Name="MaterialParametersEmptyPanel"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Width="320"
+                        Spacing="10">
+              <TextBlock Text="Выберите материал" Style="{StaticResource SectionTitleTextBlockStyle}" TextAlignment="Center" />
+              <TextBlock Text="Здесь появятся параметры выбранного материала."
+                         Style="{StaticResource MutedTextBlockStyle}"
+                         TextAlignment="Center"
+                         TextWrapping="Wrap" />
+            </StackPanel>
+          <StackPanel x:Name="MaterialParametersPanel" Spacing="12" MaxWidth="560" Visibility="Collapsed">
+            <CommandBar DefaultLabelPosition="Right" Background="Transparent">
+              <AppBarButton Icon="Save" Label="Сохранить" Click="SaveMaterialClick" />
+              <AppBarButton Icon="Delete" Label="Удалить" Click="DeleteMaterialClick" />
+            </CommandBar>
+            <TextBox x:Name="MaterialTypeBox" Header="Тип" Visibility="Collapsed" />
+            <TextBox x:Name="MaterialNameBox" Header="Название" />
+            <ComboBox x:Name="MaterialUnitBox" Header="Единица">
+              <ComboBoxItem Content="м²" Tag="m2" />
+              <ComboBoxItem Content="пог. м" Tag="lm" />
+              <ComboBoxItem Content="шт." Tag="pc" />
+            </ComboBox>
+            <NumberBox x:Name="MaterialCostBox" Header="Цена за единицу" />
+            <Grid ColumnSpacing="12">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <NumberBox x:Name="MaterialSheetLengthBox" Header="Длина листа" />
+              <NumberBox x:Name="MaterialSheetWidthBox" Grid.Column="1" Header="Ширина листа" />
+            </Grid>
+            <CheckBox x:Name="MaterialTextureBox" Content="Есть направление текстуры" />
+          </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <Grid x:Name="CatalogPage" Visibility="Collapsed">
+        <Border Style="{StaticResource PaneSurfaceStyle}">
+          <StackPanel Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center" Width="480">
+            <TextBlock Text="Каталог изделий" Style="{StaticResource SectionTitleTextBlockStyle}" TextAlignment="Center" />
+            <TextBlock Text="Каталог будет перенесен из Web-версии следующим проходом."
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"
+                       Style="{StaticResource MutedTextBlockStyle}" />
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Grid x:Name="SettingsPage" Visibility="Collapsed">
+        <Border Style="{StaticResource PaneSurfaceStyle}">
+          <ScrollViewer Padding="24">
+            <StackPanel Spacing="14">
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="Настройки" FontSize="30" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="Сохранить" Style="{StaticResource AccentButtonStyle}" MinWidth="164" Click="SettingsSaveClick" />
+              </Grid>
+              <Grid x:Name="SettingsColumnsHost" ColumnSpacing="14"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="0"/></Grid.RowDefinitions><StackPanel Grid.Column="0" Spacing="14"><StackPanel x:Name="AppearancePanel" Spacing="12">
+                <Border Style="{StaticResource SettingsSectionStyle}" Padding="22"><Grid ColumnSpacing="48"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Spacing="12"><TextBlock Text="Настройки вида" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Тема приложения"/><ComboBox x:Name="ThemeBox" SelectionChanged="ThemeChanged" SelectedIndex="-1"><ComboBoxItem Content="Системная" Tag="auto"/><ComboBoxItem Content="Светлая" Tag="light"/><ComboBoxItem Content="Тёмная" Tag="dark"/></ComboBox><TextBlock Text="Акцентный цвет"/><ComboBox x:Name="AccentBox" SelectionChanged="AccentChanged" /></StackPanel><StackPanel Grid.Column="1" Spacing="18" VerticalAlignment="Center"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Компактный режим" FontWeight="SemiBold"/><TextBlock Text="Уменьшает отступы и плотность элементов" Style="{StaticResource MutedTextBlockStyle}"/></StackPanel><ToggleSwitch x:Name="CompactModeSwitch" Grid.Column="1" Toggled="CompactModeToggled"/></Grid><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Анимация интерфейса" FontWeight="SemiBold"/><TextBlock Text="Плавное открытие экранов и панелей" Style="{StaticResource MutedTextBlockStyle}"/></StackPanel><ToggleSwitch x:Name="AnimationsSwitch" Grid.Column="1" Toggled="AnimationsToggled"/></Grid><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Подсветка под курсором" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/><ToggleSwitch x:Name="CursorRevealSwitch" Grid.Column="1" Toggled="CursorRevealToggled"/></Grid></StackPanel></Grid></Border>
+              </StackPanel>
+              <StackPanel x:Name="DatabasePanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="22"><Grid ColumnSpacing="20"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Spacing="6"><TextBlock Text="База данных" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Импорт и экспорт локальной базы в формате JSON" Style="{StaticResource MutedTextBlockStyle}"/></StackPanel><Button Grid.Column="1" Content="Импорт базы" Click="ImportDatabaseClick" MinWidth="180"/><Button Grid.Column="2" Content="Экспорт базы" Click="ExportDatabaseClick" MinWidth="180"/></Grid></Border><Border Background="#181818" BorderBrush="#303030" BorderThickness="1" CornerRadius="12" Padding="24"><StackPanel Spacing="18"><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Border Width="36" Height="36" Background="#3ECF8E" CornerRadius="9"><TextBlock Text="S" Foreground="#101010" FontWeight="SemiBold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel Grid.Column="1" Spacing="2"><TextBlock Text="supabase" Foreground="#F5F5F5" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="Облачная база Cutlist" Foreground="#AFAFAF"/></StackPanel></Grid><TextBlock Text="После входа приложение само подключает общее пространство Cutlist. Конфликт версий не перезаписывает данные." Foreground="#B8B8B8" TextWrapping="Wrap"/><Grid ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="CloudEmailBox" Header="Email" PlaceholderText="name@company.ru" InputScope="EmailSmtpAddress"/><PasswordBox x:Name="CloudPasswordBox" Grid.Column="1" Header="Пароль" PasswordRevealMode="Peek"/><Button Grid.Column="2" Content="Войти" Background="#3ECF8E" Foreground="#101010" VerticalAlignment="Bottom" Click="CloudSignInClick"/></Grid><Border Background="#242424" BorderBrush="#3ECF8E" BorderThickness="1" CornerRadius="8" Padding="12,9"><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="Пространство" Foreground="#AFAFAF"/><TextBlock Text="Cutlist" Foreground="#F5F5F5" FontWeight="SemiBold"/></StackPanel></Border><StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Загрузить из облака" Click="DownloadCloudDatabaseClick"/><Button Content="Опубликовать изменения" Background="#3ECF8E" Foreground="#101010" Click="PublishCloudDatabaseClick"/></StackPanel><TextBlock x:Name="CloudSyncStatusText" Foreground="#AFAFAF" TextWrapping="Wrap"/></StackPanel></Border><InfoBar x:Name="DatabaseInfoBar" IsOpen="False" IsClosable="True" /></StackPanel></StackPanel><StackPanel x:Name="SettingsRightColumn" Grid.Column="1" Spacing="14"><StackPanel x:Name="CuttingPanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="22"><Grid ColumnSpacing="32"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Spacing="8"><TextBlock Text="Настройки раскроя" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Формат экспорта раскроя"/><ComboBox x:Name="CutExportFormatBox" SelectedIndex="0" SelectionChanged="CutExportFormatChanged"><ComboBoxItem Content="PDF — Документ (.pdf)" Tag="pdf"/><ComboBoxItem Content="Excel — Таблица (.xlsx)" Tag="xlsx"/></ComboBox><StackPanel Orientation="Horizontal" Spacing="12"><NumberBox x:Name="CutTrimBox" Header="Подрезка, мм" Width="150" Minimum="0" ValueChanged="CutLayoutOptionsChanged"/><NumberBox x:Name="CutGapBox" Header="Зазор, мм" Width="150" Minimum="0" ValueChanged="CutLayoutOptionsChanged"/></StackPanel></StackPanel><StackPanel Grid.Column="1" Spacing="8"><TextBlock Text="Цвета раскроя"/><StackPanel Orientation="Horizontal" Spacing="10"><Button Tag="blue" Click="CutColorClick" Width="42" Height="42" Background="#7FBBE8"/><Button Tag="green" Click="CutColorClick" Width="42" Height="42" Background="#B6D983"/><Button Tag="yellow" Click="CutColorClick" Width="42" Height="42" Background="#FFD166"/><Button Tag="orange" Click="CutColorClick" Width="42" Height="42" Background="#EF8354"/><Button Tag="purple" Click="CutColorClick" Width="42" Height="42" Background="#B487E8"/></StackPanel></StackPanel></Grid></Border></StackPanel><StackPanel x:Name="DetailingPanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="22"><Grid ColumnSpacing="32"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Spacing="8"><TextBlock Text="Настройки деталировки" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Формат экспорта деталировки"/><ComboBox x:Name="DetailingExportFormatBox" SelectedIndex="0" SelectionChanged="DetailingExportFormatChanged"><ComboBoxItem Content="PDF — Документ (.pdf)" Tag="pdf"/><ComboBoxItem Content="Excel — Таблица (.xlsx)" Tag="xlsx"/></ComboBox></StackPanel><Grid Grid.Column="1"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Включать изображения" FontWeight="SemiBold"/><TextBlock Text="Добавлять изображения изделий в деталировку" Style="{StaticResource MutedTextBlockStyle}"/></StackPanel><ToggleSwitch x:Name="DetailingImagesSwitch" Grid.Column="1" Toggled="DetailingImagesToggled" /></Grid></Grid></Border></StackPanel></StackPanel></Grid>
+            </StackPanel>
+          </ScrollViewer>
+        </Border>
+      </Grid>
+    </Grid>
+    <InfoBar x:Name="AppInfoBar" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Top" Width="360" Margin="0,18,24,0" IsClosable="True" IsOpen="False" Severity="Success" Canvas.ZIndex="1000" />
+  </Grid>
+</Window>

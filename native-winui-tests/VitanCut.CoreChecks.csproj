@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../native-winui/Models/Domain.cs" Link="Models/Domain.cs" />
+    <Compile Include="../native-winui/Models/AccentPalette.cs" Link="Models/AccentPalette.cs" />
+    <Compile Include="../native-winui/Services/AppState.cs" Link="Services/AppState.cs" />
+    <Compile Include="../native-winui/Services/AppUpdateService.cs" Link="Services/AppUpdateService.cs" />
+    <Compile Include="../native-winui/Services/CloudSyncService.cs" Link="Services/CloudSyncService.cs" />
+    <Compile Include="../native-winui/Services/CloudEntityMerge.cs" Link="Services/CloudEntityMerge.cs" />
+    <Compile Include="../native-winui/Services/Calculator.cs" Link="Services/Calculator.cs" />
+    <Compile Include="../native-winui/Services/FormulaEvaluator.cs" Link="Services/FormulaEvaluator.cs" />
+    <Compile Include="../native-winui/Services/FormulaText.cs" Link="Services/FormulaText.cs" />
+    <Compile Include="../native-winui/Services/CuttingService.cs" Link="Services/CuttingService.cs" />
+    <Compile Include="../native-winui/Services/CatalogService.cs" Link="Services/CatalogService.cs" />
+    <Compile Include="../native-winui/Services/MaterialService.cs" Link="Services/MaterialService.cs" />
+    <Compile Include="../native-winui/Services/ProjectService.cs" Link="Services/ProjectService.cs" />
+    <Compile Include="../native-winui/Services/ReportDocumentService.cs" Link="Services/ReportDocumentService.cs" />
+    <PackageReference Include="ClosedXML" Version="0.102.3" />
+    <PackageReference Include="RectangleBinPack.CSharp" Version="1.0.4" />
+    <Compile Include="../native-winui/Services/CutOptimization.cs" Link="Services/CutOptimization.cs" />
+    <Compile Include="../native-winui/Services/CutMetrics.cs" Link="Services/CutMetrics.cs" />
+    <Compile Include="../native-winui/Services/CutPlanService.cs" Link="Services/CutPlanService.cs" />
+    <Compile Include="../native-winui/Services/CutEditing.cs" Link="Services/CutEditing.cs" />
+    <PackageReference Include="QuestPDF" Version="2024.7.1" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../native-winui/Services/ProductImageData.cs" Link="Services/ProductImageData.cs" />
+    <Compile Include="../native-winui/Services/FormulaEditing.cs" Link="Services/FormulaEditing.cs" />
+    <Compile Include="../native-winui/Services/FormulaPresentation.cs" Link="Services/FormulaPresentation.cs" />
+    <Compile Include="../native-winui/Services/ProductValidation.cs" Link="Services/ProductValidation.cs" />
+    <Compile Include="../native-winui/Services/CutColors.cs" Link="Services/CutColors.cs" />
+    <Compile Include="../native-winui/Services/DetailTableLayout.cs" Link="Services/DetailTableLayout.cs" />
+    <Compile Include="../native-winui/Services/DetailRotation.cs" Link="Services/DetailRotation.cs" />
+  </ItemGroup>
+</Project>
