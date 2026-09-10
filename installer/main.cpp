@@ -30,6 +30,16 @@ HBRUSH inputBrush = CreateSolidBrush(RGB(48, 60, 70));
 
 struct InstallResult { bool success; std::wstring message; };
 
+class ComApartment
+{
+public:
+    ComApartment() : _result(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) { }
+    ~ComApartment() { if (SUCCEEDED(_result)) CoUninitialize(); }
+    bool IsReady() const { return SUCCEEDED(_result) || _result == RPC_E_CHANGED_MODE; }
+private:
+    HRESULT _result;
+};
+
 std::wstring GetText(HWND control)
 {
     const int length = GetWindowTextLengthW(control);
@@ -201,6 +211,8 @@ void TryPinToTaskbar(const fs::path& executable)
 
 InstallResult Install(HWND window, const fs::path& target, bool desktop, bool startMenu, bool taskbar)
 {
+    ComApartment com;
+    if (!com.IsReady()) return { false, L"Не удалось подготовить Windows для создания ярлыков." };
     const auto staging = fs::temp_directory_path() / (L"VitanCut-setup-" + std::to_wstring(GetTickCount64()));
     try
     {
