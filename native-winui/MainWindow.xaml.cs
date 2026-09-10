@@ -278,15 +278,20 @@ public sealed partial class MainWindow : Window
 
     private void ArrangeSettingsColumns()
     {
-        if (AppearancePanel.Parent is not Panel leftColumn) return;
+        var leftColumn = SettingsColumnsHost.Children.OfType<StackPanel>()
+            .FirstOrDefault(panel => !ReferenceEquals(panel, SettingsRightColumn) && Grid.GetColumn(panel) == 0);
+        if (leftColumn is null) return;
 
-        // Parent assignment is finalized only after XAML is loaded. Remove every movable
-        // section first, then insert the intended column order deterministically.
-        if (DatabasePanel.Parent is Panel databaseParent) databaseParent.Children.Remove(DatabasePanel);
-        if (CuttingPanel.Parent is Panel cuttingParent) cuttingParent.Children.Remove(CuttingPanel);
-        if (DetailingPanel.Parent is Panel detailingParent) detailingParent.Children.Remove(DetailingPanel);
+        // Remove from both known columns before inserting. This works both during initial
+        // XAML construction and after a responsive layout pass.
+        leftColumn.Children.Remove(DatabasePanel);
+        leftColumn.Children.Remove(CuttingPanel);
+        leftColumn.Children.Remove(DetailingPanel);
+        SettingsRightColumn.Children.Remove(DatabasePanel);
+        SettingsRightColumn.Children.Remove(CuttingPanel);
+        SettingsRightColumn.Children.Remove(DetailingPanel);
 
-        var nextToAppearance = leftColumn.Children.IndexOf(AppearancePanel) + 1;
+        var nextToAppearance = Math.Max(0, leftColumn.Children.IndexOf(AppearancePanel) + 1);
         leftColumn.Children.Insert(nextToAppearance, CuttingPanel);
         leftColumn.Children.Insert(nextToAppearance + 1, DetailingPanel);
         SettingsRightColumn.Children.Insert(0, DatabasePanel);
@@ -903,6 +908,16 @@ public sealed partial class MainWindow : Window
             RefreshCustomers();
             RefreshProjects(select: null, allowAutoSelect: false);
             RefreshMaterials();
+
+            if (App.Cloud.IsSignedIn)
+            {
+                var cloudResult = await App.Cloud.PublishImportedDatabaseAsync();
+                if (cloudResult.Succeeded)
+                    result = result with { Title = "База импортирована и опубликована", Message = "Импортированная база сохранена локально и в Supabase." };
+                else
+                    result = result with { Title = "База импортирована локально", Message = $"Не удалось опубликовать её в Supabase: {cloudResult.Message}" };
+                RefreshCloudSettings();
+            }
         }
 
         ShowDatabaseMessage(result);
@@ -985,7 +1000,13 @@ public sealed partial class MainWindow : Window
 
     private async void CloudSignInClick(object sender, RoutedEventArgs e)
     {
-        ShowCloudResult(await App.Cloud.SignInAsync(CloudEmailBox.Text, CloudPasswordBox.Password));
+        var result = await App.Cloud.SignInAsync(CloudEmailBox.Text, CloudPasswordBox.Password);
+        if (result.Succeeded && App.Cloud.ShouldDownloadInitialSnapshot)
+        {
+            result = await App.Cloud.DownloadInitialSnapshotAsync();
+            if (result.Succeeded) RefreshAfterCloudDatabaseLoad();
+        }
+        ShowCloudResult(result);
         RefreshCloudSettings();
         if (App.Cloud.IsSignedIn) AppInfoBar.IsOpen = false;
     }
@@ -994,7 +1015,17 @@ public sealed partial class MainWindow : Window
     {
         var result = await App.Cloud.RestoreSessionAsync();
         RefreshCloudSettings();
-        if (result.Succeeded) return;
+        if (result.Succeeded)
+        {
+            if (!App.Cloud.ShouldDownloadInitialSnapshot) return;
+            result = await App.Cloud.DownloadInitialSnapshotAsync();
+            if (result.Succeeded)
+            {
+                RefreshAfterCloudDatabaseLoad();
+                RefreshCloudSettings();
+                return;
+            }
+        }
 
         var settingsButton = new Button { Content = "Настройки" };
         settingsButton.Click += (_, _) => ShowTab("settings");

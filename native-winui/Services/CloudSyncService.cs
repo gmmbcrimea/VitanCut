@@ -30,6 +30,8 @@ public sealed class CloudSyncService(AppState state)
     public bool HasUnsyncedLocalChanges => !string.IsNullOrWhiteSpace(_settings.WorkspaceId) &&
         (string.IsNullOrWhiteSpace(_settings.LastSnapshotHash) ||
          !string.Equals(SnapshotHash(), _settings.LastSnapshotHash, StringComparison.Ordinal));
+    public bool ShouldDownloadInitialSnapshot => IsSignedIn && LoadBaseline() is null &&
+        state.Database.Projects.Count == 0 && state.Database.Catalog.Count == 0;
 
     public void Load()
     {
@@ -151,6 +153,35 @@ public sealed class CloudSyncService(AppState state)
         catch (Exception error) when (error is JsonException or InvalidDataException)
         {
             return Fail($"Не удалось применить облачную базу. {error.Message}");
+        }
+    }
+
+    public Task<CloudSyncResult> DownloadInitialSnapshotAsync() => DownloadAsync(discardLocalChanges: true);
+
+    public async Task<CloudSyncResult> PublishImportedDatabaseAsync()
+    {
+        if (!IsSignedIn) return Fail("Сначала войдите в Supabase.");
+        if (!Guid.TryParse(_settings.WorkspaceId, out var workspaceId))
+            return Fail("Войдите в Supabase, чтобы подключить пространство Cutlist.");
+
+        var snapshotResponse = await SendAsync(HttpMethod.Get,
+            $"/rest/v1/workspace_snapshots?workspace_id=eq.{workspaceId:D}&select=revision,payload", null, true);
+        if (!snapshotResponse.Succeeded) return snapshotResponse;
+
+        try
+        {
+            using var document = JsonDocument.Parse(snapshotResponse.Payload!);
+            if (document.RootElement.GetArrayLength() != 1) return Fail("Снимок рабочего пространства не найден.");
+            var snapshot = document.RootElement[0];
+            _settings.LastRevision = snapshot.GetProperty("revision").GetInt64();
+            _settings.LastSnapshotHash = "";
+            SaveSettings();
+            SaveBaseline(snapshot.GetProperty("payload").GetRawText());
+            return await PublishAsync();
+        }
+        catch (JsonException)
+        {
+            return Fail("Supabase вернул неверный снимок рабочего пространства.");
         }
     }
 
