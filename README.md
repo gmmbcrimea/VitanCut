@@ -39,7 +39,7 @@ dotnet run --project native-winui-tests/VitanCut.CoreChecks.csproj -c Release
 Для локальной portable-упаковки:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File native-winui/package-portable.ps1 -Version 1.0.1
+powershell -ExecutionPolicy Bypass -File native-winui/package-portable.ps1 -Version 1.0.6
 ```
 
 ## Публикация обновления

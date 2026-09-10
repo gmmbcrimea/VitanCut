@@ -194,7 +194,7 @@ public sealed class CloudSyncService(AppState state)
             return Fail("Для адресной синхронизации один раз загрузите облачную базу. Локальная работа останется без изменений.");
 
         var snapshotResponse = await SendAsync(HttpMethod.Get,
-            $"/rest/v1/workspace_snapshots?workspace_id=eq.{workspaceId:D}&select=revision,payload", null, true);
+            $"/rest/v1/workspace_snapshots?workspace_id=eq.{workspaceId:D}&select=revision", null, true);
         if (!snapshotResponse.Succeeded) return snapshotResponse;
 
         Database baseline;
@@ -207,11 +207,29 @@ public sealed class CloudSyncService(AppState state)
             var snapshot = document.RootElement[0];
             remoteRevision = snapshot.GetProperty("revision").GetInt64();
             baseline = CloudEntityMerge.DeserializeDatabase(baselineJson);
-            remote = CloudEntityMerge.DeserializeDatabase(snapshot.GetProperty("payload").GetRawText());
+            remote = baseline;
         }
         catch (Exception error) when (error is JsonException or InvalidDataException)
         {
             return Fail($"Не удалось подготовить адресную синхронизацию. {error.Message}");
+        }
+
+        // A full snapshot is only needed when another computer has published since our baseline.
+        if (remoteRevision != _settings.LastRevision)
+        {
+            var remoteResponse = await SendAsync(HttpMethod.Get,
+                $"/rest/v1/workspace_snapshots?workspace_id=eq.{workspaceId:D}&select=payload", null, true);
+            if (!remoteResponse.Succeeded) return remoteResponse;
+            try
+            {
+                using var document = JsonDocument.Parse(remoteResponse.Payload!);
+                if (document.RootElement.GetArrayLength() != 1) return Fail("Снимок рабочего пространства не найден.");
+                remote = CloudEntityMerge.DeserializeDatabase(document.RootElement[0].GetProperty("payload").GetRawText());
+            }
+            catch (Exception error) when (error is JsonException or InvalidDataException)
+            {
+                return Fail($"Не удалось получить изменения из облака. {error.Message}");
+            }
         }
 
         var merge = CloudEntityMerge.Merge(baseline, state.Database, remote);
@@ -252,13 +270,11 @@ public sealed class CloudSyncService(AppState state)
             return Ok("Локальная база объединена с актуальной облачной версией.");
         }
 
-        var payload = JsonDocument.Parse(mergedJson).RootElement.Clone();
-        var response = await SendAsync(HttpMethod.Post, "/rest/v1/rpc/sync_vitan_entities", new
+        var response = await SendAsync(HttpMethod.Post, "/rest/v1/rpc/sync_vitan_entity_changes", new
         {
             p_workspace_id = workspaceId,
             p_expected_snapshot_revision = remoteRevision,
-            p_changes = changes,
-            p_snapshot_payload = payload
+            p_changes = changes
         }, true);
         if (!response.Succeeded)
         {
