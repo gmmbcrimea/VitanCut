@@ -206,6 +206,12 @@ public sealed class AppState
         var overridePath = Environment.GetEnvironmentVariable("VITANCUT_DATABASE_PATH");
         if (!string.IsNullOrWhiteSpace(overridePath)) return Path.GetFullPath(overridePath);
         var baseDir = AppContext.BaseDirectory;
+        if (IsProtectedInstallationDirectory(baseDir))
+        {
+            var applicationDataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VitanCut", "data");
+            MigrateInstalledData(Path.Combine(baseDir, "data"), applicationDataDirectory);
+            return Path.Combine(applicationDataDirectory, "database.json");
+        }
         var candidates = new[]
         {
             Path.Combine(baseDir, "data", "database.json"),
@@ -216,5 +222,35 @@ public sealed class AppState
         };
 
         return candidates.FirstOrDefault(File.Exists) ?? candidates[^2];
+    }
+
+    private static bool IsProtectedInstallationDirectory(string directory)
+    {
+        var programFiles = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
+        };
+        var fullDirectory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return programFiles.Where(path => !string.IsNullOrWhiteSpace(path)).Any(path =>
+        {
+            var fullProgramFiles = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return fullDirectory.StartsWith(fullProgramFiles, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    private static void MigrateInstalledData(string installedDataDirectory, string applicationDataDirectory)
+    {
+        if (Directory.Exists(applicationDataDirectory) || !Directory.Exists(installedDataDirectory)) return;
+        try
+        {
+            foreach (var source in Directory.EnumerateFiles(installedDataDirectory, "*", SearchOption.AllDirectories))
+            {
+                var destination = Path.Combine(applicationDataDirectory, Path.GetRelativePath(installedDataDirectory, source));
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(source, destination, overwrite: false);
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or NotSupportedException) { }
     }
 }
