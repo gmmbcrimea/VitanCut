@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace VitanCut.WinUI.Services;
 
@@ -222,15 +223,25 @@ rd /s /q "{workDirectory}"
 
     private sealed class GitHubRelease
     {
+        [JsonPropertyName("tag_name")]
         public string? TagName { get; init; }
+
+        [JsonPropertyName("html_url")]
         public string? HtmlUrl { get; init; }
+
+        [JsonPropertyName("assets")]
         public List<GitHubAsset>? Assets { get; init; }
     }
 
     private sealed class GitHubAsset
     {
+        [JsonPropertyName("name")]
         public string Name { get; init; } = "";
+
+        [JsonPropertyName("size")]
         public long Size { get; init; }
+
+        [JsonPropertyName("browser_download_url")]
         public string? BrowserDownloadUrl { get; init; }
     }
 }
