@@ -74,9 +74,15 @@ public sealed partial class ReportWindow : Window
         SubtitleText.Text = $"{report.ProjectName} · {report.Counterparty} · {report.Address}";
         HintText.Text = "";
         SaveReportButton.Content = "Сохранить деталировку";
+        DetailingTools.Visibility = Visibility.Visible;
         App.Preferences.Apply(this);
         AppWindow.Resize(new SizeInt32(1180, 820));
         BuildDetailingReport(report);
+    }
+
+    private void DspOnlyToggled(object sender, RoutedEventArgs e)
+    {
+        if (_detailingReport is not null) BuildDetailingReport(_detailingReport);
     }
 
     private void BuildCutReport(CutReport report)
@@ -405,6 +411,9 @@ public sealed partial class ReportWindow : Window
     private static SolidColorBrush CutStrokeBrush() => Brush(CutColors.Stroke(App.Preferences.Current.CutPalette));
 
     private CutReport? CurrentCutReport() => _cutReport;
+    private DetailingReport? CurrentDetailingReport() => _detailingReport is null
+        ? null
+        : DspOnlySwitch.IsOn ? CuttingService.FilterDetailingReportToDsp(_detailingReport) : _detailingReport;
     private async void SaveReportClick(object sender, RoutedEventArgs e)
     {
         SetExportBusy(true);
@@ -416,7 +425,7 @@ public sealed partial class ReportWindow : Window
         var picker = new FileSavePicker
         {
             SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            SuggestedFileName = isCut ? "раскрой" : "деталировка"
+            SuggestedFileName = isCut ? "раскрой" : DetailingFileName(_detailingReport?.ProjectName ?? "проект")
         };
         picker.FileTypeChoices.Add(format == "xlsx" ? "Excel" : "PDF", new List<string> { extension });
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
@@ -427,7 +436,7 @@ public sealed partial class ReportWindow : Window
             {
                 await Task.Run(() => { if (format == "xlsx") ReportDocumentService.SaveXlsx(cut, file.Path); else ReportDocumentService.SavePdf(cut, file.Path); });
             }
-            else if (_detailingReport is { } detailing)
+            else if (CurrentDetailingReport() is { } detailing)
             {
                 await Task.Run(() => { if (format == "xlsx") ReportDocumentService.SaveXlsx(detailing, file.Path); else ReportDocumentService.SavePdf(detailing, file.Path); });
             }
@@ -440,6 +449,15 @@ public sealed partial class ReportWindow : Window
         finally { SetExportBusy(false); }
     }
 
+    private static string DetailingFileName(string projectName)
+    {
+        var invalidCharacters = System.IO.Path.GetInvalidFileNameChars();
+        var safeProjectName = string.Concat(projectName.Trim().Select(character =>
+            invalidCharacters.Contains(character) ? '_' : character)).Trim(' ', '.');
+        if (string.IsNullOrWhiteSpace(safeProjectName)) safeProjectName = "проект";
+        return $"Деталировка_{safeProjectName}_{DateTime.Now:yyyy-MM-dd_HH-mm}";
+    }
+
     private async void PrintReportClick(object sender, RoutedEventArgs e)
     {
         SetExportBusy(true);
@@ -447,7 +465,7 @@ public sealed partial class ReportWindow : Window
         {
             var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"vitan-cut-{Guid.NewGuid():N}.pdf");
             if (CurrentCutReport() is { } cut) await Task.Run(() => ReportDocumentService.SavePdf(cut, path));
-            else if (_detailingReport is { } detailing) await Task.Run(() => ReportDocumentService.SavePdf(detailing, path));
+            else if (CurrentDetailingReport() is { } detailing) await Task.Run(() => ReportDocumentService.SavePdf(detailing, path));
             else return;
 
             var file = await StorageFile.GetFileFromPathAsync(path);
@@ -473,28 +491,29 @@ public sealed partial class ReportWindow : Window
     }
     private void BuildDetailingReport(DetailingReport report)
     {
+        var shownReport = DspOnlySwitch.IsOn ? CuttingService.FilterDetailingReportToDsp(report) : report;
         ContentPanel.Children.Clear();
-        if (!report.Products.Any())
+        if (!shownReport.Products.Any())
         {
-            ContentPanel.Children.Add(EmptyState("Изделий нет", "Добавьте изделия в проект, чтобы сформировать деталировку."));
+            ContentPanel.Children.Add(EmptyState("Деталей ДСП нет", "В изделиях не найдено деталей с материалом ДСП."));
             return;
         }
 
-        if (report.Issues.Count > 0)
+        if (shownReport.Issues.Count > 0)
         {
             var warning = Section();
             warning.Background = (Brush)Application.Current.Resources["AppWarningBrush"];
-            warning.Children.Add(SectionHeader("Проверьте деталировку", "Строки с ошибками не должны уходить в производство.", $"{report.Issues.Count} шт."));
-            foreach (var issue in report.Issues)
+            warning.Children.Add(SectionHeader("Проверьте деталировку", "Строки с ошибками не должны уходить в производство.", $"{shownReport.Issues.Count} шт."));
+            foreach (var issue in shownReport.Issues)
                 warning.Children.Add(new TextBlock { Text = $"{issue.ProductName} · {issue.DetailName}: {issue.Message}", TextWrapping = TextWrapping.Wrap });
             ContentPanel.Children.Add(warning);
         }
 
         var summary = Section();
-        summary.Children.Add(SectionHeader("Итоги проекта", $"{N(report.Summary.DetailQuantity)} деталей · {N(report.Summary.Area)} м²", $"{N(report.Summary.Cost)} ₽"));
+        summary.Children.Add(SectionHeader("Итоги проекта", $"{N(shownReport.Summary.DetailQuantity)} деталей · {N(shownReport.Summary.Area)} м²", $"{N(shownReport.Summary.Cost)} ₽"));
         ContentPanel.Children.Add(summary);
 
-        foreach (var product in report.Products)
+        foreach (var product in shownReport.Products)
         {
             var section = Section();
             var grid = new Grid { ColumnSpacing = 20 };

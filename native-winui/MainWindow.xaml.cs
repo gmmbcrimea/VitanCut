@@ -49,6 +49,7 @@ public sealed partial class MainWindow : Window
     private TextBlock? _updateTitle;
     private TextBlock? _updateDescription;
     private Button? _installUpdateButton;
+    private ProgressBar? _updateProgress;
     private Timer? _updateTimer;
     private Timer? _cloudPublishTimer;
     private int _activeCloudPublishInterval;
@@ -176,6 +177,13 @@ public sealed partial class MainWindow : Window
             Foreground = new SolidColorBrush(Colors.White)
         };
         _installUpdateButton.Click += InstallUpdateClick;
+        _updateProgress = new ProgressBar
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Height = 6,
+            Visibility = Visibility.Collapsed
+        };
 
         var header = new Grid { ColumnSpacing = 14 };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -190,6 +198,7 @@ public sealed partial class MainWindow : Window
         var panel = new StackPanel { Spacing = 12 };
         panel.Children.Add(header);
         panel.Children.Add(_installUpdateButton);
+        panel.Children.Add(_updateProgress);
         _updateCard = new Border
         {
             Style = (Style)Application.Current.Resources["SettingsSectionStyle"],
@@ -202,7 +211,8 @@ public sealed partial class MainWindow : Window
 
     private void RefreshUpdateSurface(AppUpdateInfo update)
     {
-        if (_updateCard is null || _updateTitle is null || _updateDescription is null || _updateIcon is null || _installUpdateButton is null) return;
+        if (_updateCard is null || _updateTitle is null || _updateDescription is null || _updateIcon is null || _installUpdateButton is null || _updateProgress is null) return;
+        _updateProgress.Visibility = Visibility.Collapsed;
         _updateDescription.Text = update.Message;
         switch (update.Availability)
         {
@@ -310,8 +320,37 @@ public sealed partial class MainWindow : Window
             _installUpdateButton.Content = "Скачивание обновления...";
         }
 
-        if (await App.Updates.InstallAsync(update))
+        if (_updateProgress is not null)
         {
+            _updateProgress.Value = 0;
+            _updateProgress.IsIndeterminate = true;
+            _updateProgress.Visibility = Visibility.Visible;
+        }
+
+        var progress = new Progress<UpdateDownloadProgress>(status =>
+        {
+            if (_updateProgress is null || _updateDescription is null) return;
+            if (status.Percent is { } percent)
+            {
+                _updateProgress.IsIndeterminate = false;
+                _updateProgress.Value = percent;
+                _updateDescription.Text = $"Скачивание обновления: {percent:0}%";
+            }
+            else
+            {
+                _updateProgress.IsIndeterminate = true;
+                _updateDescription.Text = "Скачивание обновления...";
+            }
+        });
+
+        if (await App.Updates.InstallAsync(update, progress))
+        {
+            if (_updateProgress is not null)
+            {
+                _updateProgress.IsIndeterminate = false;
+                _updateProgress.Value = 100;
+            }
+            if (_updateDescription is not null) _updateDescription.Text = "Файлы подготовлены. Перезапуск приложения...";
             AppInfoBar.Title = "Обновление готово";
             AppInfoBar.Message = "Приложение перезапустится после замены файлов.";
             AppInfoBar.Severity = InfoBarSeverity.Success;
@@ -327,6 +366,7 @@ public sealed partial class MainWindow : Window
             _installUpdateButton.IsEnabled = true;
             _installUpdateButton.Content = "Повторить обновление";
         }
+        if (_updateProgress is not null) _updateProgress.Visibility = Visibility.Collapsed;
         AppInfoBar.Title = "Не удалось установить обновление";
         AppInfoBar.Message = "Проверьте подключение к сети и права на изменение папки приложения.";
         AppInfoBar.Severity = InfoBarSeverity.Error;

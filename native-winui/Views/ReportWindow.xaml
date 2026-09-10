@@ -16,6 +16,11 @@
           <TextBlock Text="VITAN-CUT" FontWeight="SemiBold" Margin="4,8,4,14"/>
           <Button x:Name="SaveReportButton" Content="Сохранить" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch"/>
           <Button x:Name="PrintReportButton" Content="Печать" HorizontalAlignment="Stretch"/>
+          <StackPanel x:Name="DetailingTools" Spacing="4" Visibility="Collapsed" Margin="0,6,0,0">
+            <TextBlock Text="Состав деталировки" FontWeight="SemiBold"/>
+            <ToggleSwitch x:Name="DspOnlySwitch" Header="Только материалы ДСП" Toggled="DspOnlyToggled" />
+            <TextBlock Text="Выключено: все материалы" Style="{StaticResource MutedTextBlockStyle}" TextWrapping="Wrap"/>
+          </StackPanel>
           <StackPanel x:Name="CutTools" Spacing="10" Visibility="Collapsed">
             <Button x:Name="AdditionalCutButton" HorizontalAlignment="Stretch" Visibility="Collapsed" ToolTipService.ToolTip="ДВП, стекло и другие листовые материалы без «ДСП» в названии">
               <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE81C;" FontSize="16"/><TextBlock Text="Доп. раскрой"/></StackPanel>

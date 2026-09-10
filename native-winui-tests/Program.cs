@@ -31,6 +31,9 @@ Check(AppUpdateService.TryParseVersion("v1.2.3", out var parsedUpdateVersion) &&
 Check(AppUpdateService.TryParseVersion("1.2.3-beta.1", out parsedUpdateVersion) && parsedUpdateVersion == new Version(1, 2, 3), "Update tags ignore prerelease metadata when comparing versions");
 Check(!AppUpdateService.TryParseVersion("latest", out _), "Invalid GitHub release tag is rejected");
 Check(AppUpdateService.FormatVersion(new Version(2, 4, 0, 0)) == "2.4.0", "Update status formats local version consistently");
+var updateScript = AppUpdateService.BuildUpdateScript("C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut\\VitanCut.WinUI.exe", "C:\\Temp\\update", 1234);
+Check(updateScript.Contains("$source = 'C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut'") && updateScript.Contains("Get-Process -Id 1234") && updateScript.Contains("Start-Process -FilePath $executable"),
+    "Updater script preserves Unicode paths and waits before relaunching");
 Check(AccentPalette.Find("unknown").Id == "system" && AccentPalette.Find(null).Id == "system", "Unknown accent falls back to system");
 var accentState = new AppState();
 var accentPath = Path.Combine(output, "accent-preferences.json");
@@ -256,6 +259,10 @@ var hardwareCalc = Calculator.Detail(state, product, hardware);
 Check(hardwareCalc.Length == 0 && hardwareCalc.Width == 0 && hardwareCalc.Cost == 400 && hardwareCalc.Error == "", "Piece material ignores dimension formulas");
 var detailing = CuttingService.BuildDetailingReport(state, project);
 Check(detailing.Products[0].Rows.Last().Qty == 8 && !detailing.Products[0].Rows.Last().HasIssue, "Detail report multiplies product quantity and accepts hardware");
+var dspDetailing = CuttingService.FilterDetailingReportToDsp(detailing);
+Check(dspDetailing.Products.SelectMany(product => product.Rows).All(row => row.MaterialName.Contains("ДСП", StringComparison.OrdinalIgnoreCase)) &&
+      dspDetailing.Summary.DetailQuantity == 4 && dspDetailing.Products.Count == 1,
+    "Detail report can be limited to DSP materials with recalculated totals");
 
 var library = new MaterialService(state);
 Check(library.ExistsName("  ручка  "), "Duplicate name ignores case and outer spaces");

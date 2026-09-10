@@ -265,6 +265,24 @@ public static class CuttingService
         return new DetailingReport(Text(project.Name), Text(project.Counterparty), Text(project.Address), products, issues, summary, state.Database.Preferences.DetailingIncludeImages);
     }
 
+    public static DetailingReport FilterDetailingReportToDsp(DetailingReport report)
+    {
+        var products = report.Products
+            .Select(product => product with
+            {
+                Rows = product.Rows.Where(row => row.MaterialName.Contains("ДСП", StringComparison.OrdinalIgnoreCase)).ToList()
+            })
+            .Where(product => product.Rows.Count > 0)
+            .ToList();
+        var issues = products.SelectMany(product => product.Rows.Where(row => row.HasIssue)
+            .Select(row => new DetailingIssue(product.Name, row.DetailName, row.Issue))).ToList();
+        var summary = new DetailingSummary(
+            products.Sum(product => product.Rows.Sum(row => row.Area)),
+            products.Sum(product => product.Rows.Sum(row => row.Cost)),
+            products.Sum(product => product.Rows.Sum(row => row.Qty)));
+        return report with { Products = products, Issues = issues, Summary = summary };
+    }
+
     private static string DetailIssue(DetailCalc calc)
     {
         if (calc.Material is null) return "Не выбран материал";

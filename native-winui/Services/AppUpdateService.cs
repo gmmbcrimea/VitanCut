@@ -25,6 +25,11 @@ public sealed record AppUpdateInfo(
     public bool CanInstall => Availability == UpdateAvailability.Available && !string.IsNullOrWhiteSpace(DownloadUrl);
 }
 
+public sealed record UpdateDownloadProgress(long DownloadedBytes, long? TotalBytes)
+{
+    public double? Percent => TotalBytes is > 0 ? DownloadedBytes * 100d / TotalBytes.Value : null;
+}
+
 /// <summary>Checks the public GitHub Release feed and replaces a portable installation after exit.</summary>
 public sealed class AppUpdateService
 {
@@ -115,7 +120,8 @@ public sealed class AppUpdateService
         }
     }
 
-    public async Task<bool> InstallAsync(AppUpdateInfo update, CancellationToken cancellationToken = default)
+    public async Task<bool> InstallAsync(AppUpdateInfo update, IProgress<UpdateDownloadProgress>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         if (!update.CanInstall || string.IsNullOrWhiteSpace(update.DownloadUrl)) return false;
         if (!CanWriteTo(_applicationDirectory)) return false;
@@ -129,9 +135,21 @@ public sealed class AppUpdateService
         {
             using var response = await Client.GetAsync(update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             response.EnsureSuccessStatusCode();
+            var totalBytes = response.Content.Headers.ContentLength;
             await using (var input = await response.Content.ReadAsStreamAsync(cancellationToken))
             await using (var output = File.Create(archivePath))
-                await input.CopyToAsync(output, cancellationToken);
+            {
+                var buffer = new byte[80 * 1024];
+                long downloadedBytes = 0;
+                int read;
+                progress?.Report(new UpdateDownloadProgress(0, totalBytes));
+                while ((read = await input.ReadAsync(buffer, cancellationToken)) > 0)
+                {
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    downloadedBytes += read;
+                    progress?.Report(new UpdateDownloadProgress(downloadedBytes, totalBytes));
+                }
+            }
 
             ExtractArchiveSafely(archivePath, extractDirectory);
             var executable = Directory.EnumerateFiles(extractDirectory, "VitanCut.WinUI.exe", SearchOption.AllDirectories).FirstOrDefault();
@@ -139,9 +157,17 @@ public sealed class AppUpdateService
 
             var sourceDirectory = Path.GetDirectoryName(executable)!;
             var launchedExe = Path.Combine(_applicationDirectory, Path.GetFileName(executable));
-            var scriptPath = Path.Combine(workDirectory, "apply-update.cmd");
-            File.WriteAllText(scriptPath, BuildUpdateScript(sourceDirectory, _applicationDirectory, launchedExe, workDirectory));
-            Process.Start(new ProcessStartInfo(scriptPath) { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden });
+            var scriptPath = Path.Combine(workDirectory, "apply-update.ps1");
+            File.WriteAllText(scriptPath, BuildUpdateScript(sourceDirectory, _applicationDirectory, launchedExe, workDirectory,
+                Environment.ProcessId), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
             return true;
         }
         catch (Exception error) when (error is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException)
@@ -207,13 +233,21 @@ public sealed class AppUpdateService
         }
     }
 
-    private static string BuildUpdateScript(string source, string target, string executable, string workDirectory) => $"""
-@echo off
-timeout /t 2 /nobreak >nul
-robocopy "{source}" "{target}" /E /IS /IT /NFL /NDL /NJH /NJS /NC /NS >nul
-start "" "{executable}"
-rd /s /q "{workDirectory}"
-""";
+    internal static string BuildUpdateScript(string source, string target, string executable, string workDirectory, int processId) => string.Join(Environment.NewLine,
+        "$ErrorActionPreference = 'Stop'",
+        $"$source = '{EscapePowerShell(source)}'",
+        $"$target = '{EscapePowerShell(target)}'",
+        $"$executable = '{EscapePowerShell(executable)}'",
+        $"$workDirectory = '{EscapePowerShell(workDirectory)}'",
+        "",
+        $"while (Get-Process -Id {processId} -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 300 }}",
+        "& robocopy $source $target /E /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null",
+        "if ($LASTEXITCODE -gt 7) { exit $LASTEXITCODE }",
+        "if (-not (Test-Path -LiteralPath $executable)) { exit 8 }",
+        "Start-Process -FilePath $executable -WorkingDirectory $target",
+        "Remove-Item -LiteralPath $workDirectory -Recurse -Force -ErrorAction SilentlyContinue");
+
+    private static string EscapePowerShell(string value) => value.Replace("'", "''", StringComparison.Ordinal);
 
     private static void TryDelete(string directory)
     {
