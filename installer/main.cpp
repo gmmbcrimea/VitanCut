@@ -25,6 +25,7 @@ constexpr UINT WM_INSTALL_FINISHED = WM_APP + 3;
 
 HWND pathBox, desktopBox, startMenuBox, taskbarBox, installButton, progressBar, statusLabel;
 HFONT fontRegular, fontSmall, fontTitle, fontBold;
+bool installationComplete = false;
 HBRUSH windowBrush = CreateSolidBrush(RGB(31, 38, 45));
 HBRUSH inputBrush = CreateSolidBrush(RGB(48, 60, 70));
 
@@ -290,6 +291,7 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
         }
         else if (LOWORD(wParam) == IDC_INSTALL)
         {
+            if (installationComplete) { DestroyWindow(window); return 0; }
             const auto path = GetText(pathBox);
             if (path.empty()) { SetWindowTextW(statusLabel, L"Укажите папку установки."); return 0; }
             EnableWindow(installButton, FALSE); EnableWindow(pathBox, FALSE); EnableWindow(desktopBox, FALSE); EnableWindow(startMenuBox, FALSE); EnableWindow(taskbarBox, FALSE);
@@ -309,7 +311,7 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
     {
         auto text = reinterpret_cast<std::wstring*>(lParam); SetWindowTextW(statusLabel, text->c_str()); delete text;
         SendMessageW(progressBar, PBM_SETPOS, wParam ? 100 : 0, 0);
-        if (wParam) SetWindowTextW(installButton, L"Готово");
+        if (wParam) { installationComplete = true; SetWindowTextW(installButton, L"Готово"); }
         EnableWindow(installButton, TRUE); EnableWindow(pathBox, TRUE); EnableWindow(desktopBox, TRUE); EnableWindow(startMenuBox, TRUE); EnableWindow(taskbarBox, TRUE); return 0;
     }
     case WM_PAINT:
@@ -335,7 +337,8 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     HWND window = CreateWindowExW(0, WindowClass, L"Установка VitanCut", WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, CW_USEDEFAULT, CW_USEDEFAULT, 534, 514, nullptr, nullptr, instance, nullptr);
     auto createLabel = [window](const wchar_t* text, int x, int y, int width, int height, HFONT font) { HWND label = CreateWindowW(L"STATIC", text, WS_CHILD | WS_VISIBLE, x, y, width, height, window, nullptr, nullptr, nullptr); SendMessageW(label, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE); return label; };
     createLabel(L"VitanCut", 118, 34, 340, 34, fontTitle); createLabel(L"Установка программы", 120, 70, 300, 24, fontRegular); createLabel(L"Папка установки", 28, 142, 230, 24, fontBold); createLabel(L"Программа будет установлена в выбранную папку.", 28, 168, 380, 22, fontSmall); createLabel(L"Ярлыки", 28, 260, 230, 24, fontBold);
-    pathBox = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", (fs::path(getenv("ProgramFiles")) / L"VitanCut").c_str(), WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 28, 196, 368, 34, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_INSTALL_PATH)), instance, nullptr); SendMessageW(pathBox, WM_SETFONT, reinterpret_cast<WPARAM>(fontRegular), TRUE);
+    wchar_t documents[MAX_PATH]{}; SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, 0, documents);
+    pathBox = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", (fs::path(documents) / L"VitanCut").c_str(), WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 28, 196, 368, 34, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_INSTALL_PATH)), instance, nullptr); SendMessageW(pathBox, WM_SETFONT, reinterpret_cast<WPARAM>(fontRegular), TRUE);
     auto createButton = [window, instance](const wchar_t* text, DWORD style, int id, int x, int y, int width, int height) { HWND button = CreateWindowW(L"BUTTON", text, WS_CHILD | WS_VISIBLE | style, x, y, width, height, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance, nullptr); SendMessageW(button, WM_SETFONT, reinterpret_cast<WPARAM>(fontRegular), TRUE); return button; };
     createButton(L"Обзор", BS_OWNERDRAW, IDC_BROWSE, 406, 196, 84, 34); desktopBox = createButton(L"Ярлык на рабочем столе", BS_AUTOCHECKBOX, IDC_DESKTOP, 28, 288, 300, 27); startMenuBox = createButton(L"Ярлык в меню Пуск", BS_AUTOCHECKBOX, IDC_START_MENU, 28, 320, 300, 27); taskbarBox = createButton(L"Закрепить на панели задач", BS_AUTOCHECKBOX, IDC_TASKBAR, 28, 352, 300, 27); SendMessageW(desktopBox, BM_SETCHECK, BST_CHECKED, 0); SendMessageW(startMenuBox, BM_SETCHECK, BST_CHECKED, 0);
     progressBar = CreateWindowW(PROGRESS_CLASSW, nullptr, WS_CHILD, 28, 397, 320, 8, window, reinterpret_cast<HMENU>(IDC_PROGRESS), instance, nullptr); SendMessageW(progressBar, PBM_SETRANGE, 0, MAKELPARAM(0, 100)); statusLabel = createLabel(L"", 28, 413, 320, 42, fontSmall); installButton = createButton(L"Установить", BS_OWNERDRAW, IDC_INSTALL, 360, 398, 130, 44); SendMessageW(installButton, WM_SETFONT, reinterpret_cast<WPARAM>(fontBold), TRUE);
