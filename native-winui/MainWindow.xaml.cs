@@ -1097,7 +1097,7 @@ public sealed partial class MainWindow : Window
         if (CloudSyncStatusText is null) return;
         var cloudCard = DatabasePanel.Children.OfType<Border>().LastOrDefault();
         if (cloudCard?.Child is not StackPanel cloudPanel) return;
-        var loginGrid = CloudEmailBox.Parent as Grid;
+        var loginGrid = cloudPanel.Children.OfType<Grid>().FirstOrDefault(grid => grid.Children.Contains(CloudEmailBox));
         var description = cloudPanel.Children.OfType<TextBlock>().FirstOrDefault();
         var statusBadge = cloudPanel.Children.OfType<Border>().FirstOrDefault();
         var actions = cloudPanel.Children.OfType<StackPanel>()
