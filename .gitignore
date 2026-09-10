@@ -6,3 +6,7 @@ data/
 *.obj
 **/bin/
 **/obj/
+installer/bin/
+installer/obj/
+installer/*.res
+installer/installer-logo.png
