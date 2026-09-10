@@ -33,8 +33,8 @@ Check(AppUpdateService.TryParseVersion("1.2.3-beta.1", out parsedUpdateVersion) 
 Check(!AppUpdateService.TryParseVersion("latest", out _), "Invalid GitHub release tag is rejected");
 Check(AppUpdateService.FormatVersion(new Version(2, 4, 0, 0)) == "2.4.0", "Update status formats local version consistently");
 var updateScript = AppUpdateService.BuildUpdateScript("C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut\\VitanCut.WinUI.exe", "C:\\Temp\\update", 1234);
-Check(updateScript.Contains("$source = 'C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut'") && updateScript.Contains("Get-Process -Id 1234") && updateScript.Contains("Start-Process -FilePath $executable"),
-    "Updater script preserves Unicode paths and waits before relaunching");
+Check(updateScript.Contains("$source = 'C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut'") && updateScript.Contains("Get-Process -Id 1234") && updateScript.Contains("Start-Process -FilePath $executable") && updateScript.Contains("updater.log") && updateScript.Contains("Update failed:"),
+    "Updater script preserves Unicode paths, logs failures and waits before relaunching");
 Check(CloudSyncService.DescribeFailure(HttpStatusCode.BadRequest, "{\"code\":400,\"error_code\":\"invalid_credentials\",\"msg\":\"Invalid login credentials\"}") == "Неверный email или пароль.",
     "Cloud authentication errors use a human message");
 Check(CloudSyncService.DescribeFailure(HttpStatusCode.Unauthorized, "{}") == "Сеанс входа истёк. Войдите в Supabase снова.",

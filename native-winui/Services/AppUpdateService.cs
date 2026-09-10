@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -157,17 +158,20 @@ public sealed class AppUpdateService
 
             var sourceDirectory = Path.GetDirectoryName(executable)!;
             var launchedExe = Path.Combine(_applicationDirectory, Path.GetFileName(executable));
+            var script = BuildUpdateScript(sourceDirectory, _applicationDirectory, launchedExe, workDirectory, Environment.ProcessId);
             var scriptPath = Path.Combine(workDirectory, "apply-update.ps1");
-            File.WriteAllText(scriptPath, BuildUpdateScript(sourceDirectory, _applicationDirectory, launchedExe, workDirectory,
-                Environment.ProcessId), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-            Process.Start(new ProcessStartInfo
+            File.WriteAllText(scriptPath, script, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+            var updater = Process.Start(new ProcessStartInfo
             {
-                FileName = "powershell.exe",
-                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
+                // cmd /c start detaches the updater from the WinUI process before it exits.
+                FileName = "cmd.exe",
+                Arguments = $"/d /c start \"VitanCut updater\" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encodedScript}",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
             });
+            if (updater is null) throw new IOException("Не удалось запустить установщик обновления.");
             return true;
         }
         catch (Exception error) when (error is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException)
@@ -239,13 +243,23 @@ public sealed class AppUpdateService
         $"$target = '{EscapePowerShell(target)}'",
         $"$executable = '{EscapePowerShell(executable)}'",
         $"$workDirectory = '{EscapePowerShell(workDirectory)}'",
+        "$logDirectory = Join-Path $env:LOCALAPPDATA 'VitanCut\\logs'",
+        "$log = Join-Path $logDirectory 'updater.log'",
+        "New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null",
+        "function Write-UpdateLog([string]$message) { Add-Content -LiteralPath $log -Value (\"$(Get-Date -Format o) $message\") }",
         "",
-        $"while (Get-Process -Id {processId} -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 300 }}",
-        "& robocopy $source $target /E /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null",
-        "if ($LASTEXITCODE -gt 7) { exit $LASTEXITCODE }",
-        "if (-not (Test-Path -LiteralPath $executable)) { exit 8 }",
-        "Start-Process -FilePath $executable -WorkingDirectory $target",
-        "Remove-Item -LiteralPath $workDirectory -Recurse -Force -ErrorAction SilentlyContinue");
+        "try {",
+        $"  Write-UpdateLog 'Waiting for application process {processId} to exit.'",
+        $"  while (Get-Process -Id {processId} -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 300 }}",
+        "  Write-UpdateLog 'Copying update files.'",
+        "  & robocopy $source $target /E /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null",
+        "  if ($LASTEXITCODE -gt 7) { throw \"robocopy failed with code $LASTEXITCODE\" }",
+        "  if (-not (Test-Path -LiteralPath $executable)) { throw 'Updated executable was not found.' }",
+        "  Write-UpdateLog 'Starting updated application.'",
+        "  Start-Process -FilePath $executable -WorkingDirectory $target",
+        "  Remove-Item -LiteralPath $workDirectory -Recurse -Force -ErrorAction SilentlyContinue",
+        "  Write-UpdateLog 'Update completed.'",
+        "} catch { Write-UpdateLog (\"Update failed: \" + $_.Exception.Message) }");
 
     private static string EscapePowerShell(string value) => value.Replace("'", "''", StringComparison.Ordinal);
 
