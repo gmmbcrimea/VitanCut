@@ -233,7 +233,12 @@ InstallResult Install(HWND window, const fs::path& target, bool desktop, bool st
         PostStatus(window, L"Устанавливаем VitanCut...");
         fs::create_directories(target);
         for (const auto& entry : fs::directory_iterator(executable.parent_path()))
+        {
+            // Installed data is migrated to the user profile by VitanCut 1.0.13.
+            // Do not overwrite a previous local database before that migration can run.
+            if (entry.path().filename() == L"data") continue;
             fs::copy(entry.path(), target / entry.path().filename(), fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+        }
         const auto installed = target / L"VitanCut.WinUI.exe";
         if (!fs::exists(installed)) throw std::runtime_error("unpack");
         if (desktop) CreateShortcut(fs::path([] { wchar_t folder[MAX_PATH]; SHGetFolderPathW(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, 0, folder); return std::wstring(folder); }()) / L"VitanCut.lnk", installed);
