@@ -1,6 +1,8 @@
 #pragma code_page(65001)
 #include "resource.h"
 
+#define RT_MANIFEST 24
+1 RT_MANIFEST "app.manifest"
 IDI_INSTALLER ICON "installer-icon.ico"
 
 1 VERSIONINFO
