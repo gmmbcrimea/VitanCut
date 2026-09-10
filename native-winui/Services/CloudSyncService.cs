@@ -374,10 +374,10 @@ public sealed class CloudSyncService(AppState state)
             if (response.IsSuccessStatusCode) return new CloudSyncResult(true, "", payload);
             if (payload.Contains("revision_conflict", StringComparison.OrdinalIgnoreCase))
                 return new CloudSyncResult(false, "Облачная база изменилась на другом компьютере. Сначала загрузите её и разрешите конфликт.", payload, true);
-            return Fail($"Supabase вернул {(int)response.StatusCode}: {ExtractMessage(payload)}");
+            return Fail(DescribeFailure(response.StatusCode, payload));
         }
-        catch (HttpRequestException error) { return Fail($"Нет связи с Supabase. {error.Message}"); }
-        catch (TaskCanceledException) { return Fail("Supabase не ответил вовремя."); }
+        catch (HttpRequestException) { return Fail("Нет соединения с Supabase. Проверьте интернет и попробуйте снова."); }
+        catch (TaskCanceledException) { return Fail("Supabase не ответил вовремя. Попробуйте ещё раз."); }
     }
 
     private CloudSyncResult ApplyWorkspaceResponse(string payload, string message)
@@ -490,16 +490,47 @@ public sealed class CloudSyncService(AppState state)
     private string SnapshotHash() => SnapshotHash(state.CreateCloudSnapshot());
     private static string SnapshotHash(string json) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(json)));
 
-    private static string ExtractMessage(string payload)
+    internal static string DescribeFailure(HttpStatusCode statusCode, string payload)
     {
+        var details = payload;
         try
         {
             using var document = JsonDocument.Parse(payload);
-            return document.RootElement.TryGetProperty("message", out var message)
-                ? message.GetString() ?? payload
-                : payload;
+            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                details = string.Join(" ", new[] { "error_code", "code", "msg", "message", "error" }
+                    .Where(name => document.RootElement.TryGetProperty(name, out _))
+                    .Select(name => document.RootElement.GetProperty(name).ToString()));
+            }
         }
-        catch (JsonException) { return string.IsNullOrWhiteSpace(payload) ? "пустой ответ" : payload; }
+        catch (JsonException) { }
+
+        var normalized = details.ToLowerInvariant();
+        if (normalized.Contains("invalid_credentials") || normalized.Contains("invalid login credentials") ||
+            normalized.Contains("user not found") || normalized.Contains("invalid password"))
+            return "Неверный email или пароль.";
+        if (normalized.Contains("email_not_confirmed") || normalized.Contains("email not confirmed"))
+            return "Подтвердите email в письме от Supabase, затем войдите снова.";
+        if (normalized.Contains("refresh_token") || normalized.Contains("jwt expired") || normalized.Contains("invalid jwt"))
+            return "Сеанс входа истёк. Войдите в Supabase снова.";
+        if (normalized.Contains("revision_conflict") || normalized.Contains("entity_revision_conflict"))
+            return "Облачная база изменилась на другом компьютере. Сначала загрузите её и разрешите конфликт.";
+        if (normalized.Contains("workspace_access_denied") || normalized.Contains("permission denied") || normalized.Contains("row-level security"))
+            return "У этой учётной записи нет доступа к облачной базе Cutlist.";
+        if (normalized.Contains("workspace_not_found"))
+            return "Облачное пространство Cutlist не найдено. Войдите снова.";
+
+        return statusCode switch
+        {
+            HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity => "Не удалось обработать запрос. Проверьте введённые данные.",
+            HttpStatusCode.Unauthorized => "Сеанс входа истёк. Войдите в Supabase снова.",
+            HttpStatusCode.Forbidden => "У этой учётной записи нет доступа к облачной базе Cutlist.",
+            HttpStatusCode.NotFound => "Запрошенные облачные данные не найдены.",
+            HttpStatusCode.RequestTimeout => "Supabase не ответил вовремя. Попробуйте ещё раз.",
+            (HttpStatusCode)429 => "Слишком много запросов к Supabase. Подождите немного и повторите попытку.",
+            _ when (int)statusCode >= 500 => "Сервис Supabase временно недоступен. Попробуйте позже.",
+            _ => "Не удалось выполнить запрос к Supabase. Попробуйте ещё раз."
+        };
     }
 
     private void SaveSettings()

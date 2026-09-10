@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Net;
 using VitanCut.WinUI.Models;
 using VitanCut.WinUI.Services;
 
@@ -34,6 +35,14 @@ Check(AppUpdateService.FormatVersion(new Version(2, 4, 0, 0)) == "2.4.0", "Updat
 var updateScript = AppUpdateService.BuildUpdateScript("C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut\\VitanCut.WinUI.exe", "C:\\Temp\\update", 1234);
 Check(updateScript.Contains("$source = 'C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut'") && updateScript.Contains("Get-Process -Id 1234") && updateScript.Contains("Start-Process -FilePath $executable"),
     "Updater script preserves Unicode paths and waits before relaunching");
+Check(CloudSyncService.DescribeFailure(HttpStatusCode.BadRequest, "{\"code\":400,\"error_code\":\"invalid_credentials\",\"msg\":\"Invalid login credentials\"}") == "Неверный email или пароль.",
+    "Cloud authentication errors use a human message");
+Check(CloudSyncService.DescribeFailure(HttpStatusCode.Unauthorized, "{}") == "Сеанс входа истёк. Войдите в Supabase снова.",
+    "Cloud session errors use a human message");
+Check(CloudSyncService.DescribeFailure((HttpStatusCode)429, "{}") == "Слишком много запросов к Supabase. Подождите немного и повторите попытку.",
+    "Cloud rate limits use a human message");
+Check(CloudSyncService.DescribeFailure(HttpStatusCode.ServiceUnavailable, "{}") == "Сервис Supabase временно недоступен. Попробуйте позже.",
+    "Cloud service errors use a human message");
 Check(AccentPalette.Find("unknown").Id == "system" && AccentPalette.Find(null).Id == "system", "Unknown accent falls back to system");
 var accentState = new AppState();
 var accentPath = Path.Combine(output, "accent-preferences.json");
