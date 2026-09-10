@@ -25,6 +25,8 @@ constexpr UINT WM_INSTALL_FINISHED = WM_APP + 3;
 
 HWND pathBox, desktopBox, startMenuBox, taskbarBox, installButton, progressBar, statusLabel;
 HFONT fontRegular, fontSmall, fontTitle, fontBold;
+HBRUSH windowBrush = CreateSolidBrush(RGB(31, 38, 45));
+HBRUSH inputBrush = CreateSolidBrush(RGB(48, 60, 70));
 
 struct InstallResult { bool success; std::wstring message; };
 
@@ -49,6 +51,27 @@ bool IsSafeArchivePath(const fs::path& root, const fs::path& child)
     const auto rootText = normalizedRoot.wstring();
     const auto childText = normalizedChild.wstring();
     return childText.size() >= rootText.size() && _wcsnicmp(rootText.c_str(), childText.c_str(), rootText.size()) == 0;
+}
+
+void DrawButton(const DRAWITEMSTRUCT* item)
+{
+    const bool primary = item->CtlID == IDC_INSTALL;
+    const bool disabled = (item->itemState & ODS_DISABLED) != 0;
+    const bool pressed = (item->itemState & ODS_SELECTED) != 0;
+    const COLORREF fill = disabled ? RGB(61, 73, 83) : primary ? (pressed ? RGB(0, 91, 170) : RGB(0, 126, 224)) : (pressed ? RGB(70, 84, 96) : RGB(55, 68, 79));
+    const COLORREF border = primary ? RGB(18, 156, 239) : RGB(109, 132, 148);
+    HBRUSH brush = CreateSolidBrush(fill);
+    HPEN pen = CreatePen(PS_SOLID, 1, border);
+    const auto oldBrush = SelectObject(item->hDC, brush);
+    const auto oldPen = SelectObject(item->hDC, pen);
+    RoundRect(item->hDC, item->rcItem.left, item->rcItem.top, item->rcItem.right, item->rcItem.bottom, 8, 8);
+    SelectObject(item->hDC, oldBrush); SelectObject(item->hDC, oldPen);
+    DeleteObject(brush); DeleteObject(pen);
+    wchar_t text[128]{}; GetWindowTextW(item->hwndItem, text, static_cast<int>(std::size(text)));
+    SetBkMode(item->hDC, TRANSPARENT);
+    SetTextColor(item->hDC, disabled ? RGB(157, 171, 181) : RGB(255, 255, 255));
+    SelectObject(item->hDC, item->CtlID == IDC_INSTALL ? fontBold : fontRegular);
+    DrawTextW(item->hDC, text, -1, const_cast<RECT*>(&item->rcItem), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
 std::wstring ReadAll(HINTERNET request, HWND window, const fs::path& output)
@@ -229,8 +252,19 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
     {
     case WM_CTLCOLORSTATIC:
     {
-        auto dc = reinterpret_cast<HDC>(wParam); SetTextColor(dc, RGB(225, 232, 238)); SetBkColor(dc, RGB(31, 38, 45)); static HBRUSH brush = CreateSolidBrush(RGB(31, 38, 45)); return reinterpret_cast<LRESULT>(brush);
+        auto dc = reinterpret_cast<HDC>(wParam); SetTextColor(dc, RGB(225, 232, 238)); SetBkColor(dc, RGB(31, 38, 45)); return reinterpret_cast<LRESULT>(windowBrush);
     }
+    case WM_CTLCOLOREDIT:
+    {
+        auto dc = reinterpret_cast<HDC>(wParam); SetTextColor(dc, RGB(241, 247, 251)); SetBkColor(dc, RGB(48, 60, 70)); return reinterpret_cast<LRESULT>(inputBrush);
+    }
+    case WM_CTLCOLORBTN:
+    {
+        auto dc = reinterpret_cast<HDC>(wParam); SetTextColor(dc, RGB(225, 232, 238)); SetBkColor(dc, RGB(31, 38, 45)); return reinterpret_cast<LRESULT>(windowBrush);
+    }
+    case WM_DRAWITEM:
+        if (const auto* item = reinterpret_cast<DRAWITEMSTRUCT*>(lParam); item->CtlType == ODT_BUTTON && (item->CtlID == IDC_BROWSE || item->CtlID == IDC_INSTALL)) { DrawButton(item); return TRUE; }
+        break;
     case WM_COMMAND:
         if (LOWORD(wParam) == IDC_BROWSE)
         {
@@ -286,9 +320,9 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     createLabel(L"VitanCut", 118, 34, 340, 34, fontTitle); createLabel(L"Установка программы", 120, 70, 300, 24, fontRegular); createLabel(L"Папка установки", 28, 142, 230, 24, fontBold); createLabel(L"Программа будет установлена в выбранную папку.", 28, 168, 380, 22, fontSmall); createLabel(L"Ярлыки", 28, 260, 230, 24, fontBold);
     pathBox = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", (fs::path(getenv("LOCALAPPDATA")) / L"Programs" / L"VitanCut").c_str(), WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 28, 196, 368, 34, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_INSTALL_PATH)), instance, nullptr); SendMessageW(pathBox, WM_SETFONT, reinterpret_cast<WPARAM>(fontRegular), TRUE);
     auto createButton = [window, instance](const wchar_t* text, DWORD style, int id, int x, int y, int width, int height) { HWND button = CreateWindowW(L"BUTTON", text, WS_CHILD | WS_VISIBLE | style, x, y, width, height, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance, nullptr); SendMessageW(button, WM_SETFONT, reinterpret_cast<WPARAM>(fontRegular), TRUE); return button; };
-    createButton(L"Обзор", BS_PUSHBUTTON, IDC_BROWSE, 406, 196, 84, 34); desktopBox = createButton(L"Ярлык на рабочем столе", BS_AUTOCHECKBOX, IDC_DESKTOP, 28, 288, 300, 27); startMenuBox = createButton(L"Ярлык в меню Пуск", BS_AUTOCHECKBOX, IDC_START_MENU, 28, 320, 300, 27); taskbarBox = createButton(L"Закрепить на панели задач", BS_AUTOCHECKBOX, IDC_TASKBAR, 28, 352, 300, 27); SendMessageW(desktopBox, BM_SETCHECK, BST_CHECKED, 0); SendMessageW(startMenuBox, BM_SETCHECK, BST_CHECKED, 0);
-    progressBar = CreateWindowW(PROGRESS_CLASSW, nullptr, WS_CHILD, 28, 397, 320, 8, window, reinterpret_cast<HMENU>(IDC_PROGRESS), instance, nullptr); SendMessageW(progressBar, PBM_SETRANGE, 0, MAKELPARAM(0, 100)); statusLabel = createLabel(L"", 28, 413, 320, 42, fontSmall); installButton = createButton(L"Установить", BS_DEFPUSHBUTTON, IDC_INSTALL, 360, 398, 130, 44); SendMessageW(installButton, WM_SETFONT, reinterpret_cast<WPARAM>(fontBold), TRUE);
+    createButton(L"Обзор", BS_OWNERDRAW, IDC_BROWSE, 406, 196, 84, 34); desktopBox = createButton(L"Ярлык на рабочем столе", BS_AUTOCHECKBOX, IDC_DESKTOP, 28, 288, 300, 27); startMenuBox = createButton(L"Ярлык в меню Пуск", BS_AUTOCHECKBOX, IDC_START_MENU, 28, 320, 300, 27); taskbarBox = createButton(L"Закрепить на панели задач", BS_AUTOCHECKBOX, IDC_TASKBAR, 28, 352, 300, 27); SendMessageW(desktopBox, BM_SETCHECK, BST_CHECKED, 0); SendMessageW(startMenuBox, BM_SETCHECK, BST_CHECKED, 0);
+    progressBar = CreateWindowW(PROGRESS_CLASSW, nullptr, WS_CHILD, 28, 397, 320, 8, window, reinterpret_cast<HMENU>(IDC_PROGRESS), instance, nullptr); SendMessageW(progressBar, PBM_SETRANGE, 0, MAKELPARAM(0, 100)); statusLabel = createLabel(L"", 28, 413, 320, 42, fontSmall); installButton = createButton(L"Установить", BS_OWNERDRAW, IDC_INSTALL, 360, 398, 130, 44); SendMessageW(installButton, WM_SETFONT, reinterpret_cast<WPARAM>(fontBold), TRUE);
     ShowWindow(window, show); UpdateWindow(window);
     MSG message; while (GetMessageW(&message, nullptr, 0, 0)) { TranslateMessage(&message); DispatchMessageW(&message); }
-    DeleteObject(fontRegular); DeleteObject(fontSmall); DeleteObject(fontTitle); DeleteObject(fontBold); CoUninitialize(); return 0;
+    DeleteObject(fontRegular); DeleteObject(fontSmall); DeleteObject(fontTitle); DeleteObject(fontBold); DeleteObject(windowBrush); DeleteObject(inputBrush); CoUninitialize(); return 0;
 }
