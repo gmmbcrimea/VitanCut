@@ -49,6 +49,7 @@ public sealed partial class MainWindow : Window
     private TextBlock? _updateTitle;
     private TextBlock? _updateDescription;
     private Button? _installUpdateButton;
+    private Button? _checkUpdatesButton;
     private ProgressBar? _updateProgress;
     private Timer? _updateTimer;
     private Timer? _cloudPublishTimer;
@@ -177,6 +178,8 @@ public sealed partial class MainWindow : Window
             Foreground = new SolidColorBrush(Colors.White)
         };
         _installUpdateButton.Click += InstallUpdateClick;
+        _checkUpdatesButton = new Button { Content = "Проверить сейчас" };
+        _checkUpdatesButton.Click += CheckUpdatesClick;
         _updateProgress = new ProgressBar
         {
             Minimum = 0,
@@ -197,7 +200,10 @@ public sealed partial class MainWindow : Window
 
         var panel = new StackPanel { Spacing = 12 };
         panel.Children.Add(header);
-        panel.Children.Add(_installUpdateButton);
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        actions.Children.Add(_checkUpdatesButton);
+        actions.Children.Add(_installUpdateButton);
+        panel.Children.Add(actions);
         panel.Children.Add(_updateProgress);
         _updateCard = new Border
         {
@@ -211,7 +217,9 @@ public sealed partial class MainWindow : Window
 
     private void RefreshUpdateSurface(AppUpdateInfo update)
     {
-        if (_updateCard is null || _updateTitle is null || _updateDescription is null || _updateIcon is null || _installUpdateButton is null || _updateProgress is null) return;
+        if (_updateCard is null || _updateTitle is null || _updateDescription is null || _updateIcon is null || _installUpdateButton is null || _checkUpdatesButton is null || _updateProgress is null) return;
+        _checkUpdatesButton.IsEnabled = true;
+        _checkUpdatesButton.Content = "Проверить сейчас";
         _updateProgress.Visibility = Visibility.Collapsed;
         _updateDescription.Text = update.Message;
         switch (update.Availability)
@@ -271,6 +279,19 @@ public sealed partial class MainWindow : Window
         AppInfoBar.Severity = InfoBarSeverity.Warning;
         AppInfoBar.ActionButton = updateButton;
         AppInfoBar.IsOpen = true;
+    }
+
+    private async void CheckUpdatesClick(object sender, RoutedEventArgs e)
+    {
+        if (_checkUpdatesButton is null) return;
+        _checkUpdatesButton.IsEnabled = false;
+        _checkUpdatesButton.Content = "Проверяем...";
+        try { await CheckForUpdatesAsync(); }
+        finally
+        {
+            _checkUpdatesButton.IsEnabled = true;
+            _checkUpdatesButton.Content = "Проверить сейчас";
+        }
     }
 
     private void ConfigureCloudPublishTimer()
