@@ -59,6 +59,11 @@ public sealed class PreferencesService(AppState state)
         Current.CutUsefulRemainder = Math.Max(0, minimum);
         Commit();
     }
+    public void SetCloudPublishIntervalMinutes(int minutes)
+    {
+        Current.CloudPublishIntervalMinutes = minutes is 5 or 15 or 30 or 60 ? minutes : 15;
+        Commit();
+    }
     public void SetCutExportFormat(string format)
     {
         Current.CutExportFormat = format == "xlsx" ? "xlsx" : "pdf";

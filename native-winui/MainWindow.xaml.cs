@@ -49,6 +49,10 @@ public sealed partial class MainWindow : Window
     private TextBlock? _updateTitle;
     private TextBlock? _updateDescription;
     private Button? _installUpdateButton;
+    private Timer? _updateTimer;
+    private Timer? _cloudPublishTimer;
+    private int _activeCloudPublishInterval;
+    private bool _cloudPublishInProgress;
     private Project? SelectedProject => ProjectsList.SelectedItem as Project;
     private string? SelectedCustomer => _catalogPage.SelectedCounterparty;
     private MaterialChoice? SelectedMaterial => _materialPage.SelectedMaterial;
@@ -109,6 +113,7 @@ public sealed partial class MainWindow : Window
             ArrangeSettingsColumns();
             UpdateResponsiveLayout();
             await InitializeOnlineServicesAsync();
+            StartBackgroundTimers();
         };
         MaterialUnitBox.SelectionChanged += MaterialUnitChanged;
         ConfigureNestedScrolling();
@@ -162,7 +167,7 @@ public sealed partial class MainWindow : Window
     {
         _updateIcon = new SymbolIcon { Symbol = Symbol.Sync, Foreground = new SolidColorBrush(Color.FromArgb(255, 138, 153, 168)) };
         _updateTitle = new TextBlock { Text = "Обновления", Style = (Style)Application.Current.Resources["CardTitleTextBlockStyle"] };
-        _updateDescription = new TextBlock { Text = "Проверяем версию приложения...", Style = (Style)Application.Current.Resources["MutedTextBlockStyle"], TextWrapping = TextWrapping.Wrap };
+        _updateDescription = new TextBlock { Text = "Проверка обновлений выполняется каждые 30 минут.", Style = (Style)Application.Current.Resources["MutedTextBlockStyle"], TextWrapping = TextWrapping.Wrap };
         _installUpdateButton = new Button
         {
             Content = "Обновить",
@@ -229,6 +234,22 @@ public sealed partial class MainWindow : Window
     private async Task InitializeOnlineServicesAsync()
     {
         await RestoreCloudSessionAfterLaunchAsync();
+    }
+
+    private void StartBackgroundTimers()
+    {
+        _updateTimer ??= new Timer(_ => DispatcherQueue.TryEnqueue(async () => await CheckForUpdatesAsync()));
+        _updateTimer.Change(TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(30));
+        ConfigureCloudPublishTimer();
+        Closed += (_, _) =>
+        {
+            _updateTimer?.Dispose();
+            _cloudPublishTimer?.Dispose();
+        };
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
         var update = await App.Updates.CheckAsync();
         RefreshUpdateSurface(update);
         if (update.Availability != UpdateAvailability.Available) return;
@@ -240,6 +261,43 @@ public sealed partial class MainWindow : Window
         AppInfoBar.Severity = InfoBarSeverity.Warning;
         AppInfoBar.ActionButton = updateButton;
         AppInfoBar.IsOpen = true;
+    }
+
+    private void ConfigureCloudPublishTimer()
+    {
+        if (!App.Cloud.IsSignedIn)
+        {
+            _cloudPublishTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _activeCloudPublishInterval = 0;
+            return;
+        }
+
+        var minutes = App.Preferences.Current.CloudPublishIntervalMinutes;
+        if (_cloudPublishTimer is not null && _activeCloudPublishInterval == minutes) return;
+        _cloudPublishTimer ??= new Timer(_ => DispatcherQueue.TryEnqueue(async () => await PublishCloudChangesAutomaticallyAsync()));
+        _cloudPublishTimer.Change(TimeSpan.FromMinutes(minutes), TimeSpan.FromMinutes(minutes));
+        _activeCloudPublishInterval = minutes;
+    }
+
+    private async Task PublishCloudChangesAutomaticallyAsync()
+    {
+        if (_cloudPublishInProgress || !App.Cloud.IsSignedIn || !App.Cloud.HasUnsyncedLocalChanges) return;
+        _cloudPublishInProgress = true;
+        try
+        {
+            var result = await App.Cloud.PublishAsync();
+            RefreshCloudSettings();
+            if (result.Succeeded) return;
+            AppInfoBar.Title = "Не удалось опубликовать изменения";
+            AppInfoBar.Message = result.Message;
+            AppInfoBar.Severity = InfoBarSeverity.Warning;
+            AppInfoBar.ActionButton = null;
+            AppInfoBar.IsOpen = true;
+        }
+        finally
+        {
+            _cloudPublishInProgress = false;
+        }
     }
 
     private async void InstallUpdateClick(object sender, RoutedEventArgs e)
@@ -971,13 +1029,27 @@ public sealed partial class MainWindow : Window
                     new GradientStop { Color = Color.FromArgb(230, 20, 102, 70), Offset = 1 }
                 }
             };
+            var intervalBox = new ComboBox { Width = 150 };
+            foreach (var minutes in new[] { 5, 15, 30, 60 })
+                intervalBox.Items.Add(new ComboBoxItem { Content = $"Раз в {minutes} мин.", Tag = minutes });
+            intervalBox.SelectedIndex = new[] { 5, 15, 30, 60 }.ToList().IndexOf(App.Preferences.Current.CloudPublishIntervalMinutes);
+            intervalBox.SelectionChanged += CloudPublishIntervalChanged;
+
+            var schedule = new Grid { ColumnSpacing = 12 };
+            schedule.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            schedule.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            schedule.Children.Add(new TextBlock { Text = "Автопубликация изменений", Foreground = new SolidColorBrush(Colors.White), VerticalAlignment = VerticalAlignment.Center });
+            Grid.SetColumn(intervalBox, 1);
+            schedule.Children.Add(intervalBox);
+
             statusBadge.Child = new StackPanel
             {
-                Spacing = 2,
+                Spacing = 8,
                 Children =
                 {
                     new TextBlock { Text = "Облачная синхронизация работает", Foreground = new SolidColorBrush(Colors.White), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
-                    new TextBlock { Text = "Supabase · Cutlist", Foreground = new SolidColorBrush(Color.FromArgb(220, 218, 255, 232)), FontSize = 12 }
+                    new TextBlock { Text = "Supabase · Cutlist", Foreground = new SolidColorBrush(Color.FromArgb(220, 218, 255, 232)), FontSize = 12 },
+                    schedule
                 }
             };
         }
@@ -996,6 +1068,14 @@ public sealed partial class MainWindow : Window
             : new SolidColorBrush(Color.FromArgb(255, 24, 24, 24));
         cloudCard.BorderBrush = new SolidColorBrush(connected ? Color.FromArgb(175, 62, 207, 142) : Color.FromArgb(255, 48, 48, 48));
         CloudSyncStatusText.Text = App.Cloud.Status;
+        ConfigureCloudPublishTimer();
+    }
+
+    private void CloudPublishIntervalChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ComboBox { SelectedItem: ComboBoxItem { Tag: int minutes } }) return;
+        App.Preferences.SetCloudPublishIntervalMinutes(minutes);
+        ConfigureCloudPublishTimer();
     }
 
     private async void CloudSignInClick(object sender, RoutedEventArgs e)

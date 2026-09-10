@@ -44,6 +44,12 @@ accentState.Database.Preferences.CursorRevealEnabled = true;
 accentState.Save();
 accentState.Load(accentPath);
 Check(accentState.Database.Preferences.CursorRevealEnabled, "Enabled cursor reveal survives restart");
+accentState.Database.Preferences.CloudPublishIntervalMinutes = 30;
+accentState.Save();
+accentState.Load(accentPath);
+Check(accentState.Database.Preferences.CloudPublishIntervalMinutes == 30, "Cloud publish interval survives restart");
+accentState.ImportJson("""{"projects":[],"materials":{},"catalog":{},"preferences":{"cloudPublishIntervalMinutes":7}}""");
+Check(accentState.Database.Preferences.CloudPublishIntervalMinutes == 15, "Unsupported cloud publish interval falls back safely");
 foreach (var accent in AccentPalette.Options)
 {
     accentState.Database.Preferences.AccentColor = AccentPalette.Find(accent.Id).Id;

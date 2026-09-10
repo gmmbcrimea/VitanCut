@@ -89,6 +89,7 @@ public sealed class AppPreferences
     public double CutTrim { get; set; } = 10;
     public double CutGap { get; set; } = 6;
     public double CutUsefulRemainder { get; set; } = 200;
+    public int CloudPublishIntervalMinutes { get; set; } = 15;
     public bool RotationDefaultsMigrated { get; set; }
     public bool SystemThemeDefaultMigrated { get; set; }
     public int ThemeDefaultsVersion { get; set; }

@@ -129,6 +129,9 @@ public sealed class AppState
         }
         Database.Preferences.CutTrim = Math.Max(0, Database.Preferences.CutTrim);
         Database.Preferences.CutGap = Math.Max(0, Database.Preferences.CutGap);
+        Database.Preferences.CloudPublishIntervalMinutes = Database.Preferences.CloudPublishIntervalMinutes is 5 or 15 or 30 or 60
+            ? Database.Preferences.CloudPublishIntervalMinutes
+            : 15;
 
         foreach (var group in Database.MaterialGroups)
         {
