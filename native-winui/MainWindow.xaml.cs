@@ -1,4 +1,5 @@
 using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -55,6 +56,8 @@ public sealed partial class MainWindow : Window
     private Timer? _cloudPublishTimer;
     private int _activeCloudPublishInterval;
     private bool _cloudPublishInProgress;
+    private bool _shutdownInProgress;
+    private bool _shutdownRequested;
     private Project? SelectedProject => ProjectsList.SelectedItem as Project;
     private string? SelectedCustomer => _catalogPage.SelectedCounterparty;
     private MaterialChoice? SelectedMaterial => _materialPage.SelectedMaterial;
@@ -107,6 +110,7 @@ public sealed partial class MainWindow : Window
         CustomerProjectsTitle.Loaded += (_, _) => ConfigureCatalogActions();
         ConfigureMaterialParameterActions();
         ConfigureTitleBar();
+        AppWindow.Closing += MainWindowClosing;
         App.Preferences.Apply(this);
         ApplyTitleBarForeground();
         Root.SizeChanged += (_, _) => UpdateResponsiveLayout();
@@ -264,6 +268,36 @@ public sealed partial class MainWindow : Window
             _updateTimer?.Dispose();
             _cloudPublishTimer?.Dispose();
         };
+    }
+
+    private void MainWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_shutdownRequested || _shutdownInProgress) return;
+        if (!App.Cloud.HasUnsyncedLocalChanges) return;
+
+        args.Cancel = true;
+        _shutdownInProgress = true;
+        _ = PublishBeforeExitAsync();
+    }
+
+    private async Task PublishBeforeExitAsync()
+    {
+        var progressWindow = new Views.CloudPublishWindow();
+        progressWindow.Activate();
+        AppWindow.Hide();
+
+        CloudSyncResult result;
+        try { result = await App.Cloud.PublishAsync(); }
+        catch (Exception) { result = new CloudSyncResult(false, "Нет соединения с Supabase. Изменения останутся на этом компьютере и будут отправлены при следующем запуске."); }
+
+        var message = result.Succeeded
+            ? "Изменённые данные опубликованы. Приложение можно безопасно закрыть."
+            : "Изменения сохранены на этом компьютере и будут отправлены при следующем запуске. " + result.Message;
+        progressWindow.Complete(result.Succeeded, message);
+        await Task.Delay(result.Succeeded ? 900 : 3200);
+        _shutdownRequested = true;
+        progressWindow.Close();
+        Application.Current.Exit();
     }
 
     private async Task CheckForUpdatesAsync()
@@ -1158,14 +1192,23 @@ public sealed partial class MainWindow : Window
         RefreshCloudSettings();
         if (result.Succeeded)
         {
-            if (!App.Cloud.ShouldDownloadInitialSnapshot) return;
-            result = await App.Cloud.DownloadInitialSnapshotAsync();
-            if (result.Succeeded)
+            if (App.Cloud.ShouldDownloadInitialSnapshot)
             {
-                RefreshAfterCloudDatabaseLoad();
-                RefreshCloudSettings();
-                return;
+                result = await App.Cloud.DownloadInitialSnapshotAsync();
+                if (result.Succeeded)
+                {
+                    RefreshAfterCloudDatabaseLoad();
+                    RefreshCloudSettings();
+                    return;
+                }
             }
+            else if (App.Cloud.HasUnsyncedLocalChanges)
+            {
+                result = await App.Cloud.PublishAsync();
+                RefreshCloudSettings();
+                if (result.Succeeded) return;
+            }
+            else return;
         }
 
         var settingsButton = new Button { Content = "Настройки" };

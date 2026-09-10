@@ -1,0 +1,21 @@
+<Window
+    x:Class="VitanCut.WinUI.Views.CloudPublishWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Vitan-Cut">
+  <Window.SystemBackdrop><DesktopAcrylicBackdrop /></Window.SystemBackdrop>
+  <Grid Background="{StaticResource PageSurfaceBrush}" Padding="24">
+    <Border Style="{StaticResource PaneSurfaceStyle}" Padding="22">
+      <StackPanel Spacing="14">
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <FontIcon x:Name="StatusIcon" Glyph="&#xE895;" FontSize="24" Foreground="{StaticResource AppAccentBrush}" />
+          <StackPanel Spacing="3">
+            <TextBlock x:Name="TitleText" Text="Сохранение в облако" Style="{StaticResource CardTitleTextBlockStyle}" />
+            <TextBlock x:Name="StatusText" Text="Публикуем изменённые данные в Supabase..." Style="{StaticResource MutedTextBlockStyle}" TextWrapping="Wrap" />
+          </StackPanel>
+        </StackPanel>
+        <ProgressBar x:Name="Progress" IsIndeterminate="True" Height="6" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>
