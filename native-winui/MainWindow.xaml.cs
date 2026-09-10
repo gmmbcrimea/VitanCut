@@ -104,7 +104,12 @@ public sealed partial class MainWindow : Window
         App.Preferences.Apply(this);
         ApplyTitleBarForeground();
         Root.SizeChanged += (_, _) => UpdateResponsiveLayout();
-        Root.Loaded += async (_, _) => await InitializeOnlineServicesAsync();
+        Root.Loaded += async (_, _) =>
+        {
+            ArrangeSettingsColumns();
+            UpdateResponsiveLayout();
+            await InitializeOnlineServicesAsync();
+        };
         MaterialUnitBox.SelectionChanged += MaterialUnitChanged;
         ConfigureNestedScrolling();
         ConfigureContextMenuSelection();
@@ -273,12 +278,17 @@ public sealed partial class MainWindow : Window
 
     private void ArrangeSettingsColumns()
     {
-        if (AppearancePanel.Parent is not StackPanel leftColumn) return;
-        leftColumn.Children.Remove(DatabasePanel);
-        SettingsRightColumn.Children.Remove(CuttingPanel);
-        SettingsRightColumn.Children.Remove(DetailingPanel);
-        leftColumn.Children.Add(CuttingPanel);
-        leftColumn.Children.Add(DetailingPanel);
+        if (AppearancePanel.Parent is not Panel leftColumn) return;
+
+        // Parent assignment is finalized only after XAML is loaded. Remove every movable
+        // section first, then insert the intended column order deterministically.
+        if (DatabasePanel.Parent is Panel databaseParent) databaseParent.Children.Remove(DatabasePanel);
+        if (CuttingPanel.Parent is Panel cuttingParent) cuttingParent.Children.Remove(CuttingPanel);
+        if (DetailingPanel.Parent is Panel detailingParent) detailingParent.Children.Remove(DetailingPanel);
+
+        var nextToAppearance = leftColumn.Children.IndexOf(AppearancePanel) + 1;
+        leftColumn.Children.Insert(nextToAppearance, CuttingPanel);
+        leftColumn.Children.Insert(nextToAppearance + 1, DetailingPanel);
         SettingsRightColumn.Children.Insert(0, DatabasePanel);
     }
     private void ConfigureTitleBar()
