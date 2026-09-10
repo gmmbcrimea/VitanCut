@@ -1,0 +1,3 @@
+#include "resource.h"
+
+IDI_INSTALLER ICON "installer-icon.ico"
