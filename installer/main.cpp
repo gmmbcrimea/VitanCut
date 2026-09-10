@@ -18,7 +18,7 @@
 namespace fs = std::filesystem;
 
 constexpr wchar_t WindowClass[] = L"VitanCutInstallerWindow";
-constexpr wchar_t ReleasesUrl[] = L"https://api.github.com/repos/gmmbcrimea/VitanCut/releases/latest";
+constexpr wchar_t ReleasesUrl[] = L"https://api.github.com/repos/gmmbcrimea/VitanCut/releases?per_page=100";
 constexpr UINT WM_INSTALL_PROGRESS = WM_APP + 1;
 constexpr UINT WM_INSTALL_STATUS = WM_APP + 2;
 constexpr UINT WM_INSTALL_FINISHED = WM_APP + 3;
