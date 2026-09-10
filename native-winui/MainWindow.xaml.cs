@@ -1183,7 +1183,7 @@ public sealed partial class MainWindow : Window
         }
         ShowCloudResult(result);
         RefreshCloudSettings();
-        if (App.Cloud.IsSignedIn) AppInfoBar.IsOpen = false;
+        if (result.Succeeded) AppInfoBar.IsOpen = false;
     }
 
     private async Task RestoreCloudSessionAfterLaunchAsync()

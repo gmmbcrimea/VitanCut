@@ -61,7 +61,7 @@ public sealed class AppUpdateService
         try
         {
             using var response = await Client.GetAsync(
-                $"https://api.github.com/repos/{RepositoryOwner}/{RepositoryName}/releases/latest",
+                $"https://api.github.com/repos/{RepositoryOwner}/{RepositoryName}/releases?per_page=100",
                 cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
@@ -71,13 +71,20 @@ public sealed class AppUpdateService
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            var release = await JsonSerializer.DeserializeAsync<GitHubRelease>(stream, new JsonSerializerOptions(JsonSerializerDefaults.Web), cancellationToken);
-            if (release is null || !TryParseVersion(release.TagName, out var latest))
+            var releases = await JsonSerializer.DeserializeAsync<GitHubRelease[]>(stream, new JsonSerializerOptions(JsonSerializerDefaults.Web), cancellationToken);
+            var releaseCandidate = releases?
+                .Select(release => new { Release = release, IsVersion = TryParseVersion(release.TagName, out var version), Version = version })
+                .Where(candidate => candidate.IsVersion && candidate.Release.Assets?.Any(IsPortableAsset) == true)
+                .OrderByDescending(candidate => candidate.Version)
+                .FirstOrDefault();
+            if (releaseCandidate is null)
             {
                 return Remember(new AppUpdateInfo(
                     UpdateAvailability.Unavailable, _currentVersion, null,
-                    "В последнем релизе GitHub не указан корректный номер версии."));
+                    "В GitHub не найден релиз программы с portable-архивом."));
             }
+            var release = releaseCandidate.Release;
+            var latest = releaseCandidate.Version;
 
             if (latest <= _currentVersion)
             {
@@ -88,8 +95,7 @@ public sealed class AppUpdateService
             }
 
             var asset = release.Assets?
-                .Where(item => item.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-                               item.Name.Contains("portable", StringComparison.OrdinalIgnoreCase))
+                .Where(IsPortableAsset)
                 .OrderByDescending(item => item.Size)
                 .FirstOrDefault();
             if (asset is null || string.IsNullOrWhiteSpace(asset.BrowserDownloadUrl))
@@ -120,6 +126,10 @@ public sealed class AppUpdateService
                 "GitHub вернул некорректные данные о релизе."));
         }
     }
+
+    private static bool IsPortableAsset(GitHubAsset asset) =>
+        asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+        asset.Name.Contains("portable", StringComparison.OrdinalIgnoreCase);
 
     public async Task<bool> InstallAsync(AppUpdateInfo update, IProgress<UpdateDownloadProgress>? progress = null,
         CancellationToken cancellationToken = default)

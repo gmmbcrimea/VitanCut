@@ -60,6 +60,7 @@ public sealed class CloudSyncService(AppState state)
     {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password)) return Fail("Введите email и пароль пользователя Supabase.");
 
+        _accessToken = "";
         var response = await SendAsync(HttpMethod.Post, "/auth/v1/token?grant_type=password", new { email = email.Trim(), password }, false);
         if (!response.Succeeded) return response;
         try
@@ -68,7 +69,9 @@ public sealed class CloudSyncService(AppState state)
             UpdateSession(document.RootElement);
             if (!IsSignedIn || string.IsNullOrWhiteSpace(_refreshToken)) return Fail("Supabase не вернул сеанс входа.");
             SaveRefreshToken();
-            return await EnsureWorkspaceAsync();
+            var workspaceResult = await EnsureWorkspaceAsync();
+            if (!workspaceResult.Succeeded) _accessToken = "";
+            return workspaceResult;
         }
         catch (JsonException) { return Fail("Supabase вернул неполный ответ авторизации."); }
     }
@@ -84,7 +87,9 @@ public sealed class CloudSyncService(AppState state)
             UpdateSession(document.RootElement);
             if (!IsSignedIn) return Fail("Supabase не вернул действующий сеанс.");
             SaveRefreshToken();
-            return await EnsureWorkspaceAsync();
+            var workspaceResult = await EnsureWorkspaceAsync();
+            if (!workspaceResult.Succeeded) _accessToken = "";
+            return workspaceResult;
         }
         catch (JsonException) { return Fail("Supabase вернул неполный ответ восстановления сеанса."); }
     }
