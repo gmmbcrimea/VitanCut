@@ -356,12 +356,14 @@ public sealed partial class MainWindow : Window
         try
         {
             var result = await App.Cloud.PublishAsync();
-            RefreshCloudSettings();
             if (result.Succeeded)
             {
+                RefreshCloudSettings();
                 if (result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
                 return;
             }
+            result = App.Cloud.RequireSignInAfterSyncFailure(result);
+            RefreshCloudSettings();
             AppInfoBar.Title = "Не удалось опубликовать изменения";
             AppInfoBar.Message = result.Message;
             AppInfoBar.Severity = InfoBarSeverity.Warning;
@@ -1236,6 +1238,7 @@ public sealed partial class MainWindow : Window
         try
         {
             var result = await App.Cloud.PublishAsync();
+            if (!result.Succeeded) result = App.Cloud.RequireSignInAfterSyncFailure(result);
             ShowCloudResult(result);
             if (result.Succeeded && result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
             RefreshCloudSettings();

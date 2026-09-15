@@ -113,6 +113,9 @@ public sealed class CloudSyncService(AppState state)
         return Fail(result.Message);
     }
 
+    public CloudSyncResult RequireSignInAfterSyncFailure(CloudSyncResult result) =>
+        result.IsConflict ? result : DisconnectAfterFailure(result);
+
     private async Task<CloudSyncResult> EnsureWorkspaceAsync()
     {
         var path = $"/rest/v1/workspaces?name=eq.{Uri.EscapeDataString(WorkspaceName)}&select=id&limit=1";
