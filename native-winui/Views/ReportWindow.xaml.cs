@@ -34,6 +34,9 @@ public sealed partial class ReportWindow : Window
         Func<Task>? openAdditionalCut = null, bool isAdditional = false)
     {
         InitializeComponent();
+        var notifications = new NotificationOverlay();
+        Grid.SetColumnSpan(notifications, 2);
+        Root.Children.Add(notifications);
         _cutReport = report;
         _baseline = report;
         _signature = CutPlanService.Signature(report);
@@ -66,6 +69,9 @@ public sealed partial class ReportWindow : Window
     public ReportWindow(DetailingReport report)
     {
         InitializeComponent();
+        var notifications = new NotificationOverlay();
+        Grid.SetColumnSpan(notifications, 2);
+        Root.Children.Add(notifications);
         _detailingReport = report;
         SaveReportButton.Click += SaveReportClick;
         PrintReportButton.Click += PrintReportClick;

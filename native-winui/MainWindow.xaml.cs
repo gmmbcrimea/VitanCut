@@ -67,6 +67,10 @@ public sealed partial class MainWindow : Window
     {
         _minSizeSubclassProc = MinSizeSubclassProc;
         InitializeComponent();
+        var notifications = new NotificationOverlay();
+        Grid.SetRowSpan(notifications, 2);
+        Grid.SetColumnSpan(notifications, 2);
+        Root.Children.Add(notifications);
         _projectPage = new ProjectPageController(
             App.State, ProjectsList, NoProjectsPanel, EmptyStatePanel, ProjectPanel,
             ProjectTitleText, ProjectCustomerText, ProjectAddressText,
@@ -534,7 +538,7 @@ public sealed partial class MainWindow : Window
     }
 
     private void ConfigureNestedScrolling() =>
-        _nestedScrolling.Attach(ProductsList, PayrollsList);
+        _nestedScrolling.Attach(PayrollsList);
 
     private void ConfigureContextMenuSelection() =>
         _contextMenus.Configure(ProjectsList, ProductsList, PayrollsList, CustomersList, CustomerProjectsList, MaterialsList);
@@ -1361,8 +1365,11 @@ public sealed partial class MainWindow : Window
             ProjectWorkListsGrid.RowDefinitions[1].Height = stackLists ? GridLength.Auto : new GridLength(0);
             Grid.SetColumn(PayrollPanel, stackLists ? 0 : 1);
             Grid.SetRow(PayrollPanel, stackLists ? 1 : 0);
-            var listHeight = Math.Max(360, Root.ActualHeight - 460);
-            ProjectWorkListsGrid.MaxHeight = listHeight * (stackLists ? 2 : 1) + (stackLists ? 72 : 0);
+            var listHeight = Math.Max(360, Root.ActualHeight - 500);
+            const double listPanelChrome = 88;
+            ProjectWorkListsGrid.MaxHeight = (listHeight + listPanelChrome) * (stackLists ? 2 : 1) + (stackLists ? 12 : 0);
+            ProductsList.Height = listHeight;
+            PayrollsList.Height = listHeight;
             ProductsList.MaxHeight = listHeight;
             PayrollsList.MaxHeight = listHeight;
         }

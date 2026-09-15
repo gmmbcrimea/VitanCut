@@ -32,6 +32,8 @@ Check(AppUpdateService.TryParseVersion("v1.2.3", out var parsedUpdateVersion) &&
 Check(AppUpdateService.TryParseVersion("1.2.3-beta.1", out parsedUpdateVersion) && parsedUpdateVersion == new Version(1, 2, 3), "Update tags ignore prerelease metadata when comparing versions");
 Check(!AppUpdateService.TryParseVersion("latest", out _), "Invalid GitHub release tag is rejected");
 Check(AppUpdateService.FormatVersion(new Version(2, 4, 0, 0)) == "2.4.0", "Update status formats local version consistently");
+var releaseSummary = AppUpdateService.SummarizeReleaseNotes("## Что нового в VitanCut 1.0.18\n\n- Исправлена прокрутка\n- Добавлена история уведомлений\n\n## Что нового в VitanCut 1.0.17\n- Старые изменения\n\n**Full Changelog**: link", "v1.0.18");
+Check(releaseSummary is not null && releaseSummary.Contains("Исправлена прокрутка") && !releaseSummary.Contains("Старые изменения") && !releaseSummary.Contains("Full Changelog"), "Update notes include only the selected release version");
 var updateScript = AppUpdateService.BuildUpdateScript("C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut\\VitanCut.WinUI.exe", "C:\\Temp\\update", 1234);
 Check(updateScript.Contains("$source = 'C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut'") && updateScript.Contains("Get-Process -Id 1234") && updateScript.Contains("Start-Process -FilePath $executable") && updateScript.Contains("updater.log") && updateScript.Contains("Update failed:"),
     "Updater script preserves Unicode paths, logs failures and waits before relaunching");

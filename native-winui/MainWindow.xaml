@@ -156,7 +156,7 @@
                          Style="{StaticResource MutedTextBlockStyle}" />
             </StackPanel>
 
-            <ScrollViewer x:Name="ProjectPanel" Visibility="Collapsed">
+            <ScrollViewer x:Name="ProjectPanel" Visibility="Collapsed" VerticalScrollMode="Enabled" VerticalScrollBarVisibility="Auto">
               <StackPanel Spacing="24">
                 <Button x:Name="BackToProjectsButton"
                         Content="Назад к проектам"
@@ -251,7 +251,7 @@
                                 RightTapped="ListViewRightTappedSelectItem"
                                 IsRightTapEnabled="True"
                                 ScrollViewer.VerticalScrollMode="Enabled"
-                                ScrollViewer.VerticalScrollBarVisibility="Hidden">
+                                ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListView.ContextFlyout>
                           <MenuFlyout>
                             <MenuFlyoutItem Text="Добавить" Click="AddProductClick" />
@@ -297,7 +297,7 @@
                                 MaxHeight="360"
                                 RightTapped="ListViewRightTappedSelectItem"
                                 ScrollViewer.VerticalScrollMode="Enabled"
-                                ScrollViewer.VerticalScrollBarVisibility="Hidden">
+                                ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListView.ContextFlyout>
                           <MenuFlyout>
                             <MenuFlyoutItem Text="Добавить" Click="AddPayrollClick" />

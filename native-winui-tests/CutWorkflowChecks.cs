@@ -43,6 +43,21 @@ internal static class CutWorkflowChecks
         check(rotated.Report.Groups[0].Sheets.SelectMany(s => s.Placements)
                 .All(p => original.Groups[0].Sheets.SelectMany(s => s.Placements).Single(source => source.InstanceId == p.InstanceId).DisplayNumber == p.DisplayNumber),
             "Rotation preserves the displayed number of every detail instance");
+        var prioritizedTurn = CutEditing.Rotate(Report(Sheet(1,
+            Part("priority", 10, 10, 300, 400), Part("neighbour-a", 310, 10, 250, 200), Part("neighbour-b", 310, 210, 250, 200))), new HashSet<string> { "priority" });
+        check(prioritizedTurn.Success && prioritizedTurn.NewSheets == 1 && prioritizedTurn.Report.Groups[0].Sheets[0].Placements.Single(part => part.InstanceId == "priority").Rotated &&
+            prioritizedTurn.Report.Groups[0].Sheets[1].Placements.All(part => part.InstanceId != "priority"),
+            "Rotate-here prioritizes the selected part and sends displaced neighbours to a new sheet");
+        var movedRotation = CutEditing.RotateToAvailableSheet(original, new HashSet<string> { "a" });
+        check(movedRotation.Success && movedRotation.NewSheets == 0 && movedRotation.Report.Groups[0].Sheets[1].Placements.Any(part => part.InstanceId == "a" && part.Rotated),
+            "Overflow rotation uses the first existing later sheet with available space");
+        check(movedRotation.Report.Groups[0].Sheets[0].Placements.Count == 2 && CutEditing.Valid(movedRotation.Report.Groups[0].Sheets[0].Placements, 620, 420, 10, 0),
+            "Moving a rotated part recalculates its source sheet without losing parts");
+        var movedToNew = CutEditing.RotateToAvailableSheet(Report(Sheet(1,
+            Part("left", 10, 10, 200, 400), Part("middle", 210, 10, 200, 400), Part("right", 410, 10, 200, 400))), new HashSet<string> { "left" });
+        check(movedToNew.Success && movedToNew.NewSheets == 1 && movedToNew.SheetSummary.Contains("лист 2") &&
+            movedToNew.Report.Groups[0].Sheets[1].Placements.Any(part => part.InstanceId == "left" && part.Rotated),
+            "Overflow rotation creates a new sheet only when no existing sheet is available");
         var locked = Report(Sheet(1, Part("locked", 10, 10, 100, 100, false)));
         check(!CutEditing.Rotate(locked, new HashSet<string> { "locked" }).Success, "Group rotation cannot bypass a rotation lock");
         var oversized = Report(Sheet(1, Part("wide", 10, 10, 500, 100)));

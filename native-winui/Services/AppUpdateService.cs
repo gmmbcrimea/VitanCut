@@ -110,7 +110,7 @@ public sealed class AppUpdateService
             return Remember(new AppUpdateInfo(
                 UpdateAvailability.Available, _currentVersion, latest,
                 $"Доступна версия {FormatVersion(latest)}. Установлена {FormatVersion(_currentVersion)}.",
-                asset.BrowserDownloadUrl, release.HtmlUrl, SummarizeReleaseNotes(release.Body)));
+                asset.BrowserDownloadUrl, release.HtmlUrl, SummarizeReleaseNotes(release.Body, release.TagName)));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -132,14 +132,47 @@ public sealed class AppUpdateService
         asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
         asset.Name.Contains("portable", StringComparison.OrdinalIgnoreCase);
 
-    private static string? SummarizeReleaseNotes(string? body)
+    internal static string? SummarizeReleaseNotes(string? body, string? tagName)
     {
         if (string.IsNullOrWhiteSpace(body)) return null;
-        var lines = body.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var lines = body.Split('\n', StringSplitOptions.TrimEntries);
+        var version = tagName?.TrimStart('v', 'V');
+        var headings = lines.Select((line, index) => (line, index))
+            .Where(item => item.line.StartsWith('#'))
+            .ToList();
+        var versionHeadingPosition = string.IsNullOrWhiteSpace(version)
+            ? -1
+            : headings.FindIndex(item => item.line.Contains(version, StringComparison.OrdinalIgnoreCase));
+        var versionHeading = versionHeadingPosition >= 0 ? headings[versionHeadingPosition].index : -1;
+        if (versionHeading >= 0)
+        {
+            var nextHeading = headings.FirstOrDefault(item => item.index > versionHeading).index;
+            lines = lines.Skip(versionHeading + 1).Take(nextHeading > versionHeading ? nextHeading - versionHeading - 1 : int.MaxValue).ToArray();
+        }
+        else if (headings.Count > 0)
+        {
+            var firstContentHeading = headings.FindIndex(item =>
+                item.line.Contains("измен", StringComparison.OrdinalIgnoreCase) ||
+                item.line.Contains("what's changed", StringComparison.OrdinalIgnoreCase) ||
+                item.line.Contains("what’s changed", StringComparison.OrdinalIgnoreCase) ||
+                item.line.Contains("what's new", StringComparison.OrdinalIgnoreCase) ||
+                item.line.Contains("what’s new", StringComparison.OrdinalIgnoreCase));
+            if (firstContentHeading >= 0)
+            {
+                var start = headings[firstContentHeading].index;
+                var end = headings.Skip(firstContentHeading + 1).Select(item => item.index).FirstOrDefault(int.MaxValue);
+                lines = lines.Skip(start + 1).Take(end == int.MaxValue ? int.MaxValue : end - start - 1).ToArray();
+            }
+        }
+        var cleaned = lines
             .Select(line => line.TrimStart('#', ' ', '-', '*', '>').Trim())
-            .Where(line => line.Length > 0)
+            .Where(line => line.Length > 0 &&
+                !line.StartsWith("Full Changelog", StringComparison.OrdinalIgnoreCase) &&
+                !line.StartsWith("Полный список изменений", StringComparison.OrdinalIgnoreCase) &&
+                !line.StartsWith("New Contributors", StringComparison.OrdinalIgnoreCase) &&
+                !line.StartsWith("Новые участники", StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        var summary = string.Join(" ", lines);
+        var summary = string.Join(" · ", cleaned);
         return summary.Length <= 480 ? summary : summary[..477].TrimEnd() + "...";
     }
 

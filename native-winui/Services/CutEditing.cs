@@ -171,14 +171,102 @@ public static class CutEditing
             var moving = sheet.Placements.Where(p => ids.Contains(p.InstanceId)).ToList();
             if (moving.Count == 0) continue;
             if (group.TextureDirection) return new(source, Error: "Направление текстуры запрещает поворот.");
-            sheet.Placements.RemoveAll(p => ids.Contains(p.InstanceId));
+            var remaining = sheet.Placements.Where(p => !ids.Contains(p.InstanceId)).ToList();
+            sheet.Placements.Clear();
             var rotated = moving.Select(p => p with { Length = p.Width, Width = p.Length, Rotated = !p.Rotated }).ToList();
-            var proposal = Arrange(copy, group, group.Sheets.IndexOf(sheet), rotated, source, align: true);
-            if (!proposal.Success) return proposal;
-            created += proposal.NewSheets;
-            if (proposal.NewSheets > 0) affected.Add(proposal.SheetSummary);
+            if (rotated.Any(p => p.Length > group.SheetLength - 2 * copy.Trim + Epsilon || p.Width > group.SheetWidth - 2 * copy.Trim + Epsilon))
+                return new(source, Error: "В этой ориентации деталь не помещается даже на пустой лист материала.");
+            var overflow = new List<CutPlacement>();
+            var alignedRotation = Aligned(rotated, sheet.Placements, group.SheetLength, group.SheetWidth, copy.Trim, copy.Gap);
+            if (alignedRotation is not null) sheet.Placements.AddRange(alignedRotation);
+            else
+            {
+                foreach (var part in rotated.OrderByDescending(p => p.Length * p.Width))
+                {
+                    var offset = Nearest([part], sheet.Placements, group.SheetLength, group.SheetWidth, copy.Trim, copy.Gap);
+                    if (offset is { } shift) sheet.Placements.Add(part with { X = part.X + shift.X, Y = part.Y + shift.Y });
+                    else overflow.Add(part);
+                }
+            }
+            foreach (var part in remaining.OrderByDescending(p => p.Length * p.Width))
+            {
+                var offset = Nearest([part], sheet.Placements, group.SheetLength, group.SheetWidth, copy.Trim, copy.Gap);
+                if (offset is { } shift) sheet.Placements.Add(part with { X = part.X + shift.X, Y = part.Y + shift.Y });
+                else overflow.Add(part);
+            }
+            var added = new List<CutSheet>();
+            foreach (var part in overflow)
+            {
+                CutSheet? destination = null;
+                (double X, double Y)? shift = null;
+                foreach (var candidate in added)
+                {
+                    shift = Nearest([part], candidate.Placements, group.SheetLength, group.SheetWidth, copy.Trim, copy.Gap);
+                    if (shift is not null) { destination = candidate; break; }
+                }
+                if (destination is null)
+                {
+                    destination = new CutSheet(0, group.SheetLength, group.SheetWidth, 0, []);
+                    added.Add(destination);
+                    shift = Nearest([part], [], group.SheetLength, group.SheetWidth, copy.Trim, copy.Gap);
+                }
+                destination.Placements.Add(part with { X = part.X + shift!.Value.X, Y = part.Y + shift.Value.Y });
+            }
+            var sheetIndex = group.Sheets.IndexOf(sheet);
+            group.Sheets.InsertRange(sheetIndex + 1, added);
+            created += added.Count;
+            if (added.Count > 0) affected.Add($"{group.MaterialName}, исходный лист {sheet.Number}: +{added.Count}");
         }
         return new(Renumber(copy), created, SheetSummary: string.Join("\n", affected));
+    }
+
+    public static CutEditProposal RotateToAvailableSheet(CutReport source, IReadOnlySet<string> ids)
+    {
+        var found = source.Groups.SelectMany(group => group.Sheets.Select((sheet, index) => (group, sheet, index)))
+            .Where(item => item.sheet.Placements.Any(part => ids.Contains(part.InstanceId))).ToList();
+        if (ids.Count == 0 || found.Sum(item => item.sheet.Placements.Count(part => ids.Contains(part.InstanceId))) != ids.Count)
+            return new(source, Error: "Выделенные детали не найдены.");
+        if (found.Count != 1) return new(source, Error: "Для переноса выберите детали на одном листе.");
+        var (sourceGroup, sourceSheet, sourceIndex) = found[0];
+        var selected = sourceSheet.Placements.Where(part => ids.Contains(part.InstanceId)).ToList();
+        if (selected.Any(part => !part.AllowRotation)) return new(source, Error: "В выделении есть детали с запрещённым поворотом.");
+        if (sourceGroup.TextureDirection) return new(source, Error: "Направление текстуры запрещает поворот.");
+        var rotated = selected.Select(part => part with { Length = part.Width, Width = part.Length, Rotated = !part.Rotated }).ToList();
+        if (rotated.Any(part => part.Length > sourceGroup.SheetLength - 2 * source.Trim + Epsilon || part.Width > sourceGroup.SheetWidth - 2 * source.Trim + Epsilon))
+            return new(source, Error: "Деталь не помещается даже на пустой лист в повёрнутом виде.");
+
+        var copy = Clone(source);
+        var group = copy.Groups.First(item => item.MaterialId == sourceGroup.MaterialId);
+        var sourceTarget = group.Sheets[sourceIndex];
+        sourceTarget.Placements.RemoveAll(part => ids.Contains(part.InstanceId));
+        var targetIndex = -1;
+        List<CutPlacement>? placed = null;
+        var candidates = Enumerable.Range(sourceIndex + 1, Math.Max(0, group.Sheets.Count - sourceIndex - 1))
+            .Concat(Enumerable.Range(0, sourceIndex));
+        foreach (var index in candidates)
+        {
+            var offset = Nearest(rotated, group.Sheets[index].Placements, group.SheetLength, group.SheetWidth, copy.Trim, copy.Gap);
+            if (offset is null) continue;
+            targetIndex = index;
+            placed = rotated.Select(part => part with { X = part.X + offset.Value.X, Y = part.Y + offset.Value.Y }).ToList();
+            break;
+        }
+        var created = false;
+        if (targetIndex < 0)
+        {
+            targetIndex = sourceIndex + 1;
+            var newSheet = new CutSheet(0, group.SheetLength, group.SheetWidth, 0, []);
+            group.Sheets.Insert(targetIndex, newSheet);
+            var offset = Nearest(rotated, [], group.SheetLength, group.SheetWidth, copy.Trim, copy.Gap);
+            if (offset is null) return new(source, Error: "Не удалось разместить деталь на новом листе.");
+            placed = rotated.Select(part => part with { X = part.X + offset.Value.X, Y = part.Y + offset.Value.Y }).ToList();
+            created = true;
+        }
+        group.Sheets[targetIndex].Placements.AddRange(placed!);
+        var reordered = OrderSheet(copy, sourceGroup.MaterialId, sourceSheet.Number);
+        if (reordered.Success) copy = reordered.Report;
+        var summary = $"{group.MaterialName}: деталь перенесена на лист {targetIndex + 1}";
+        return new(Renumber(copy), created ? 1 : 0, SheetSummary: summary);
     }
 
     public static CutEditProposal OrderSheet(CutReport source, string materialId, int sheetNumber)

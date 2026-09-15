@@ -29,8 +29,17 @@ jobs:
           $archive = "VitanCut-portable-win-x64-$version.zip"
           Compress-Archive -Path "$source/*" -DestinationPath $archive -CompressionLevel Optimal
 
+      - name: Load version-specific release notes
+        id: notes
+        shell: pwsh
+        run: |
+          $notes = "release-notes/${{ github.ref_name }}.md"
+          if (-not (Test-Path $notes)) { throw "Missing version-specific release notes: $notes" }
+          "path=$notes" >> $env:GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          generate_release_notes: false
+          body_path: ${{ steps.notes.outputs.path }}
           files: VitanCut-portable-win-x64-*.zip

@@ -190,11 +190,12 @@ public sealed partial class ReportWindow
         catch (Exception error) { HintText.Text = $"Правка не сохранена: {error.Message}"; return false; }
     }
 
-    private async Task ApplyEditAsync(CutEditProposal proposal)
+    private async Task<bool> ApplyEditAsync(CutEditProposal proposal)
     {
-        if (_cutBusy) return;
-        if (!proposal.Success) { HintText.Text = proposal.Error; return; }
+        if (_cutBusy) return false;
+        if (!proposal.Success) { HintText.Text = proposal.Error; return false; }
         _cutBusy = true;
+        var committed = false;
         try
         {
             var nextReport = proposal.Report;
@@ -208,7 +209,7 @@ public sealed partial class ReportWindow
                 var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = title,
                     Content = $"{content}\n\n{proposal.SheetSummary}", PrimaryButtonText = action,
                     CloseButtonText = "Отмена", DefaultButton = ContentDialogButton.Close };
-                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return false;
             }
             var emptied = NewlyEmptySheets(nextReport);
             if (emptied.Count > 0)
@@ -219,9 +220,10 @@ public sealed partial class ReportWindow
                     PrimaryButtonText = "Удалить", CloseButtonText = "Оставить", DefaultButton = ContentDialogButton.Close };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary) nextReport = CutEditing.RemoveEmptySheets(nextReport, emptied);
             }
-            CommitEdit(nextReport);
+            committed = CommitEdit(nextReport);
         }
         finally { _cutBusy = false; PaintSelection(); }
+        return committed;
     }
 
     private async Task ComputeEditAsync(Func<CutEditProposal> compute)
@@ -235,10 +237,59 @@ public sealed partial class ReportWindow
         if (!_cutClosed && proposal is not null) await ApplyEditAsync(proposal);
     }
 
-    private Task RotatePartsAsync(HashSet<string> ids)
+    private async Task RotatePartsAsync(HashSet<string> ids)
     {
         var report = _cutReport;
-        return report is null || _cutBusy ? Task.CompletedTask : ComputeEditAsync(() => CutEditing.Rotate(report, ids));
+        if (report is null || _cutBusy || _cutClosed) return;
+        _cutBusy = true; SetExportBusy(true);
+        CutEditProposal? rotateHere = null;
+        CutEditProposal? transfer = null;
+        try
+        {
+            var proposals = await Task.Run(() => (CutEditing.Rotate(report, ids), CutEditing.RotateToAvailableSheet(report, ids)));
+            rotateHere = proposals.Item1;
+            transfer = proposals.Item2;
+        }
+        catch (Exception error) { if (!_cutClosed) HintText.Text = error.Message; }
+        finally { _cutBusy = false; if (!_cutClosed) SetExportBusy(false); }
+        if (_cutClosed || rotateHere is null || transfer is null) return;
+        if (!rotateHere.Success) { HintText.Text = rotateHere.Error; return; }
+        if (rotateHere.NewSheets == 0)
+        {
+            await ApplyEditAsync(rotateHere);
+            return;
+        }
+        if (!transfer.Success)
+        {
+            await ApplyEditAsync(rotateHere);
+            return;
+        }
+
+        var transferLabel = transfer.NewSheets > 0 ? "Перенести на новый лист" : "Перенести на следующий лист";
+        var content = new StackPanel { Spacing = 8 };
+        content.Children.Add(new TextBlock { Text = "Поворот не помещается в текущую раскладку. Выберите действие:" , TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(new TextBlock { Text = "При переносе исходный лист будет пересчитан. При повороте здесь не помещающиеся детали перейдут на новый лист.", TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            RequestedTheme = Root.ActualTheme,
+            Title = "Деталь не помещается на листе",
+            Content = content,
+            PrimaryButtonText = transferLabel,
+            SecondaryButtonText = "Повернуть здесь",
+            CloseButtonText = "Отменить поворот",
+            DefaultButton = ContentDialogButton.Close
+        };
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            var moved = await ApplyEditAsync(transfer with { NewSheets = 0 });
+            if (moved) NotificationCenter.Publish("Деталь перенесена", transfer.SheetSummary);
+        }
+        else if (result == ContentDialogResult.Secondary)
+        {
+            await ApplyEditAsync(rotateHere with { NewSheets = 0 });
+        }
     }
 
     private Task OrderSheetAsync(InteractiveSheet sheet)
