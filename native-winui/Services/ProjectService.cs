@@ -7,6 +7,8 @@ namespace VitanCut.WinUI.Services;
 /// </summary>
 public sealed class ProjectService(AppState state)
 {
+    public Project? Find(string id) => state.Database.Projects.FirstOrDefault(project => project.Id == id);
+
     public IReadOnlyList<Project> GetOrdered(string sortKey) => sortKey switch
     {
         "created" => state.Database.Projects.OrderByDescending(project => project.CreatedAt).ToList(),
@@ -27,6 +29,7 @@ public sealed class ProjectService(AppState state)
 
     public void UpdateProject(Project project, string name, string counterparty, string address)
     {
+        project = Resolve(project);
         project.Name = name;
         project.Counterparty = counterparty;
         project.Address = address;
@@ -37,12 +40,14 @@ public sealed class ProjectService(AppState state)
 
     public void Delete(Project project)
     {
+        project = Resolve(project);
         state.Database.Projects.Remove(project);
         state.Save();
     }
 
     public void SaveProduct(Project project, Product? previous, Product saved)
     {
+        project = Resolve(project);
         if (previous is null)
         {
             saved.Id = Ids.NewId();
@@ -50,8 +55,12 @@ public sealed class ProjectService(AppState state)
         }
         else
         {
-            var index = project.Products.IndexOf(previous);
-            if (index >= 0) project.Products[index] = saved;
+            var index = project.Products.FindIndex(product => product.Id == previous.Id);
+            if (index >= 0)
+            {
+                saved.Id = project.Products[index].Id;
+                project.Products[index] = saved;
+            }
         }
 
         Touch(project);
@@ -60,6 +69,7 @@ public sealed class ProjectService(AppState state)
 
     public void SaveCutLayout(Project project, IEnumerable<CutLayoutOverride> layout)
     {
+        project = Resolve(project);
         project.CutLayout = layout.Select(item => new CutLayoutOverride
         {
             InstanceId = item.InstanceId,
@@ -76,7 +86,7 @@ public sealed class ProjectService(AppState state)
     }
     public void SaveCutPlans(Project project, IReadOnlyList<SavedCutPlan> plans, string activeId, string expectedSignature, CutReportScope scope = CutReportScope.All)
     {
-        if (!state.Database.Projects.Contains(project)) throw new InvalidOperationException("Проект уже удалён.");
+        project = Resolve(project);
         var baseline = CuttingService.BuildCutReport(state, project, false, scope);
         if (CutPlanService.Signature(baseline) != expectedSignature)
             throw new InvalidOperationException("Размеры, материалы или настройки раскроя изменились. Откройте расчёт заново.");
@@ -101,13 +111,15 @@ public sealed class ProjectService(AppState state)
     }
     public void DeleteProduct(Project project, Product product)
     {
-        project.Products.Remove(product);
+        project = Resolve(project);
+        project.Products.RemoveAll(item => item.Id == product.Id);
         Touch(project);
         state.Save();
     }
 
     public void AddPayroll(Project project, Payroll payroll)
     {
+        project = Resolve(project);
         project.Payrolls.Add(payroll);
         Touch(project);
         state.Save();
@@ -115,6 +127,7 @@ public sealed class ProjectService(AppState state)
 
     public void UpdatePayroll(Project project, int index, string mode, double amount, double rate, string note)
     {
+        project = Resolve(project);
         if (index < 0 || index >= project.Payrolls.Count) return;
         var payroll = project.Payrolls[index];
         payroll.Mode = mode;
@@ -127,6 +140,7 @@ public sealed class ProjectService(AppState state)
 
     public void DeletePayroll(Project project, int index)
     {
+        project = Resolve(project);
         if (index < 0 || index >= project.Payrolls.Count) return;
         project.Payrolls.RemoveAt(index);
         Touch(project);
@@ -139,6 +153,9 @@ public sealed class ProjectService(AppState state)
             state.Database.Counterparties.Contains(counterparty, StringComparer.CurrentCultureIgnoreCase)) return;
         state.Database.Counterparties.Add(counterparty);
     }
+
+    private Project Resolve(Project project) => Find(project.Id)
+        ?? throw new InvalidOperationException("Проект уже удалён.");
 
     private static void Touch(Project project) => project.UpdatedAt = DateTimeOffset.Now;
 }

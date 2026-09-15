@@ -81,8 +81,13 @@ public static class CutOptimization
         var distance = FamilyDistance(a).CompareTo(FamilyDistance(b));
         if (distance != 0) return distance < 0;
         var length = CuttingMetrics.ForSheets(a, trim).Length.CompareTo(CuttingMetrics.ForSheets(b, trim).Length);
-        return length != 0 ? length < 0 : Compactness(a) > Compactness(b) + 1e-9;
+        if (length != 0) return length < 0;
+        var compactness = Compactness(a).CompareTo(Compactness(b));
+        if (Math.Abs(compactness) > 1e-9) return compactness > 0;
+        return RotationCount(a) > RotationCount(b);
     }
+
+    private static int RotationCount(IEnumerable<CutSheet> sheets) => sheets.SelectMany(sheet => sheet.Placements).Count(part => part.Rotated);
 
     private static double FamilyDistance(IEnumerable<CutSheet> sheets) => sheets.Sum(sheet =>
         sheet.Placements.GroupBy(part => (part.ProductId, part.DetailId)).Sum(group =>

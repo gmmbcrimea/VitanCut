@@ -21,7 +21,8 @@ public sealed record AppUpdateInfo(
     Version? LatestVersion,
     string Message,
     string? DownloadUrl = null,
-    string? ReleaseUrl = null)
+    string? ReleaseUrl = null,
+    string? ReleaseNotes = null)
 {
     public bool CanInstall => Availability == UpdateAvailability.Available && !string.IsNullOrWhiteSpace(DownloadUrl);
 }
@@ -109,7 +110,7 @@ public sealed class AppUpdateService
             return Remember(new AppUpdateInfo(
                 UpdateAvailability.Available, _currentVersion, latest,
                 $"Доступна версия {FormatVersion(latest)}. Установлена {FormatVersion(_currentVersion)}.",
-                asset.BrowserDownloadUrl, release.HtmlUrl));
+                asset.BrowserDownloadUrl, release.HtmlUrl, SummarizeReleaseNotes(release.Body)));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -130,6 +131,17 @@ public sealed class AppUpdateService
     private static bool IsPortableAsset(GitHubAsset asset) =>
         asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
         asset.Name.Contains("portable", StringComparison.OrdinalIgnoreCase);
+
+    private static string? SummarizeReleaseNotes(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return null;
+        var lines = body.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.TrimStart('#', ' ', '-', '*', '>').Trim())
+            .Where(line => line.Length > 0)
+            .ToArray();
+        var summary = string.Join(" ", lines);
+        return summary.Length <= 480 ? summary : summary[..477].TrimEnd() + "...";
+    }
 
     public async Task<bool> InstallAsync(AppUpdateInfo update, IProgress<UpdateDownloadProgress>? progress = null,
         CancellationToken cancellationToken = default)
@@ -286,6 +298,9 @@ public sealed class AppUpdateService
 
         [JsonPropertyName("html_url")]
         public string? HtmlUrl { get; init; }
+
+        [JsonPropertyName("body")]
+        public string? Body { get; init; }
 
         [JsonPropertyName("assets")]
         public List<GitHubAsset>? Assets { get; init; }

@@ -233,17 +233,20 @@
                   </Border>
                 </Grid>
 
-                <Grid RowSpacing="10">
+                <Grid x:Name="ProjectWorkListsGrid" ColumnSpacing="16" RowSpacing="12" MaxHeight="540">
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="0"/></Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Grid RowSpacing="10" MinHeight="360">
                   <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                   </Grid.RowDefinitions>
                   <TextBlock Text="Изделия" Style="{StaticResource SectionTitleTextBlockStyle}" />
-                  <Grid Grid.Row="1" MinHeight="150">
+                  <Grid Grid.Row="1" MinHeight="360">
                     <Border Style="{StaticResource ListSurfaceStyle}">
                       <ListView x:Name="ProductsList"
-                                MaxHeight="220"
+                                MaxHeight="360"
                                 DoubleTapped="ProductsListDoubleTapped"
                                 RightTapped="ListViewRightTappedSelectItem"
                                 IsRightTapEnabled="True"
@@ -281,17 +284,17 @@
                   <Button Grid.Row="2" Content="Добавить изделие" Click="AddProductClick" HorizontalAlignment="Left" />
                 </Grid>
 
-                <Grid RowSpacing="10">
+                <Grid x:Name="PayrollPanel" Grid.Column="1" RowSpacing="10" MinHeight="360">
                   <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                   </Grid.RowDefinitions>
                   <TextBlock Text="ЗП" Style="{StaticResource SectionTitleTextBlockStyle}" />
-                  <Grid Grid.Row="1" MinHeight="130">
+                  <Grid Grid.Row="1" MinHeight="360">
                     <Border Style="{StaticResource ListSurfaceStyle}">
                       <ListView x:Name="PayrollsList"
-                                MaxHeight="180"
+                                MaxHeight="360"
                                 RightTapped="ListViewRightTappedSelectItem"
                                 ScrollViewer.VerticalScrollMode="Enabled"
                                 ScrollViewer.VerticalScrollBarVisibility="Hidden">
@@ -310,6 +313,7 @@
                     </StackPanel>
                   </Grid>
                   <Button Grid.Row="2" Content="Добавить ЗП" Click="AddPayrollClick" HorizontalAlignment="Left" />
+                </Grid>
                 </Grid>
               </StackPanel>
             </ScrollViewer>

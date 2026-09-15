@@ -15,7 +15,8 @@ public sealed class ReportWindowCoordinator(OwnedWindowActivator windows, AppSta
         string ActiveFor(Models.Project value) =>
             scope == CutReportScope.Additional ? value.ActiveAdditionalCutPlanId : value.ActiveCutPlanId;
 
-        var expectedPlans = JsonSerializer.Serialize(PlansFor(project));
+        Models.Project Current() => projects.Find(project.Id) ?? throw new InvalidOperationException("Проект уже удалён.");
+        var expectedPlans = JsonSerializer.Serialize(PlansFor(Current()));
         var snapshot = new AppState();
         snapshot.Database.Materials = JsonSerializer.Deserialize<Dictionary<string, List<Models.Material>>>(JsonSerializer.Serialize(state.Database.Materials))!;
         snapshot.Database.Preferences = JsonSerializer.Deserialize<Models.AppPreferences>(JsonSerializer.Serialize(state.Database.Preferences))!;
@@ -35,10 +36,10 @@ public sealed class ReportWindowCoordinator(OwnedWindowActivator windows, AppSta
         });
         void SavePlans(IReadOnlyList<Models.SavedCutPlan> saved, string active)
         {
-            if (JsonSerializer.Serialize(PlansFor(project)) != expectedPlans)
+            if (JsonSerializer.Serialize(PlansFor(Current())) != expectedPlans)
                 throw new InvalidOperationException("Варианты раскроя изменены в другом окне. Откройте расчёт заново, чтобы не потерять изменения.");
             projects.SaveCutPlans(project, saved, active, signature, scope);
-            expectedPlans = JsonSerializer.Serialize(PlansFor(project));
+            expectedPlans = JsonSerializer.Serialize(PlansFor(Current()));
         }
         SavePlans(plans, activeId);
         var hasAdditional = scope == CutReportScope.MainDsp && await Task.Run(() =>

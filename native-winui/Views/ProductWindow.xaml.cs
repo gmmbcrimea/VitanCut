@@ -281,7 +281,7 @@ public sealed partial class ProductWindow : Window
 
         void BringIntoView()
         {
-            DetailsScrollViewer.UpdateLayout();
+            DetailsTableViewport.UpdateLayout();
             container.StartBringIntoView(new BringIntoViewOptions
             {
                 AnimationDesired = App.Preferences.Current.AnimationsEnabled,
@@ -290,7 +290,7 @@ public sealed partial class ProductWindow : Window
         }
 
         container.Loaded += (_, _) => BringIntoView();
-        DetailsScrollViewer.DispatcherQueue.TryEnqueue(BringIntoView);
+        DetailsTableViewport.DispatcherQueue.TryEnqueue(BringIntoView);
     }
     private async void DeleteDetailClick(object sender, RoutedEventArgs e)
     {

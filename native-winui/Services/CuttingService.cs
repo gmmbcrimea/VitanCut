@@ -351,6 +351,7 @@ public static class CuttingService
                 .ThenBy(item => item.Candidate.ShortSide)
                 .ThenBy(item => item.Candidate.AreaWaste)
                 .ThenByDescending(item => item.SameFamily)
+                .ThenByDescending(item => item.Candidate.Rotated)
                 .ThenBy(item => item.Candidate.SheetIndex)
                 .FirstOrDefault();
             if (candidate is not null)

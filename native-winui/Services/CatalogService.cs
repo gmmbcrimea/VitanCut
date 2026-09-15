@@ -1,4 +1,5 @@
 using VitanCut.WinUI.Models;
+using System.Text.Json;
 
 namespace VitanCut.WinUI.Services;
 
@@ -99,5 +100,16 @@ public sealed class CatalogService(AppState state)
         products.RemoveAt(index);
         try { state.Save(); }
         catch { products.Insert(index, product); throw; }
+    }
+
+    public void CopyProduct(string sourceCounterparty, Product source, string targetCounterparty)
+    {
+        if (string.Equals(sourceCounterparty, targetCounterparty, StringComparison.CurrentCultureIgnoreCase)) return;
+        var copy = JsonSerializer.Deserialize<Product>(JsonSerializer.Serialize(source))
+            ?? throw new InvalidDataException("Не удалось скопировать изделие.");
+        copy.Id = Ids.NewId();
+        foreach (var detail in copy.Details) detail.Id = Ids.NewId();
+        foreach (var size in copy.FixedSizes) size.Id = Ids.NewId();
+        SaveProduct(targetCounterparty, null, copy);
     }
 }

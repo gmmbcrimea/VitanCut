@@ -93,6 +93,9 @@ Check(CuttingService.BuildDetailingReport(rotationState, rotationProject).Produc
 rotationDetail.AllowRotation = true;
 var rotatedCut = CuttingService.BuildCutReport(rotationState, rotationProject);
 Check(rotatedCut.Unplaced.Count == 0 && rotatedCut.Groups.SelectMany(g => g.Sheets).SelectMany(s => s.Placements).All(p => p.Rotated && p.AllowRotation), "Enabling rotation allows a rotated fit");
+var rotationAlternatives = CutOptimization.Calculate(rotatedCut);
+Check(rotationAlternatives[0].Report.Groups.SelectMany(g => g.Sheets).SelectMany(s => s.Placements).All(p => p.Rotated && p.AllowRotation),
+    "Automatic optimization preserves the required rotated orientation when rotation is allowed");
 Check(!CuttingService.BuildDetailingReport(rotationState, rotationProject).Products[0].Rows[0].RotationLocked, "Detailing updates when rotation is enabled");
 rotationMaterial.TextureDirection = true;
 Check(CuttingService.BuildCutReport(rotationState, rotationProject).Unplaced.Count == 1 && CuttingService.BuildDetailingReport(rotationState, rotationProject).Products[0].Rows[0].RotationLocked,
@@ -108,6 +111,28 @@ rotationProject.CutLayout = [new CutLayoutOverride { BaseLength = 600, BaseWidth
     X = lockedPlacement.X, Y = lockedPlacement.Y, Length = 300, Width = 600, Rotated = true }];
 Check(!CuttingService.BuildCutReport(rotationState, rotationProject).Groups[0].Sheets[0].Placements[0].Rotated, "Saved layout cannot rotate a locked part");
 Check(!DetailRotation.IsLocked(rotationDetail, new Material { Unit = "pc" }) && !DetailRotation.CanRotate(rotationDetail, new Material { Unit = "lm" }), "Hardware and linear materials have no rotation control");
+var staleProjectState = new AppState();
+staleProjectState.Load(Path.Combine(output, "stale-project.json"));
+var staleProject = new Project { Id = "stable-project", Name = "Sync project" };
+staleProjectState.Database.Projects.Add(staleProject);
+staleProjectState.Save();
+staleProjectState.ReplaceFromCloudSnapshot(staleProjectState.CreateCloudSnapshot());
+var currentProject = staleProjectState.Database.Projects.Single();
+var currentReport = CuttingService.BuildCutReport(staleProjectState, currentProject, applySavedLayout: false);
+new ProjectService(staleProjectState).SaveCutPlans(staleProject, [], "", CutPlanService.Signature(currentReport));
+Check(staleProjectState.Database.Projects.Single().Id == staleProject.Id,
+    "Open report saves resolve the current project after cloud replaces its object instance");
+var catalogService = new CatalogService(staleProjectState);
+catalogService.AddCounterparty("Копирование источник");
+catalogService.AddCounterparty("Копирование получатель");
+var catalogSource = new Product { Name = "Шкаф", Details = [new Detail { Name = "Бок" }], FixedSizes = [new FixedSize { Name = "Полка", Value = 300 }] };
+catalogService.SaveProduct("Копирование источник", null, catalogSource);
+catalogSource = catalogService.GetProducts("Копирование источник").Single();
+catalogService.CopyProduct("Копирование источник", catalogSource, "Копирование получатель");
+var catalogCopy = catalogService.GetProducts("Копирование получатель").Single();
+Check(catalogCopy.Id != catalogSource.Id && catalogCopy.Details[0].Id != catalogSource.Details[0].Id &&
+    catalogCopy.FixedSizes[0].Id != catalogSource.FixedSizes[0].Id,
+    "Catalog copy creates independent product, detail, and fixed-size identities");
 var lockedReport = CuttingService.BuildDetailingReport(rotationState, rotationProject);
 ReportDocumentService.SaveXlsx(lockedReport, Path.Combine(output, "locked-detailing.xlsx"));
 using (var book = new ClosedXML.Excel.XLWorkbook(Path.Combine(output, "locked-detailing.xlsx")))

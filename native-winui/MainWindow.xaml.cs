@@ -49,6 +49,7 @@ public sealed partial class MainWindow : Window
     private SymbolIcon? _updateIcon;
     private TextBlock? _updateTitle;
     private TextBlock? _updateDescription;
+    private TextBlock? _updateNotes;
     private Button? _installUpdateButton;
     private Button? _checkUpdatesButton;
     private ProgressBar? _updateProgress;
@@ -174,6 +175,7 @@ public sealed partial class MainWindow : Window
         _updateIcon = new SymbolIcon { Symbol = Symbol.Sync, Foreground = new SolidColorBrush(Color.FromArgb(255, 138, 153, 168)) };
         _updateTitle = new TextBlock { Text = "Обновления", Style = (Style)Application.Current.Resources["CardTitleTextBlockStyle"] };
         _updateDescription = new TextBlock { Text = "Проверка обновлений выполняется каждые 30 минут.", Style = (Style)Application.Current.Resources["MutedTextBlockStyle"], TextWrapping = TextWrapping.Wrap };
+        _updateNotes = new TextBlock { Style = (Style)Application.Current.Resources["MutedTextBlockStyle"], TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
         _installUpdateButton = new Button
         {
             Content = "Обновить",
@@ -199,6 +201,7 @@ public sealed partial class MainWindow : Window
         var text = new StackPanel { Spacing = 4 };
         text.Children.Add(_updateTitle);
         text.Children.Add(_updateDescription);
+        text.Children.Add(_updateNotes);
         Grid.SetColumn(text, 1);
         header.Children.Add(text);
 
@@ -221,11 +224,13 @@ public sealed partial class MainWindow : Window
 
     private void RefreshUpdateSurface(AppUpdateInfo update)
     {
-        if (_updateCard is null || _updateTitle is null || _updateDescription is null || _updateIcon is null || _installUpdateButton is null || _checkUpdatesButton is null || _updateProgress is null) return;
+        if (_updateCard is null || _updateTitle is null || _updateDescription is null || _updateNotes is null || _updateIcon is null || _installUpdateButton is null || _checkUpdatesButton is null || _updateProgress is null) return;
         _checkUpdatesButton.IsEnabled = true;
         _checkUpdatesButton.Content = "Проверить сейчас";
         _updateProgress.Visibility = Visibility.Collapsed;
         _updateDescription.Text = update.Message;
+        _updateNotes.Text = string.IsNullOrWhiteSpace(update.ReleaseNotes) ? "Что нового: описание пока не добавлено." : "Что нового: " + update.ReleaseNotes;
+        _updateNotes.Visibility = update.Availability == UpdateAvailability.Available ? Visibility.Visible : Visibility.Collapsed;
         switch (update.Availability)
         {
             case UpdateAvailability.UpToDate:
@@ -346,13 +351,17 @@ public sealed partial class MainWindow : Window
 
     private async Task PublishCloudChangesAutomaticallyAsync()
     {
-        if (_cloudPublishInProgress || !App.Cloud.IsSignedIn || !App.Cloud.HasUnsyncedLocalChanges) return;
+        if (_cloudPublishInProgress || !App.Cloud.IsSignedIn) return;
         _cloudPublishInProgress = true;
         try
         {
             var result = await App.Cloud.PublishAsync();
             RefreshCloudSettings();
-            if (result.Succeeded) return;
+            if (result.Succeeded)
+            {
+                if (result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
+                return;
+            }
             AppInfoBar.Title = "Не удалось опубликовать изменения";
             AppInfoBar.Message = result.Message;
             AppInfoBar.Severity = InfoBarSeverity.Warning;
@@ -548,6 +557,7 @@ public sealed partial class MainWindow : Window
             if (menuData is CustomerProductItem item)
             {
                 Add("Изменить", () => OpenCatalogProductWindow(item.Counterparty, item.Product));
+                Add("Копировать другому заказчику", async () => await CopyCatalogProductToCounterpartyAsync(item));
                 Add("Удалить", async () =>
                 {
                     if (!await _dialogs.ConfirmDeleteAsync("Удалить из каталога?", item.Product.Name + ". Изделия в проектах сохранятся.")) return;
@@ -1086,8 +1096,9 @@ public sealed partial class MainWindow : Window
 
     private void RefreshAfterCloudDatabaseLoad()
     {
+        var selectedId = SelectedProject?.Id;
         RefreshCustomers();
-        RefreshProjects(select: null, allowAutoSelect: false);
+        RefreshProjects(select: selectedId is null ? null : App.State.Database.Projects.FirstOrDefault(project => project.Id == selectedId), allowAutoSelect: false);
         RefreshMaterials();
         LoadSettings();
     }
@@ -1108,6 +1119,11 @@ public sealed partial class MainWindow : Window
         if (description is not null) description.Visibility = Visibility.Collapsed;
         if (actions is not null) actions.Visibility = Visibility.Collapsed;
         CloudSyncStatusText.Visibility = Visibility.Collapsed;
+        CloudSyncStatusText.Text = App.Cloud.Status;
+        CloudSyncStatusText.Foreground = new SolidColorBrush(App.Cloud.HasError
+            ? Color.FromArgb(255, 255, 107, 107)
+            : Color.FromArgb(255, 175, 175, 175));
+        CloudSyncStatusText.Visibility = !connected && App.Cloud.HasError ? Visibility.Visible : Visibility.Collapsed;
 
         if (statusBadge is not null)
         {
@@ -1136,6 +1152,8 @@ public sealed partial class MainWindow : Window
             schedule.Children.Add(new TextBlock { Text = "Автопубликация изменений", Foreground = new SolidColorBrush(Colors.White), VerticalAlignment = VerticalAlignment.Center });
             Grid.SetColumn(intervalBox, 1);
             schedule.Children.Add(intervalBox);
+            var syncNow = new Button { Content = "Синхронизировать сейчас", HorizontalAlignment = HorizontalAlignment.Left };
+            syncNow.Click += ManualCloudSyncClick;
 
             statusBadge.Child = new StackPanel
             {
@@ -1144,7 +1162,8 @@ public sealed partial class MainWindow : Window
                 {
                     new TextBlock { Text = "Облачная синхронизация работает", Foreground = new SolidColorBrush(Colors.White), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
                     new TextBlock { Text = "Supabase · Cutlist", Foreground = new SolidColorBrush(Color.FromArgb(220, 218, 255, 232)), FontSize = 12 },
-                    schedule
+                    schedule,
+                    syncNow
                 }
             };
         }
@@ -1161,7 +1180,9 @@ public sealed partial class MainWindow : Window
                 }
             }
             : new SolidColorBrush(Color.FromArgb(255, 24, 24, 24));
-        cloudCard.BorderBrush = new SolidColorBrush(connected ? Color.FromArgb(175, 62, 207, 142) : Color.FromArgb(255, 48, 48, 48));
+        cloudCard.BorderBrush = new SolidColorBrush(connected
+            ? Color.FromArgb(175, 62, 207, 142)
+            : App.Cloud.HasError ? Color.FromArgb(220, 255, 107, 107) : Color.FromArgb(255, 48, 48, 48));
         CloudSyncStatusText.Text = App.Cloud.Status;
         ConfigureCloudPublishTimer();
     }
@@ -1176,14 +1197,53 @@ public sealed partial class MainWindow : Window
     private async void CloudSignInClick(object sender, RoutedEventArgs e)
     {
         var result = await App.Cloud.SignInAsync(CloudEmailBox.Text, CloudPasswordBox.Password);
-        if (result.Succeeded && App.Cloud.ShouldDownloadInitialSnapshot)
-        {
-            result = await App.Cloud.DownloadInitialSnapshotAsync();
-            if (result.Succeeded) RefreshAfterCloudDatabaseLoad();
-        }
+        if (result.Succeeded && result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
         ShowCloudResult(result);
         RefreshCloudSettings();
         if (result.Succeeded) AppInfoBar.IsOpen = false;
+    }
+
+    private async Task CopyCatalogProductToCounterpartyAsync(CustomerProductItem item)
+    {
+        var targets = App.Catalog.GetCounterparties()
+            .Where(name => !string.Equals(name, item.Counterparty, StringComparison.CurrentCultureIgnoreCase))
+            .ToList();
+        if (targets.Count == 0)
+        {
+            await _dialogs.ShowMessageAsync("Нет другого заказчика", "Сначала добавьте ещё одного заказчика в каталоге.");
+            return;
+        }
+
+        var targetBox = new ComboBox { ItemsSource = targets, SelectedIndex = 0, MinWidth = 280 };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            RequestedTheme = Root.ActualTheme,
+            Title = "Копировать изделие",
+            Content = targetBox,
+            PrimaryButtonText = "Копировать",
+            CloseButtonText = "Отмена",
+            DefaultButton = ContentDialogButton.Primary
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || targetBox.SelectedItem is not string target) return;
+        App.Catalog.CopyProduct(item.Counterparty, item.Product, target);
+        _catalogPage.RenderProducts();
+    }
+
+    private async void ManualCloudSyncClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button) button.IsEnabled = false;
+        try
+        {
+            var result = await App.Cloud.PublishAsync();
+            ShowCloudResult(result);
+            if (result.Succeeded && result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
+            RefreshCloudSettings();
+        }
+        finally
+        {
+            if (sender is Button control) control.IsEnabled = true;
+        }
     }
 
     private async Task RestoreCloudSessionAfterLaunchAsync()
@@ -1192,23 +1252,8 @@ public sealed partial class MainWindow : Window
         RefreshCloudSettings();
         if (result.Succeeded)
         {
-            if (App.Cloud.ShouldDownloadInitialSnapshot)
-            {
-                result = await App.Cloud.DownloadInitialSnapshotAsync();
-                if (result.Succeeded)
-                {
-                    RefreshAfterCloudDatabaseLoad();
-                    RefreshCloudSettings();
-                    return;
-                }
-            }
-            else if (App.Cloud.HasUnsyncedLocalChanges)
-            {
-                result = await App.Cloud.PublishAsync();
-                RefreshCloudSettings();
-                if (result.Succeeded) return;
-            }
-            else return;
+            if (result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
+            return;
         }
 
         var settingsButton = new Button { Content = "Настройки" };
@@ -1305,6 +1350,19 @@ public sealed partial class MainWindow : Window
     private void UpdateResponsiveLayout()
     {
         _projectLayout.Update(SelectedProject is not null, _showingProjectListOnNarrow);
+        if (ProjectWorkListsGrid is not null)
+        {
+            var stackLists = Root.ActualWidth < 1280;
+            ProjectWorkListsGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+            ProjectWorkListsGrid.ColumnDefinitions[1].Width = stackLists ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+            ProjectWorkListsGrid.RowDefinitions[1].Height = stackLists ? GridLength.Auto : new GridLength(0);
+            Grid.SetColumn(PayrollPanel, stackLists ? 0 : 1);
+            Grid.SetRow(PayrollPanel, stackLists ? 1 : 0);
+            var listHeight = Math.Max(360, Root.ActualHeight - 460);
+            ProjectWorkListsGrid.MaxHeight = listHeight * (stackLists ? 2 : 1) + (stackLists ? 72 : 0);
+            ProductsList.MaxHeight = listHeight;
+            PayrollsList.MaxHeight = listHeight;
+        }
         if (SettingsColumnsHost is null || SettingsRightColumn is null) return;
 
         var singleColumn = Root.ActualWidth < 1320;

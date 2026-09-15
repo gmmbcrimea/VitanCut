@@ -26,6 +26,7 @@ public sealed class CloudSyncService(AppState state)
 
     public string Status { get; private set; } = "Облачная синхронизация не подключена.";
     public bool IsSignedIn => !string.IsNullOrWhiteSpace(_accessToken);
+    public bool HasError { get; private set; }
     public bool HasStoredSession => !string.IsNullOrWhiteSpace(_refreshToken);
     public bool HasUnsyncedLocalChanges => !string.IsNullOrWhiteSpace(_settings.WorkspaceId) &&
         (string.IsNullOrWhiteSpace(_settings.LastSnapshotHash) ||
@@ -70,8 +71,11 @@ public sealed class CloudSyncService(AppState state)
             if (!IsSignedIn || string.IsNullOrWhiteSpace(_refreshToken)) return Fail("Supabase не вернул сеанс входа.");
             SaveRefreshToken();
             var workspaceResult = await EnsureWorkspaceAsync();
-            if (!workspaceResult.Succeeded) _accessToken = "";
-            return workspaceResult;
+            if (!workspaceResult.Succeeded) return DisconnectAfterFailure(workspaceResult);
+            var syncResult = await VerifyAndSynchronizeAsync();
+            return syncResult.Succeeded
+                ? Ok("Облачная синхронизация подключена и проверена.") with { DatabaseChanged = syncResult.DatabaseChanged }
+                : DisconnectAfterFailure(syncResult);
         }
         catch (JsonException) { return Fail("Supabase вернул неполный ответ авторизации."); }
     }
@@ -88,10 +92,25 @@ public sealed class CloudSyncService(AppState state)
             if (!IsSignedIn) return Fail("Supabase не вернул действующий сеанс.");
             SaveRefreshToken();
             var workspaceResult = await EnsureWorkspaceAsync();
-            if (!workspaceResult.Succeeded) _accessToken = "";
-            return workspaceResult;
+            if (!workspaceResult.Succeeded) return DisconnectAfterFailure(workspaceResult);
+            var syncResult = await VerifyAndSynchronizeAsync();
+            return syncResult.Succeeded
+                ? Ok("Облачная синхронизация подключена и проверена.") with { DatabaseChanged = syncResult.DatabaseChanged }
+                : DisconnectAfterFailure(syncResult);
         }
         catch (JsonException) { return Fail("Supabase вернул неполный ответ восстановления сеанса."); }
+    }
+
+    private Task<CloudSyncResult> VerifyAndSynchronizeAsync()
+    {
+        if (ShouldDownloadInitialSnapshot) return DownloadInitialSnapshotAsync();
+        return LoadBaseline() is null ? PublishImportedDatabaseAsync() : PublishAsync();
+    }
+
+    private CloudSyncResult DisconnectAfterFailure(CloudSyncResult result)
+    {
+        _accessToken = "";
+        return Fail(result.Message);
     }
 
     private async Task<CloudSyncResult> EnsureWorkspaceAsync()
@@ -153,7 +172,7 @@ public sealed class CloudSyncService(AppState state)
             SaveBaseline(payload);
             return Ok(recoveryPath is null
                 ? "Облачная база загружена в локальную рабочую копию."
-                : $"Облачная база загружена. Локальная версия сохранена: {recoveryPath}");
+                : $"Облачная база загружена. Локальная версия сохранена: {recoveryPath}") with { DatabaseChanged = true };
         }
         catch (Exception error) when (error is JsonException or InvalidDataException)
         {
@@ -265,14 +284,15 @@ public sealed class CloudSyncService(AppState state)
             }).ToArray();
 
         var mergedJson = CloudEntityMerge.SerializeDatabase(merge.Database);
+        var databaseChanged = !SameEntities(CloudEntityMerge.Snapshot(state.Database), mergedEntities);
         if (changes.Length == 0)
         {
-            state.ReplaceFromCloudSnapshot(mergedJson);
+            if (databaseChanged) state.ReplaceFromCloudSnapshot(mergedJson);
             _settings.LastRevision = remoteRevision;
             _settings.LastSnapshotHash = SnapshotHash();
             SaveSettings();
             SaveBaseline(mergedJson);
-            return Ok("Локальная база объединена с актуальной облачной версией.");
+            return Ok("Локальная база объединена с актуальной облачной версией.") with { DatabaseChanged = databaseChanged };
         }
 
         var response = await SendAsync(HttpMethod.Post, "/rest/v1/rpc/sync_vitan_entity_changes", new
@@ -295,11 +315,11 @@ public sealed class CloudSyncService(AppState state)
         {
             using var document = JsonDocument.Parse(response.Payload!);
             _settings.LastRevision = document.RootElement[0].GetProperty("revision").GetInt64();
-            state.ReplaceFromCloudSnapshot(mergedJson);
+            if (databaseChanged) state.ReplaceFromCloudSnapshot(mergedJson);
             _settings.LastSnapshotHash = SnapshotHash();
             SaveSettings();
             SaveBaseline(mergedJson);
-            return Ok("Локальные изменения объединены и опубликованы в облаке.");
+            return Ok("Локальные изменения объединены и опубликованы в облаке.") with { DatabaseChanged = databaseChanged };
         }
         catch (JsonException) { return Fail("Supabase вернул неверный ответ публикации."); }
     }
@@ -396,7 +416,7 @@ public sealed class CloudSyncService(AppState state)
             _settings.LastSnapshotHash = SnapshotHash();
             SaveSettings();
             SaveBaseline(state.CreateCloudSnapshot());
-            return new CloudSyncResult(true, message, payload);
+            return new CloudSyncResult(true, message, payload, DatabaseChanged: true);
         }
         catch (JsonException) { return Fail("Supabase вернул неверный ответ рабочего пространства."); }
     }
@@ -490,9 +510,11 @@ public sealed class CloudSyncService(AppState state)
         File.WriteAllBytes(_sessionPath, encrypted);
     }
 
-    private CloudSyncResult Ok(string message) { Status = message; return new CloudSyncResult(true, message); }
-    private CloudSyncResult Fail(string message) { Status = message; return new CloudSyncResult(false, message); }
+    private CloudSyncResult Ok(string message) { Status = message; HasError = false; return new CloudSyncResult(true, message); }
+    private CloudSyncResult Fail(string message) { Status = message; HasError = true; return new CloudSyncResult(false, message); }
     private string SnapshotHash() => SnapshotHash(state.CreateCloudSnapshot());
+    private static bool SameEntities(IReadOnlyDictionary<CloudEntityKey, CloudEntity> left, IReadOnlyDictionary<CloudEntityKey, CloudEntity> right) =>
+        left.Count == right.Count && left.All(pair => right.TryGetValue(pair.Key, out var entity) && entity.Payload == pair.Value.Payload);
     private static string SnapshotHash(string json) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(json)));
 
     internal static string DescribeFailure(HttpStatusCode statusCode, string payload)
@@ -552,7 +574,7 @@ public sealed class CloudSyncSettings
     public string LastSnapshotHash { get; set; } = "";
 }
 
-public sealed record CloudSyncResult(bool Succeeded, string Message, string? Payload = null, bool IsConflict = false);
+public sealed record CloudSyncResult(bool Succeeded, string Message, string? Payload = null, bool IsConflict = false, bool DatabaseChanged = false);
 public sealed record CloudSnapshotVersion(long Revision, DateTimeOffset SavedAt)
 {
     public string Label => $"Версия {Revision} · {SavedAt.ToLocalTime():dd.MM.yyyy HH:mm}";

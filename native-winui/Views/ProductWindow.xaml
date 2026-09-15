@@ -140,7 +140,7 @@
             <Grid x:Name="DetailsTable" RowSpacing="12">
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="360" />
+                <RowDefinition Height="Auto" />
               </Grid.RowDefinitions>
             <Border Margin="5,0" Padding="8" BorderThickness="1" BorderBrush="Transparent">
             <Grid x:Name="DetailsHeaderGrid" ColumnSpacing="10" SizeChanged="DetailsHeaderSizeChanged">
@@ -164,10 +164,7 @@
             </Border>
 
             <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}" BorderThickness="1" Padding="0">
-              <ScrollViewer x:Name="DetailsScrollViewer" VerticalScrollBarVisibility="Hidden"
-                            HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel x:Name="DetailsRowsPanel" Padding="4" Spacing="4" />
-              </ScrollViewer>
+              <StackPanel x:Name="DetailsRowsPanel" Padding="4" Spacing="4" />
             </Border>
             </Grid>
             </ScrollViewer>
