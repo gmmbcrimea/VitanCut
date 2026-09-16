@@ -19,7 +19,7 @@ public sealed partial class CloudPublishWindow : Window
     {
         Progress.IsIndeterminate = false;
         Progress.Value = 100;
-        StatusIcon.Glyph = succeeded ? "&#xE73E;" : "&#xE783;";
+        StatusIcon.Glyph = succeeded ? "\uE73E" : "\uE783";
         StatusIcon.Foreground = new SolidColorBrush(succeeded
             ? Color.FromArgb(255, 62, 207, 142)
             : Color.FromArgb(255, 242, 192, 108));

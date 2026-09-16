@@ -11,7 +11,7 @@
           <FontIcon x:Name="StatusIcon" Glyph="&#xE895;" FontSize="24" Foreground="{StaticResource AppAccentBrush}" />
           <StackPanel Spacing="3">
             <TextBlock x:Name="TitleText" Text="Сохранение в облако" Style="{StaticResource CardTitleTextBlockStyle}" />
-            <TextBlock x:Name="StatusText" Text="Публикуем изменённые данные в Supabase..." Style="{StaticResource MutedTextBlockStyle}" TextWrapping="Wrap" />
+            <TextBlock x:Name="StatusText" Text="Публикуем изменённые данные в Supabase..." Style="{StaticResource MutedTextBlockStyle}" TextWrapping="Wrap" MaxWidth="340" />
           </StackPanel>
         </StackPanel>
         <ProgressBar x:Name="Progress" IsIndeterminate="True" Height="8" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
