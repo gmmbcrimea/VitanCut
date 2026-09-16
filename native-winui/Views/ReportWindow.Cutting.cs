@@ -185,7 +185,9 @@ public sealed partial class ReportWindow
         {
             if (remember) _undo.Push(_cutReport);
             _cutReport = nextReport;
-            RenderCut(); HintText.Text = "Есть несохранённые изменения"; return true;
+            RenderCut(); HintText.Text = "Есть несохранённые изменения";
+            NotificationCenter.Publish("Раскрой изменён", "В раскрой внесены несохранённые изменения.");
+            return true;
         }
         catch (Exception error) { HintText.Text = $"Правка не сохранена: {error.Message}"; return false; }
     }

@@ -322,6 +322,7 @@ public sealed partial class MainWindow : Window
         AppInfoBar.Severity = InfoBarSeverity.Warning;
         AppInfoBar.ActionButton = updateButton;
         AppInfoBar.IsOpen = true;
+        NotificationCenter.Publish("Доступно обновление", update.Message);
     }
 
     private async void CheckUpdatesClick(object sender, RoutedEventArgs e)
@@ -362,6 +363,7 @@ public sealed partial class MainWindow : Window
             var result = await App.Cloud.PublishAsync();
             if (result.Succeeded)
             {
+                NotificationCenter.Publish("Облачная синхронизация", "Изменения успешно опубликованы в Supabase.");
                 RefreshCloudSettings();
                 if (result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
                 return;
@@ -373,6 +375,7 @@ public sealed partial class MainWindow : Window
             AppInfoBar.Severity = InfoBarSeverity.Warning;
             AppInfoBar.ActionButton = null;
             AppInfoBar.IsOpen = true;
+            NotificationCenter.Publish("Не удалось опубликовать изменения", result.Message);
         }
         finally
         {
@@ -426,6 +429,7 @@ public sealed partial class MainWindow : Window
             AppInfoBar.Severity = InfoBarSeverity.Success;
             AppInfoBar.ActionButton = null;
             AppInfoBar.IsOpen = true;
+            NotificationCenter.Publish("Обновление готово", "Приложение перезапустится после замены файлов.");
             await Task.Delay(700);
             Application.Current.Exit();
             return;
@@ -442,6 +446,7 @@ public sealed partial class MainWindow : Window
         AppInfoBar.Severity = InfoBarSeverity.Error;
         AppInfoBar.ActionButton = null;
         AppInfoBar.IsOpen = true;
+        NotificationCenter.Publish("Не удалось установить обновление", "Проверьте подключение к сети и права на изменение папки приложения.");
     }
 
     private void ArrangeSettingsColumns()
@@ -672,6 +677,7 @@ public sealed partial class MainWindow : Window
         if (!await _catalogCommands.DeleteCounterpartyAsync(customer)) return;
         RefreshProjects(SelectedProject, allowAutoSelect: false);
         RefreshCustomers();
+        NotificationCenter.Publish("Заказчик удалён", $"Заказчик «{customer}» удалён из каталога.");
     }
 
     private void CustomersSelectionChanged(object sender, SelectionChangedEventArgs e) => _catalogPage.RenderProducts();
@@ -726,6 +732,7 @@ public sealed partial class MainWindow : Window
             RefreshCustomers();
             RefreshProjects(project);
             ShowTab("projects");
+            NotificationCenter.Publish("Проект создан", $"Проект «{project.Name}» создан.");
         });
     }
 
@@ -754,6 +761,7 @@ public sealed partial class MainWindow : Window
         if (!await _projectCommands.DeleteProjectAsync(project)) return;
         RefreshProjects(select: null, allowAutoSelect: false);
         RefreshCustomerProjects();
+        NotificationCenter.Publish("Проект удалён", $"Проект «{project.Name}» удалён.");
     }
 
     private Project? ProjectFromCommand(object sender) =>
@@ -793,7 +801,11 @@ public sealed partial class MainWindow : Window
 
     private async Task DeleteProductAsync(Project project, Product product)
     {
-        if (await _projectCommands.DeleteProductAsync(project, product)) FillProjectCard();
+        if (await _projectCommands.DeleteProductAsync(project, product))
+        {
+            FillProjectCard();
+            NotificationCenter.Publish("Изделие удалено", $"Изделие «{product.Name}» удалено из проекта.");
+        }
     }
 
     private void AddPayrollClick(object sender, RoutedEventArgs e)
@@ -801,6 +813,7 @@ public sealed partial class MainWindow : Window
         if (SelectedProject is not { } project) return;
         _projectCommands.AddPayroll(project);
         FillProjectCard();
+        NotificationCenter.Publish("Зарплата добавлена", "В проект добавлена новая строка ЗП.");
     }
 
     private async void EditPayrollClick(object sender, RoutedEventArgs e) =>
@@ -816,7 +829,11 @@ public sealed partial class MainWindow : Window
 
     private async Task DeletePayrollAsync(int index)
     {
-        if (SelectedProject is { } project && await _projectCommands.DeletePayrollAsync(project, index)) FillProjectCard();
+        if (SelectedProject is { } project && index >= 0 && index < project.Payrolls.Count && await _projectCommands.DeletePayrollAsync(project, index))
+        {
+            FillProjectCard();
+            NotificationCenter.Publish("Строка ЗП удалена", "Строка зарплаты удалена из проекта.");
+        }
     }
 
     private void ProjectsSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -917,6 +934,7 @@ public sealed partial class MainWindow : Window
         AppInfoBar.Message = message;
         AppInfoBar.Severity = InfoBarSeverity.Success;
         AppInfoBar.IsOpen = true;
+        NotificationCenter.Publish("Готово", message);
     }
 
     private async void DeleteMaterialClick(object sender, RoutedEventArgs e)
@@ -926,7 +944,11 @@ public sealed partial class MainWindow : Window
 
     private async Task DeleteMaterialAsync(MaterialChoice choice)
     {
-        if (await _materialCommands.DeleteAsync(choice)) RefreshCurrentMaterialCategory();
+        if (await _materialCommands.DeleteAsync(choice))
+        {
+            RefreshCurrentMaterialCategory();
+            NotificationCenter.Publish("Материал удалён", $"Материал «{choice.Material.Name}» удалён.");
+        }
     }
 
     private void RefreshCurrentMaterialCategory() => _materialPage.RefreshCurrentCategory();
@@ -1239,6 +1261,8 @@ public sealed partial class MainWindow : Window
     private async void ManualCloudSyncClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button button) button.IsEnabled = false;
+        var progressWindow = new Views.CloudPublishWindow();
+        progressWindow.Activate();
         try
         {
             var result = await App.Cloud.PublishAsync();
@@ -1246,9 +1270,20 @@ public sealed partial class MainWindow : Window
             ShowCloudResult(result);
             if (result.Succeeded && result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
             RefreshCloudSettings();
+            progressWindow.Complete(result.Succeeded, result.Succeeded
+                ? "Изменения успешно опубликованы в Supabase."
+                : "Изменения сохранены на этом компьютере и будут отправлены позже. " + result.Message);
+            await Task.Delay(result.Succeeded ? 700 : 2200);
+        }
+        catch (Exception error)
+        {
+            progressWindow.Complete(false, "Изменения сохранены на этом компьютере и будут отправлены позже.");
+            NotificationCenter.Publish("Синхронизация не выполнена", error.Message);
+            await Task.Delay(2200);
         }
         finally
         {
+            progressWindow.Close();
             if (sender is Button control) control.IsEnabled = true;
         }
     }
@@ -1270,6 +1305,7 @@ public sealed partial class MainWindow : Window
         AppInfoBar.Severity = InfoBarSeverity.Warning;
         AppInfoBar.ActionButton = settingsButton;
         AppInfoBar.IsOpen = true;
+        NotificationCenter.Publish("Облачная синхронизация не выполнена", result.Message);
     }
 
     private async void DownloadCloudDatabaseClick(object sender, RoutedEventArgs e)
@@ -1352,6 +1388,7 @@ public sealed partial class MainWindow : Window
         DatabaseInfoBar.Title = result.IsConflict ? "Конфликт облачной синхронизации" : result.Succeeded ? "Облачная синхронизация" : "Не удалось синхронизировать";
         DatabaseInfoBar.Message = result.Message;
         DatabaseInfoBar.IsOpen = true;
+        NotificationCenter.Publish(result.Succeeded ? "Облачная синхронизация" : "Синхронизация не выполнена", result.Message);
     }
 
     private void UpdateResponsiveLayout()

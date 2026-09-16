@@ -299,6 +299,7 @@ public sealed partial class ProductWindow : Window
         _sourceProduct.Details.Remove(row.Detail);
         RefreshDetails();
         UpdateSummary();
+        NotificationCenter.Publish("Деталь удалена", $"Деталь «{row.Detail.Name}» удалена из изделия.");
     }
 
     private void DetailRowChanged(object sender, object e)

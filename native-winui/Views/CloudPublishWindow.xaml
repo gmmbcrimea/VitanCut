@@ -14,7 +14,7 @@
             <TextBlock x:Name="StatusText" Text="Публикуем изменённые данные в Supabase..." Style="{StaticResource MutedTextBlockStyle}" TextWrapping="Wrap" />
           </StackPanel>
         </StackPanel>
-        <ProgressBar x:Name="Progress" IsIndeterminate="True" Height="6" />
+        <ProgressBar x:Name="Progress" IsIndeterminate="True" Height="8" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
       </StackPanel>
     </Border>
   </Grid>
