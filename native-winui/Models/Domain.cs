@@ -138,6 +138,7 @@ public sealed class Material
     public double SheetLength { get; set; }
     public double SheetWidth { get; set; }
     public bool TextureDirection { get; set; }
+    public string Texture { get; set; } = "";
 }
 
 public sealed class FixedSize

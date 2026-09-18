@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using VitanCut.WinUI.Models;
 using VitanCut.WinUI.Controllers;
 using VitanCut.WinUI.Services;
+using Windows.Storage.Pickers;
 using Windows.UI;
 using WinRT.Interop;
 
@@ -964,6 +965,35 @@ public sealed partial class MainWindow : Window
     {
         if (_loadingMaterials) return;
         _materialPage.RenderSelected();
+        _ = UpdateMaterialTexturePreviewAsync();
+    }
+
+    private async Task UpdateMaterialTexturePreviewAsync()
+    {
+        var source = _materialPage.SelectedMaterial?.Material.Texture ?? "";
+        var loaded = await ImagePreviewService.SetAsync(MaterialTexturePreview, source);
+        MaterialTexturePreview.Visibility = loaded ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void PickMaterialTextureClick(object sender, RoutedEventArgs e)
+    {
+        if (_materialPage.SelectedMaterial is not { } choice) return;
+        var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.PicturesLibrary };
+        picker.FileTypeFilter.Add(".png");
+        picker.FileTypeFilter.Add(".jpg");
+        picker.FileTypeFilter.Add(".jpeg");
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
+        var file = await picker.PickSingleFileAsync();
+        if (file is null) return;
+        var texture = await ImageResizeService.FromFileAsync(file.Path, 100, 100);
+        if (texture is null)
+        {
+            await _dialogs.ShowMessageAsync("Не удалось загрузить текстуру", "Выберите корректное изображение PNG или JPEG.");
+            return;
+        }
+        choice.Material.Texture = texture;
+        await UpdateMaterialTexturePreviewAsync();
+        ShowSuccess("Текстура материала загружена");
     }
 
     private void MaterialUnitChanged(object sender, SelectionChangedEventArgs e)

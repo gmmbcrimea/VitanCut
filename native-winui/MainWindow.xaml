@@ -481,6 +481,15 @@
               <NumberBox x:Name="MaterialSheetWidthBox" Grid.Column="1" Header="Ширина листа" />
             </Grid>
             <CheckBox x:Name="MaterialTextureBox" Content="Есть направление текстуры" />
+            <TextBlock Text="Текстура материала" FontWeight="SemiBold" Margin="0,8,0,0" />
+            <Grid ColumnSpacing="12">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="100" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <Image x:Name="MaterialTexturePreview" Width="100" Height="100" Stretch="Uniform" Visibility="Collapsed" />
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+                <Button Content="Загрузить текстуру" Click="PickMaterialTextureClick" />
+                <TextBlock Text="Изображение будет сохранено в размере 100 × 100 пикселей." Style="{StaticResource MutedTextBlockStyle}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
           </StackPanel>
           </Grid>
         </Border>

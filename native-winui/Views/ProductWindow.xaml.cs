@@ -189,20 +189,28 @@ public sealed partial class ProductWindow : Window
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
         var file = await picker.PickSingleFileAsync();
         if (file is null) return;
-        var bytes = ProductImageData.Read(file.Path);
-        if (bytes is null || !await ImagePreviewService.SetAsync(ProductImagePreview, file.Path))
+        var resized = await ImageResizeService.FromFileAsync(file.Path, 300, 300);
+        if (resized is null)
         {
-            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = "Не удалось загрузить изображение", Content = "Выберите PNG или JPEG размером до 20 МБ.", CloseButtonText = "Понятно" }.ShowAsync();
+            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = "Не удалось загрузить изображение", Content = "Выберите корректное PNG или JPEG-изображение.", CloseButtonText = "Понятно" }.ShowAsync();
             return;
         }
-        var media = file.FileType.Equals(".png", StringComparison.OrdinalIgnoreCase) ? "png" : "jpeg";
-        _sourceProduct.Image = $"data:image/{media};base64," + Convert.ToBase64String(bytes);
+        _sourceProduct.Image = resized;
         UpdateImagePreview();
     }
 
     private async void UpdateImagePreview()
     {
         var path = _sourceProduct.Image;
+        if (path.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) && ProductImageData.Read(path) is { } original)
+        {
+            var resized = await ImageResizeService.ResizeAsync(original, 300, 300);
+            if (!string.IsNullOrWhiteSpace(resized) && resized != path)
+            {
+                _sourceProduct.Image = resized;
+                path = resized;
+            }
+        }
         var loaded = await ImagePreviewService.SetAsync(ProductImagePreview, path);
         if (_sourceProduct.Image != path) return;
         ProductImagePreview.Visibility = loaded ? Visibility.Visible : Visibility.Collapsed;
@@ -516,9 +524,18 @@ public sealed partial class ProductWindow : Window
         nameBox.TextChanged += (_, _) => { row.Detail.Name = nameBox.Text; DetailRowChanged(nameBox, EventArgs.Empty); };
         grid.Children.Add(nameBox);
 
+        var materialContent = new Grid { ColumnSpacing = 8 };
+        materialContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+        materialContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var materialImage = new Image { Width = 100, Height = 100, Stretch = Stretch.Uniform, Visibility = Visibility.Collapsed };
+        materialContent.Children.Add(materialImage);
+        var materialName = new TextBlock { Text = row.SelectedMaterial?.Material.Name ?? "Выберите материал", TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        Grid.SetColumn(materialName, 1);
+        materialContent.Children.Add(materialName);
+        _ = LoadMaterialTextureAsync(materialImage, row.SelectedMaterial?.Material.Texture);
         var materialButton = new Button
         {
-            Content = new TextBlock { Text = row.SelectedMaterial?.Material.Name ?? "Выберите материал", TextTrimming = TextTrimming.CharacterEllipsis },
+            Content = materialContent,
             MinWidth = 0,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -812,7 +829,10 @@ public sealed partial class ProductWindow : Window
                 {
                     row.SelectedMaterial = choice;
                     row.CommitMaterial();
-                    button.Content = choice.Material.Name;
+                    if (button.Content is Grid content && content.Children.OfType<TextBlock>().FirstOrDefault() is { } label)
+                        label.Text = choice.Material.Name;
+                    if (button.Content is Grid imageContent && imageContent.Children.OfType<Image>().FirstOrDefault() is { } image)
+                        _ = LoadMaterialTextureAsync(image, choice.Material.Texture);
                     RefreshDetails(row.Detail);
                     UpdateSummary();
                 };
@@ -821,6 +841,12 @@ public sealed partial class ProductWindow : Window
             flyout.Items.Add(category);
         }
         return flyout;
+    }
+
+    private static async Task LoadMaterialTextureAsync(Image image, string? source)
+    {
+        var loaded = await ImagePreviewService.SetAsync(image, source ?? "");
+        image.Visibility = loaded ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static string UnitLabel(string unit) => unit switch
