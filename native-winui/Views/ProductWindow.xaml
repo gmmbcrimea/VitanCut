@@ -35,7 +35,7 @@
       </Border>
     </Grid>
 
-    <ScrollViewer Grid.Row="1"
+    <ScrollViewer x:Name="ProductScrollViewer" Grid.Row="1"
                   Padding="24,0,24,0"
                   HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Hidden">

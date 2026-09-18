@@ -525,12 +525,12 @@ public sealed partial class ProductWindow : Window
         grid.Children.Add(nameBox);
 
         var materialContent = new Grid { ColumnSpacing = 8 };
-        materialContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
+        materialContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });
         materialContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var materialImage = new Image
         {
-            Width = 32,
-            Height = 32,
+            Width = 25,
+            Height = 25,
             Stretch = Stretch.UniformToFill,
             VerticalAlignment = VerticalAlignment.Center,
             Visibility = Visibility.Collapsed
@@ -834,6 +834,7 @@ public sealed partial class ProductWindow : Window
                 var item = new MenuFlyoutItem { Text = $"{choice.Material.Name} / {UnitLabel(choice.Material.Unit)}" };
                 item.Click += (_, _) =>
                 {
+                    var verticalOffset = ProductScrollViewer.VerticalOffset;
                     row.SelectedMaterial = choice;
                     row.CommitMaterial();
                     if (button.Content is Grid content && content.Children.OfType<TextBlock>().FirstOrDefault() is { } label)
@@ -842,6 +843,7 @@ public sealed partial class ProductWindow : Window
                         _ = LoadMaterialTextureAsync(image, choice.Material.Texture);
                     RefreshDetails(row.Detail);
                     UpdateSummary();
+                    ProductScrollViewer.DispatcherQueue.TryEnqueue(() => ProductScrollViewer.ChangeView(null, verticalOffset, null));
                 };
                 category.Items.Add(item);
             }

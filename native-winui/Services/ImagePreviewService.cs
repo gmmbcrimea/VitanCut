@@ -11,6 +11,10 @@ public static class ImagePreviewService
         if (ProductImageData.Read(source) is not { } bytes) return false;
         try
         {
+            // Downsample large source images with the high-quality decoder interpolation
+            // before WinUI renders them in a smaller thumbnail or preview.
+            if (await ImageResizeService.ResizeAsync(bytes, 300, 300) is { } resized && ProductImageData.Read(resized) is { } resizedBytes)
+                bytes = resizedBytes;
             using var stream = new InMemoryRandomAccessStream();
             using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
             {
