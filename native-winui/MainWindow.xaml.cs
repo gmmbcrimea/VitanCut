@@ -316,13 +316,6 @@ public sealed partial class MainWindow : Window
         RefreshUpdateSurface(update);
         if (update.Availability != UpdateAvailability.Available) return;
 
-        var updateButton = new Button { Content = "Обновить" };
-        updateButton.Click += InstallUpdateClick;
-        AppInfoBar.Title = "Доступно обновление";
-        AppInfoBar.Message = update.Message;
-        AppInfoBar.Severity = InfoBarSeverity.Warning;
-        AppInfoBar.ActionButton = updateButton;
-        AppInfoBar.IsOpen = true;
         NotificationCenter.Publish("Доступно обновление", update.Message);
     }
 
@@ -371,11 +364,6 @@ public sealed partial class MainWindow : Window
             }
             result = App.Cloud.RequireSignInAfterSyncFailure(result);
             RefreshCloudSettings();
-            AppInfoBar.Title = "Не удалось опубликовать изменения";
-            AppInfoBar.Message = result.Message;
-            AppInfoBar.Severity = InfoBarSeverity.Warning;
-            AppInfoBar.ActionButton = null;
-            AppInfoBar.IsOpen = true;
             NotificationCenter.Publish("Не удалось опубликовать изменения", result.Message);
         }
         finally
@@ -425,11 +413,6 @@ public sealed partial class MainWindow : Window
                 _updateProgress.Value = 100;
             }
             if (_updateDescription is not null) _updateDescription.Text = "Файлы подготовлены. Перезапуск приложения...";
-            AppInfoBar.Title = "Обновление готово";
-            AppInfoBar.Message = "Приложение перезапустится после замены файлов.";
-            AppInfoBar.Severity = InfoBarSeverity.Success;
-            AppInfoBar.ActionButton = null;
-            AppInfoBar.IsOpen = true;
             NotificationCenter.Publish("Обновление готово", "Приложение перезапустится после замены файлов.");
             await Task.Delay(700);
             Application.Current.Exit();
@@ -442,11 +425,6 @@ public sealed partial class MainWindow : Window
             _installUpdateButton.Content = "Повторить обновление";
         }
         if (_updateProgress is not null) _updateProgress.Visibility = Visibility.Collapsed;
-        AppInfoBar.Title = "Не удалось установить обновление";
-        AppInfoBar.Message = "Проверьте подключение к сети и права на изменение папки приложения.";
-        AppInfoBar.Severity = InfoBarSeverity.Error;
-        AppInfoBar.ActionButton = null;
-        AppInfoBar.IsOpen = true;
         NotificationCenter.Publish("Не удалось установить обновление", "Проверьте подключение к сети и права на изменение папки приложения.");
     }
 
@@ -931,10 +909,6 @@ public sealed partial class MainWindow : Window
 
     private void ShowSuccess(string message)
     {
-        AppInfoBar.Title = "Готово";
-        AppInfoBar.Message = message;
-        AppInfoBar.Severity = InfoBarSeverity.Success;
-        AppInfoBar.IsOpen = true;
         NotificationCenter.Publish("Готово", message);
     }
 
@@ -1156,10 +1130,7 @@ public sealed partial class MainWindow : Window
 
     private void ShowDatabaseMessage(DatabaseTransferResult result)
     {
-        DatabaseInfoBar.Severity = result.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error;
-        DatabaseInfoBar.Title = result.Title;
-        DatabaseInfoBar.Message = result.Message;
-        DatabaseInfoBar.IsOpen = true;
+        NotificationCenter.Publish(result.Title, result.Message);
     }
 
     private void RefreshAfterCloudDatabaseLoad()
@@ -1268,7 +1239,6 @@ public sealed partial class MainWindow : Window
         if (result.Succeeded && result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
         ShowCloudResult(result);
         RefreshCloudSettings();
-        if (result.Succeeded) AppInfoBar.IsOpen = false;
     }
 
     private async Task CopyCatalogProductToCounterpartyAsync(CustomerProductItem item)
@@ -1338,13 +1308,6 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var settingsButton = new Button { Content = "Настройки" };
-        settingsButton.Click += (_, _) => ShowTab("settings");
-        AppInfoBar.Title = "Облачная синхронизация";
-        AppInfoBar.Message = result.Message;
-        AppInfoBar.Severity = InfoBarSeverity.Warning;
-        AppInfoBar.ActionButton = settingsButton;
-        AppInfoBar.IsOpen = true;
         NotificationCenter.Publish("Облачная синхронизация не выполнена", result.Message);
     }
 
@@ -1424,10 +1387,6 @@ public sealed partial class MainWindow : Window
 
     private void ShowCloudResult(CloudSyncResult result)
     {
-        DatabaseInfoBar.Severity = result.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error;
-        DatabaseInfoBar.Title = result.IsConflict ? "Конфликт облачной синхронизации" : result.Succeeded ? "Облачная синхронизация" : "Не удалось синхронизировать";
-        DatabaseInfoBar.Message = result.Message;
-        DatabaseInfoBar.IsOpen = true;
         NotificationCenter.Publish(result.Succeeded ? "Облачная синхронизация" : "Синхронизация не выполнена", result.Message);
     }
 

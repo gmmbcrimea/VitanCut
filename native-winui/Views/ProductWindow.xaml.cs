@@ -548,6 +548,7 @@ public sealed partial class ProductWindow : Window
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left
         };
+        row.MaterialButton = materialButton;
         materialButton.Flyout = CreateMaterialFlyout(row, materialButton);
         ToolTipService.SetToolTip(materialButton, row.SelectedMaterial?.Material.Name ?? "Выберите материал");
         Grid.SetColumn(materialButton, 1);
@@ -843,7 +844,12 @@ public sealed partial class ProductWindow : Window
                         _ = LoadMaterialTextureAsync(image, choice.Material.Texture);
                     RefreshDetails(row.Detail);
                     UpdateSummary();
-                    ProductScrollViewer.DispatcherQueue.TryEnqueue(() => ProductScrollViewer.ChangeView(null, verticalOffset, null));
+                    var refreshedRow = _detailRows.FirstOrDefault(item => item.Detail.Id == row.Detail.Id);
+                    ProductScrollViewer.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        refreshedRow?.MaterialButton?.Focus(FocusState.Programmatic);
+                        ProductScrollViewer.ChangeView(null, verticalOffset, null);
+                    });
                 };
                 category.Items.Add(item);
             }
@@ -1000,6 +1006,7 @@ public sealed class DetailRow(Detail detail, List<MaterialChoice> materialChoice
     public Detail Detail { get; } = detail;
     public List<MaterialChoice> MaterialChoices { get; } = materialChoices;
     public MaterialChoice? SelectedMaterial { get; set; } = materialChoices.FirstOrDefault(item => item.Type == detail.Type && item.Material.Id == detail.MaterialId);
+    public Button? MaterialButton { get; set; }
     public string Calculation { get; set; } = "";
     public Border? Container { get; set; }
     public TextBlock? CalculationText { get; set; }
