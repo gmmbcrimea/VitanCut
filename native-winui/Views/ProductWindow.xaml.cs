@@ -525,9 +525,16 @@ public sealed partial class ProductWindow : Window
         grid.Children.Add(nameBox);
 
         var materialContent = new Grid { ColumnSpacing = 8 };
-        materialContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+        materialContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
         materialContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var materialImage = new Image { Width = 100, Height = 100, Stretch = Stretch.Uniform, Visibility = Visibility.Collapsed };
+        var materialImage = new Image
+        {
+            Width = 32,
+            Height = 32,
+            Stretch = Stretch.UniformToFill,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed
+        };
         materialContent.Children.Add(materialImage);
         var materialName = new TextBlock { Text = row.SelectedMaterial?.Material.Name ?? "Выберите материал", TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(materialName, 1);

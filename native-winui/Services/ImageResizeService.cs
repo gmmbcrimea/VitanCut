@@ -6,14 +6,14 @@ namespace VitanCut.WinUI.Services;
 
 public static class ImageResizeService
 {
-    public static async Task<string?> FromFileAsync(string path, uint maxWidth, uint maxHeight)
+    public static async Task<string?> FromFileAsync(string path, uint maxWidth, uint maxHeight, bool cropToBounds = false)
     {
         try
         {
             await using var input = File.OpenRead(path);
             using var source = new MemoryStream();
             await input.CopyToAsync(source);
-            return await ResizeAsync(source.ToArray(), maxWidth, maxHeight);
+            return await ResizeAsync(source.ToArray(), maxWidth, maxHeight, cropToBounds);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -21,7 +21,7 @@ public static class ImageResizeService
         }
     }
 
-    public static async Task<string?> ResizeAsync(byte[] bytes, uint maxWidth, uint maxHeight)
+    public static async Task<string?> ResizeAsync(byte[] bytes, uint maxWidth, uint maxHeight, bool cropToBounds = false)
     {
         if (bytes.Length == 0) return null;
         try
@@ -30,11 +30,29 @@ public static class ImageResizeService
             await WriteAsync(input, bytes);
             input.Seek(0);
             var decoder = await BitmapDecoder.CreateAsync(input);
-            var scale = Math.Min((double)maxWidth / decoder.PixelWidth, (double)maxHeight / decoder.PixelHeight);
-            scale = Math.Min(1, scale);
-            var width = Math.Max(1u, (uint)Math.Round(decoder.PixelWidth * scale));
-            var height = Math.Max(1u, (uint)Math.Round(decoder.PixelHeight * scale));
-            var transform = new BitmapTransform { ScaledWidth = width, ScaledHeight = height };
+            var scale = cropToBounds
+                ? Math.Max((double)maxWidth / decoder.PixelWidth, (double)maxHeight / decoder.PixelHeight)
+                : Math.Min(1, Math.Min((double)maxWidth / decoder.PixelWidth, (double)maxHeight / decoder.PixelHeight));
+            var scaledWidth = Math.Max(1u, (uint)Math.Round(decoder.PixelWidth * scale));
+            var scaledHeight = Math.Max(1u, (uint)Math.Round(decoder.PixelHeight * scale));
+            var width = cropToBounds ? maxWidth : scaledWidth;
+            var height = cropToBounds ? maxHeight : scaledHeight;
+            var transform = new BitmapTransform
+            {
+                ScaledWidth = scaledWidth,
+                ScaledHeight = scaledHeight,
+                InterpolationMode = BitmapInterpolationMode.Fant
+            };
+            if (cropToBounds)
+            {
+                transform.Bounds = new BitmapBounds
+                {
+                    X = (scaledWidth - width) / 2,
+                    Y = (scaledHeight - height) / 2,
+                    Width = width,
+                    Height = height
+                };
+            }
             var pixels = await decoder.GetPixelDataAsync(
                 BitmapPixelFormat.Bgra8,
                 BitmapAlphaMode.Premultiplied,

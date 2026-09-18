@@ -104,17 +104,35 @@ public static class ThemeService
                 scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
             if (scroll.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled)
                 scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
+            if (scroll.Content is FrameworkElement scrollContent)
+                ApplyLayout(scrollContent, preferences);
+            return;
         }
-        if (root is Button or TextBox or NumberBox or ComboBox)
+        if (root is Button button)
         {
-            var control = (Control)root;
-            if (root is Button { Tag: "cut-tool" }) return;
-            control.MinHeight = compact ? 32 : 40;
-            if (root is Button) control.Padding = compact ? new Thickness(12, 5, 12, 5) : new Thickness(16, 8, 16, 8);
-            if (root is Button button) CommandAppearance.Decorate(button);
-            if (root is Button { Tag: "projects" or "customers" or "materials" or "catalog" or "settings" } navigation)
-                navigation.Padding = new Thickness(4);
-            if (root is TextBox text) text.Padding = compact ? new Thickness(10, 4, 10, 4) : new Thickness(12, 8, 12, 8);
+            if (button.Tag is "cut-tool") return;
+            button.MinHeight = compact ? 32 : 40;
+            button.Padding = compact ? new Thickness(12, 5, 12, 5) : new Thickness(16, 8, 16, 8);
+            CommandAppearance.Decorate(button);
+            if (button.Tag is "projects" or "customers" or "materials" or "catalog" or "settings")
+            {
+                button.Padding = new Thickness(4);
+                return;
+            }
+            if (button.Content is FrameworkElement buttonContent)
+                ApplyLayout(buttonContent, preferences);
+            return;
+        }
+        if (root is TextBox text)
+        {
+            text.MinHeight = compact ? 32 : 40;
+            text.Padding = compact ? new Thickness(10, 4, 10, 4) : new Thickness(12, 8, 12, 8);
+            return;
+        }
+        if (root is NumberBox or ComboBox or ToggleSwitch or CheckBox or RadioButton)
+        {
+            if (root is Control control)
+                control.MinHeight = compact ? 32 : 40;
             return;
         }
         if (root is Border { Shadow: ThemeShadow } elevated)

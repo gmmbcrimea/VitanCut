@@ -970,7 +970,17 @@ public sealed partial class MainWindow : Window
 
     private async Task UpdateMaterialTexturePreviewAsync()
     {
-        var source = _materialPage.SelectedMaterial?.Material.Texture ?? "";
+        var material = _materialPage.SelectedMaterial?.Material;
+        var source = material?.Texture ?? "";
+        if (material is not null && source.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) && ProductImageData.Read(source) is { } bytes)
+        {
+            var normalized = await ImageResizeService.ResizeAsync(bytes, 100, 100, cropToBounds: true);
+            if (!string.IsNullOrWhiteSpace(normalized) && normalized != source)
+            {
+                material.Texture = normalized;
+                source = normalized;
+            }
+        }
         var loaded = await ImagePreviewService.SetAsync(MaterialTexturePreview, source);
         MaterialTexturePreview.Visibility = loaded ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -985,7 +995,7 @@ public sealed partial class MainWindow : Window
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
         var file = await picker.PickSingleFileAsync();
         if (file is null) return;
-        var texture = await ImageResizeService.FromFileAsync(file.Path, 100, 100);
+        var texture = await ImageResizeService.FromFileAsync(file.Path, 100, 100, cropToBounds: true);
         if (texture is null)
         {
             await _dialogs.ShowMessageAsync("Не удалось загрузить текстуру", "Выберите корректное изображение PNG или JPEG.");
