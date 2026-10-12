@@ -445,7 +445,7 @@
               </Grid>
               <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
                 <Grid>
-                  <ListView x:Name="MaterialsList" SelectionMode="Multiple" SelectionChanged="MaterialsSelectionChanged"
+                  <ListView x:Name="MaterialsList" SelectionMode="Extended" SelectionChanged="MaterialsSelectionChanged"
                             RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
                     <ListView.ItemTemplate>
                       <DataTemplate>
@@ -459,7 +459,7 @@
                     <DataTemplate>
                       <Expander Header="{Binding Name}" IsExpanded="True">
                         <ListView ItemsSource="{Binding Items}" SelectionChanged="MaterialGroupSelectionChanged"
-                                  RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" SelectionMode="Multiple">
+                                  RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" SelectionMode="Extended">
                           <ListView.ItemTemplate>
                             <DataTemplate>
                               <TextBlock Text="{Binding Material.Name}" Padding="8,6" />

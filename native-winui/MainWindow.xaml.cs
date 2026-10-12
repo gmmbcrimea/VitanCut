@@ -976,7 +976,7 @@ public sealed partial class MainWindow : Window
 
     private void UpdateMaterialGroupAction()
     {
-        MaterialGroupActionBox.Visibility = _materialSelection.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        MaterialGroupActionBox.Visibility = _materialSelection.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
         _materialGroupActionChanging = true;
         MaterialGroupActionBox.SelectedIndex = 0;
         _materialGroupActionChanging = false;
