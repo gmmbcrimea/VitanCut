@@ -50,6 +50,7 @@ public sealed class MaterialService(AppState state)
     public void Add(string group, Material material)
     {
         Validate(material);
+        if (material.CreatedAt == DateTimeOffset.MinValue) material.CreatedAt = DateTimeOffset.Now;
         group = string.IsNullOrWhiteSpace(group) ? "Прочее" : group.Trim();
         state.Database.Materials.TryAdd(group, []);
         if (!state.Database.MaterialGroups.Contains(group)) state.Database.MaterialGroups.Add(group);

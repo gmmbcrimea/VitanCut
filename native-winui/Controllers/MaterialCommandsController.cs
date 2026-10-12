@@ -11,7 +11,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
     public MaterialChoice AddFromEditor(MaterialPageController editor)
     {
         var type = editor.EditorGroup;
-        var material = new Material { Name = materials.CreateUniqueName("Новый материал") };
+        var material = new Material { Name = materials.CreateUniqueName("Новый материал"), Group = editor.EditorMaterialGroup };
         materials.Add(type, material);
         return new MaterialChoice(type, material);
     }
@@ -34,7 +34,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
             return null;
         }
         var material = choice.Material;
-        var previous = new Material { Name = material.Name, Unit = material.Unit, Cost = material.Cost, SheetLength = material.SheetLength, SheetWidth = material.SheetWidth, TextureDirection = material.TextureDirection };
+        var previous = new Material { Name = material.Name, Group = material.Group, CreatedAt = material.CreatedAt, Unit = material.Unit, Cost = material.Cost, SheetLength = material.SheetLength, SheetWidth = material.SheetWidth, TextureDirection = material.TextureDirection, Texture = material.Texture };
         try
         {
             Copy(draft, material);
@@ -51,6 +51,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
     private static void Copy(Material source, Material target)
     {
         target.Name = source.Name; target.Unit = source.Unit; target.Cost = source.Cost;
+        target.Group = source.Group; target.CreatedAt = source.CreatedAt; target.Texture = source.Texture;
         target.SheetLength = source.SheetLength; target.SheetWidth = source.SheetWidth;
         target.TextureDirection = source.TextureDirection;
     }

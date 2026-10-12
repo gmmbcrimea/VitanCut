@@ -394,8 +394,10 @@
 
       <Grid x:Name="MaterialsPage" Visibility="Collapsed" ColumnSpacing="20">
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="200" />
-          <ColumnDefinition Width="280" />
+          <ColumnDefinition x:Name="MaterialCategoriesColumn" Width="200" />
+          <ColumnDefinition Width="6" />
+          <ColumnDefinition x:Name="MaterialListColumn" Width="280" />
+          <ColumnDefinition Width="6" />
           <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
         <Border Style="{StaticResource PaneSurfaceStyle}">
@@ -410,7 +412,8 @@
             </Border>
           </Grid>
         </Border>
-        <Border Grid.Column="1" Style="{StaticResource PaneSurfaceStyle}">
+        <Border x:Name="MaterialCategoriesSplitter" Grid.Column="1" Background="Transparent" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" PointerCanceled="MaterialSplitterReleased" />
+        <Border Grid.Column="2" Style="{StaticResource PaneSurfaceStyle}">
           <Grid Padding="16" RowSpacing="12">
             <Grid.RowDefinitions>
               <RowDefinition Height="Auto" />
@@ -418,19 +421,29 @@
               <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <TextBlock Text="Материалы" Style="{StaticResource SectionTitleTextBlockStyle}" />
-            <Grid Grid.Row="1">
-              <Border Style="{StaticResource ListSurfaceStyle}">
+            <Grid Grid.Row="1" RowSpacing="8">
+              <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+              <Grid ColumnSpacing="8">
+                <ComboBox x:Name="MaterialSortBox" Header="Сортировка" SelectionChanged="MaterialSortChanged" SelectedIndex="0">
+                  <ComboBoxItem Content="Название А–Я" Tag="name-asc" />
+                  <ComboBoxItem Content="Название Я–А" Tag="name-desc" />
+                  <ComboBoxItem Content="Дата добавления" Tag="date" />
+                </ComboBox>
+                <CheckBox x:Name="MaterialGroupingBox" Grid.Column="1" Content="Группы" VerticalAlignment="Bottom" Tapped="MaterialGroupingChanged" />
+              </Grid>
+              <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
                 <ListView x:Name="MaterialsList" SelectionChanged="MaterialsSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
-                <ListView.ContextFlyout>
-                  <MenuFlyout>
-                    <MenuFlyoutItem Text="Добавить" Click="AddMaterialClick" />
-                    <MenuFlyoutItem Text="Изменить" Click="SaveMaterialClick" />
-                    <MenuFlyoutItem Text="Удалить" Click="DeleteMaterialClick" />
-                  </MenuFlyout>
-                </ListView.ContextFlyout>
-              </ListView>
-            </Border>
+                  <ListView.ItemTemplate>
+                    <DataTemplate>
+                      <Expander Header="{Binding Name}" IsExpanded="True">
+                        <ListView ItemsSource="{Binding Items}" SelectionChanged="MaterialGroupSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" SelectionMode="Single" />
+                      </Expander>
+                    </DataTemplate>
+                  </ListView.ItemTemplate>
+                </ListView>
+              </Border>
             <StackPanel x:Name="MaterialListEmptyPanel"
+                        Grid.Row="1"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Width="240"
@@ -446,7 +459,8 @@
                   HorizontalAlignment="Stretch" />
           </Grid>
         </Border>
-        <Border Grid.Column="2" Style="{StaticResource PaneSurfaceStyle}">
+        <Border x:Name="MaterialListSplitter" Grid.Column="3" Background="Transparent" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" PointerCanceled="MaterialSplitterReleased" />
+        <Border Grid.Column="4" Style="{StaticResource PaneSurfaceStyle}">
           <Grid Padding="20">
             <StackPanel x:Name="MaterialParametersEmptyPanel"
                         HorizontalAlignment="Center"
@@ -466,6 +480,7 @@
             </CommandBar>
             <TextBox x:Name="MaterialTypeBox" Header="Тип" Visibility="Collapsed" />
             <TextBox x:Name="MaterialNameBox" Header="Название" />
+            <TextBox x:Name="MaterialGroupBox" Header="Группа материалов" PlaceholderText="Например, Kronospan" />
             <ComboBox x:Name="MaterialUnitBox" Header="Единица">
               <ComboBoxItem Content="м²" Tag="m2" />
               <ComboBoxItem Content="пог. м" Tag="lm" />

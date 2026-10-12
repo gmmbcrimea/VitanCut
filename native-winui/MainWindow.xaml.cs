@@ -46,6 +46,9 @@ public sealed partial class MainWindow : Window
     private bool _firstLoad = true;
     private bool _showingProjectListOnNarrow = true;
     private bool _catalogActionConfigured;
+    private Border? _activeMaterialSplitter;
+    private double _materialSplitterStartX;
+    private double _materialSplitterStartWidth;
     private Border? _updateCard;
     private SymbolIcon? _updateIcon;
     private TextBlock? _updateTitle;
@@ -83,7 +86,8 @@ public sealed partial class MainWindow : Window
         _materialPage = new MaterialPageController(
             App.MaterialLibrary, MaterialCategoriesList, MaterialsList, MaterialListEmptyPanel,
             MaterialParametersEmptyPanel, MaterialParametersPanel, MaterialTypeBox, MaterialNameBox,
-            MaterialUnitBox, MaterialCostBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialTextureBox);
+            MaterialUnitBox, MaterialCostBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialTextureBox,
+            MaterialGroupBox, MaterialSortBox, MaterialGroupingBox);
         _catalogPage = new CatalogPageController(
             App.Catalog, CustomersList, CustomerProjectsList, CustomerProjectsTitle, CustomerProjectsSubtitle);
         _navigation = new NavigationController(
@@ -603,19 +607,15 @@ public sealed partial class MainWindow : Window
             return menu;
         }
 
-        if (list == MaterialsList)
+        if (menuData is MaterialChoice choice)
         {
-            Add("Добавить", () => AddMaterialClick(list, new RoutedEventArgs()));
-            if (menuData is MaterialChoice choice)
+            Add("Изменить", () =>
             {
-                Add("Изменить", () =>
-                {
-                    MaterialsList.SelectedItem = choice;
-                    FillMaterial();
-                    MaterialNameBox.Focus(FocusState.Programmatic);
-                });
-                Add("Удалить", async () => await DeleteMaterialAsync(choice));
-            }
+                _materialPage.SelectMaterial(choice);
+                _ = UpdateMaterialTexturePreviewAsync();
+                MaterialNameBox.Focus(FocusState.Programmatic);
+            });
+            Add("Удалить", async () => await DeleteMaterialAsync(choice));
         }
 
         return menu;
@@ -937,9 +937,59 @@ public sealed partial class MainWindow : Window
 
     private void MaterialsSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loadingMaterials) return;
-        _materialPage.RenderSelected();
+        // Group rows are containers; actual material selection is handled by the nested lists.
+    }
+
+    private void MaterialGroupSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingMaterials || e.AddedItems.FirstOrDefault() is not MaterialChoice choice) return;
+        _materialPage.SelectMaterial(choice);
         _ = UpdateMaterialTexturePreviewAsync();
+    }
+
+    private void MaterialSortChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingMaterials) return;
+        _materialPage.RefreshCurrentCategory();
+    }
+
+    private void MaterialGroupingChanged(object sender, TappedRoutedEventArgs e)
+    {
+        if (_loadingMaterials) return;
+        _materialPage.RefreshCurrentCategory();
+    }
+
+    private void MaterialSplitterPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not Border splitter) return;
+        _activeMaterialSplitter = splitter;
+        _materialSplitterStartX = e.GetCurrentPoint(MaterialsPage).Position.X;
+        _materialSplitterStartWidth = splitter == MaterialCategoriesSplitter
+            ? MaterialCategoriesColumn.Width.Value
+            : MaterialListColumn.Width.Value;
+        splitter.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void MaterialSplitterMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_activeMaterialSplitter is null || !e.Pointer.IsInContact) return;
+        var delta = e.GetCurrentPoint(MaterialsPage).Position.X - _materialSplitterStartX;
+        var minimum = _activeMaterialSplitter == MaterialCategoriesSplitter ? 150 : 220;
+        var maximum = _activeMaterialSplitter == MaterialCategoriesSplitter ? 360 : 520;
+        var width = Math.Clamp(_materialSplitterStartWidth + (_activeMaterialSplitter == MaterialCategoriesSplitter ? delta : delta), minimum, maximum);
+        if (_activeMaterialSplitter == MaterialCategoriesSplitter)
+            MaterialCategoriesColumn.Width = new GridLength(width);
+        else
+            MaterialListColumn.Width = new GridLength(width);
+        e.Handled = true;
+    }
+
+    private void MaterialSplitterReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _activeMaterialSplitter?.ReleasePointerCapture(e.Pointer);
+        _activeMaterialSplitter = null;
+        e.Handled = true;
     }
 
     private async Task UpdateMaterialTexturePreviewAsync()

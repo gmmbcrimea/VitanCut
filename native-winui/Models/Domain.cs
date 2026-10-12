@@ -39,7 +39,7 @@ public sealed class Project
     public string Name { get; set; } = "Новый проект";
     public string Counterparty { get; set; } = "Частный заказчик";
     public string Address { get; set; } = "";
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.MinValue;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
     public List<Product> Products { get; set; } = [];
     public List<Payroll> Payrolls { get; set; } = [];
@@ -133,6 +133,8 @@ public sealed class Material
 {
     public string Id { get; set; } = Ids.NewId();
     public string Name { get; set; } = "Новый материал";
+    public string Group { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
     public double Cost { get; set; }
     public string Unit { get; set; } = "pc";
     public double SheetLength { get; set; }
