@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -45,6 +46,7 @@ public sealed class AppUpdateService
     private readonly Version _currentVersion;
 
     public AppUpdateInfo? LastCheck { get; private set; }
+    public bool CanRollback => File.Exists(Path.Combine(GetRollbackDirectory(_applicationDirectory), "VitanCut.WinUI.exe"));
 
     public AppUpdateService()
         : this(AppContext.BaseDirectory, GetApplicationVersion())
@@ -213,7 +215,8 @@ public sealed class AppUpdateService
 
             var sourceDirectory = Path.GetDirectoryName(executable)!;
             var launchedExe = Path.Combine(_applicationDirectory, Path.GetFileName(executable));
-            var script = BuildUpdateScript(sourceDirectory, _applicationDirectory, launchedExe, workDirectory, Environment.ProcessId);
+            var backupDirectory = GetRollbackDirectory(_applicationDirectory);
+            var script = BuildUpdateScript(sourceDirectory, _applicationDirectory, launchedExe, workDirectory, Environment.ProcessId, backupDirectory);
             var scriptPath = Path.Combine(workDirectory, "apply-update.ps1");
             File.WriteAllText(scriptPath, script, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
             var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
@@ -233,6 +236,39 @@ public sealed class AppUpdateService
         {
             TryDelete(workDirectory);
             return false;
+        }
+    }
+
+    public Task<bool> RollbackAsync()
+    {
+        var backupDirectory = GetRollbackDirectory(_applicationDirectory);
+        var backupExecutable = Path.Combine(backupDirectory, "VitanCut.WinUI.exe");
+        if (!File.Exists(backupExecutable) || !CanWriteTo(_applicationDirectory)) return Task.FromResult(false);
+
+        var workDirectory = Path.Combine(Path.GetTempPath(), "VitanCut-rollback-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(workDirectory);
+            var script = BuildUpdateScript(backupDirectory, _applicationDirectory,
+                Path.Combine(_applicationDirectory, "VitanCut.WinUI.exe"), workDirectory, Environment.ProcessId, mirror: true);
+            var scriptPath = Path.Combine(workDirectory, "rollback.ps1");
+            File.WriteAllText(scriptPath, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+            var updater = Process.Start(new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/d /c start \"VitanCut recovery\" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encodedScript}",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            if (updater is null) return Task.FromResult(false);
+            return Task.FromResult(true);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            TryDelete(workDirectory);
+            return Task.FromResult(false);
         }
     }
 
@@ -292,12 +328,14 @@ public sealed class AppUpdateService
         }
     }
 
-    internal static string BuildUpdateScript(string source, string target, string executable, string workDirectory, int processId) => string.Join(Environment.NewLine,
+    internal static string BuildUpdateScript(string source, string target, string executable, string workDirectory, int processId, string? backupDirectory = null, bool mirror = false) => string.Join(Environment.NewLine,
         "$ErrorActionPreference = 'Stop'",
         $"$source = '{EscapePowerShell(source)}'",
         $"$target = '{EscapePowerShell(target)}'",
         $"$executable = '{EscapePowerShell(executable)}'",
         $"$workDirectory = '{EscapePowerShell(workDirectory)}'",
+        $"$backupDirectory = '{EscapePowerShell(backupDirectory ?? "")}'",
+        $"$mirror = ${mirror.ToString().ToLowerInvariant()}",
         "$logDirectory = Join-Path $env:LOCALAPPDATA 'VitanCut\\logs'",
         "$log = Join-Path $logDirectory 'updater.log'",
         "New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null",
@@ -306,8 +344,15 @@ public sealed class AppUpdateService
         "try {",
         $"  Write-UpdateLog 'Waiting for application process {processId} to exit.'",
         $"  while (Get-Process -Id {processId} -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 300 }}",
+        "  if ($backupDirectory) {",
+        "    Write-UpdateLog 'Saving current version for rollback.'",
+        "    if (Test-Path -LiteralPath $backupDirectory) { Remove-Item -LiteralPath $backupDirectory -Recurse -Force }",
+        "    New-Item -ItemType Directory -Force -Path $backupDirectory | Out-Null",
+        "    & robocopy $target $backupDirectory /E /NFL /NDL /NJH /NJS /NC /NS | Out-Null",
+        "    if ($LASTEXITCODE -gt 7) { throw \"Could not save rollback copy (robocopy $LASTEXITCODE).\" }",
+        "  }",
         "  Write-UpdateLog 'Copying update files.'",
-        "  & robocopy $source $target /E /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null",
+        "  if ($mirror) { & robocopy $source $target /MIR /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null } else { & robocopy $source $target /E /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null }",
         "  if ($LASTEXITCODE -gt 7) { throw \"robocopy failed with code $LASTEXITCODE\" }",
         "  if (-not (Test-Path -LiteralPath $executable)) { throw 'Updated executable was not found.' }",
         "  Write-UpdateLog 'Starting updated application.'",
@@ -317,6 +362,13 @@ public sealed class AppUpdateService
         "} catch { Write-UpdateLog (\"Update failed: \" + $_.Exception.Message) }");
 
     private static string EscapePowerShell(string value) => value.Replace("'", "''", StringComparison.Ordinal);
+
+    private static string GetRollbackDirectory(string applicationDirectory)
+    {
+        var normalized = Path.GetFullPath(applicationDirectory).TrimEnd(Path.DirectorySeparatorChar).ToUpperInvariant();
+        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..16];
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VitanCut", "rollback", key);
+    }
 
     private static void TryDelete(string directory)
     {

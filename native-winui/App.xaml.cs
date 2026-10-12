@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using VitanCut.WinUI.Services;
+using VitanCut.WinUI.Views;
 
 namespace VitanCut.WinUI;
 
@@ -18,13 +19,14 @@ public partial class App : Application
     {
         UnhandledException += (_, args) =>
         {
-            try
+            args.Handled = true;
+            LogError(args.Exception);
+            if (_mainWindow is RecoveryWindow recovery)
             {
-                var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VitanCut", "logs");
-                Directory.CreateDirectory(folder);
-                File.AppendAllText(Path.Combine(folder, "errors.log"), $"{DateTimeOffset.Now:O}\n{args.Exception}\n");
+                recovery.ShowError(args.Exception, Updates.CanRollback);
+                return;
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+            ShowRecovery(args.Exception);
         };
         InitializeComponent();
     }
@@ -37,17 +39,50 @@ public partial class App : Application
             Cloud.Load();
             _mainWindow = new MainWindow();
         }
-        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
+        catch (Exception error)
         {
-            var text = new Microsoft.UI.Xaml.Controls.TextBlock
-            {
-                Text = error.Message,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(24)
-            };
-            _mainWindow = new Window { Title = "Не удалось открыть базу", Content = text };
-            _mainWindow.AppWindow.Resize(new Windows.Graphics.SizeInt32(720, 300));
+            LogError(error);
+            ShowRecovery(error);
         }
-        _mainWindow.Activate();
+        _mainWindow!.Activate();
+    }
+
+    private void ShowRecovery(Exception error)
+    {
+        var recovery = new RecoveryWindow(error, RetryLaunchAsync, RollbackAsync, Updates.CanRollback);
+        _mainWindow = recovery;
+        recovery.Activate();
+    }
+
+    private async Task RetryLaunchAsync(RecoveryWindow recovery)
+    {
+        try
+        {
+            State.Load();
+            Cloud.Load();
+            var main = new MainWindow();
+            _mainWindow = main;
+            main.Activate();
+            recovery.Close();
+        }
+        catch (Exception error)
+        {
+            LogError(error);
+            recovery.ShowError(error, Updates.CanRollback);
+        }
+        await Task.CompletedTask;
+    }
+
+    private Task<bool> RollbackAsync() => Updates.RollbackAsync();
+
+    private static void LogError(Exception error)
+    {
+        try
+        {
+            var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VitanCut", "logs");
+            Directory.CreateDirectory(folder);
+            File.AppendAllText(Path.Combine(folder, "errors.log"), $"{DateTimeOffset.Now:O}\n{error}\n");
+        }
+        catch (Exception logError) when (logError is IOException or UnauthorizedAccessException) { }
     }
 }
