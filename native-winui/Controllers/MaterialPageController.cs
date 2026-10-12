@@ -5,14 +5,12 @@ using VitanCut.WinUI.Services;
 
 namespace VitanCut.WinUI.Controllers;
 
-/// <summary>
-/// Owns the material-page selection and editor rendering; persistence stays in MaterialService.
-/// </summary>
 public sealed class MaterialPageController
 {
     private readonly MaterialService _materials;
     private readonly ListView _categories;
     private readonly ListView _items;
+    private readonly ListView _groupedItems;
     private readonly UIElement _listEmpty;
     private readonly UIElement _parametersEmpty;
     private readonly UIElement _parameters;
@@ -23,32 +21,17 @@ public sealed class MaterialPageController
     private readonly NumberBox _sheetLength;
     private readonly NumberBox _sheetWidth;
     private readonly CheckBox _texture;
-    private readonly TextBox _group;
     private readonly ComboBox _sort;
-    private readonly CheckBox _grouping;
     private MaterialChoice? _selectedMaterial;
 
-    public MaterialPageController(
-        MaterialService materials,
-        ListView categories,
-        ListView items,
-        UIElement listEmpty,
-        UIElement parametersEmpty,
-        UIElement parameters,
-        TextBox type,
-        TextBox name,
-        ComboBox unit,
-        NumberBox cost,
-        NumberBox sheetLength,
-        NumberBox sheetWidth,
-        CheckBox texture,
-        TextBox group,
-        ComboBox sort,
-        CheckBox grouping)
+    public MaterialPageController(MaterialService materials, ListView categories, ListView items, ListView groupedItems,
+        UIElement listEmpty, UIElement parametersEmpty, UIElement parameters, TextBox type, TextBox name,
+        ComboBox unit, NumberBox cost, NumberBox sheetLength, NumberBox sheetWidth, CheckBox texture, ComboBox sort)
     {
         _materials = materials;
         _categories = categories;
         _items = items;
+        _groupedItems = groupedItems;
         _listEmpty = listEmpty;
         _parametersEmpty = parametersEmpty;
         _parameters = parameters;
@@ -59,16 +42,13 @@ public sealed class MaterialPageController
         _sheetLength = sheetLength;
         _sheetWidth = sheetWidth;
         _texture = texture;
-        _group = group;
         _sort = sort;
-        _grouping = grouping;
     }
 
     public string? SelectedCategory => _categories.SelectedItem as string;
     public MaterialChoice? SelectedMaterial => _selectedMaterial;
     public string EditorName => string.IsNullOrWhiteSpace(_name.Text) ? "Новый материал" : _name.Text.Trim();
     public string EditorGroup => string.IsNullOrWhiteSpace(_type.Text) ? "Прочее" : _type.Text.Trim();
-    public string EditorMaterialGroup => _group.Text.Trim();
 
     public void Refresh(MaterialChoice? select = null)
     {
@@ -77,23 +57,22 @@ public sealed class MaterialPageController
         _categories.ItemsSource = _materials.GetGroups().ToList();
         if (category is not null) _categories.SelectedItem = category;
         if (_categories.SelectedItem is null && _categories.Items.Count > 0) _categories.SelectedIndex = 0;
-
         _selectedMaterial = select;
-        BindItems(select);
+        BindItems();
         RenderSelected();
     }
 
     public void RefreshCurrentCategory()
     {
         _selectedMaterial = null;
-        BindItems(select: null);
+        BindItems();
         RenderSelected();
     }
 
     public void OnCategoryChanged()
     {
         _selectedMaterial = null;
-        BindItems(select: null);
+        BindItems();
         RenderSelected();
     }
 
@@ -101,7 +80,6 @@ public sealed class MaterialPageController
     {
         var choice = SelectedMaterial;
         _type.Text = choice?.Type ?? SelectedCategory ?? "Прочее";
-        _group.Text = choice?.Material.Group ?? string.Empty;
         _name.Text = choice?.Material.Name ?? string.Empty;
         _cost.Value = choice?.Material.Cost ?? 0;
         _sheetLength.Value = choice?.Material.SheetLength ?? 0;
@@ -118,7 +96,6 @@ public sealed class MaterialPageController
     public void ApplyEditor(Material material)
     {
         material.Name = string.IsNullOrWhiteSpace(_name.Text) ? "Новый материал" : _name.Text.Trim();
-        material.Group = _group.Text.Trim();
         material.Cost = EditorValue(_cost);
         material.Unit = _unit.SelectedItem is ComboBoxItem item ? item.Tag?.ToString() ?? "pc" : "pc";
         material.SheetLength = material.Unit == "m2" ? EditorValue(_sheetLength) : 0;
@@ -135,15 +112,24 @@ public sealed class MaterialPageController
         _texture.Visibility = visibility;
     }
 
-    private void BindItems(MaterialChoice? select)
+    private void BindItems()
     {
         _items.ItemsSource = null;
+        _groupedItems.ItemsSource = null;
         var choices = SortChoices(_materials.GetChoices(SelectedCategory));
-        var groups = _grouping.IsChecked == true
-            ? choices.GroupBy(choice => string.IsNullOrWhiteSpace(choice.Material.Group) ? "Без группы" : choice.Material.Group.Trim(), StringComparer.CurrentCultureIgnoreCase)
-                .Select(group => new MaterialGroupView(group.Key, group.ToList())).ToList()
-            : [new MaterialGroupView("Все материалы", choices)];
-        _items.ItemsSource = groups;
+        var hasGroups = choices.Any(choice => !string.IsNullOrWhiteSpace(choice.Material.Group));
+        _items.Visibility = hasGroups ? Visibility.Collapsed : Visibility.Visible;
+        _groupedItems.Visibility = hasGroups ? Visibility.Visible : Visibility.Collapsed;
+        if (hasGroups)
+        {
+            _groupedItems.ItemsSource = choices
+                .GroupBy(choice => string.IsNullOrWhiteSpace(choice.Material.Group) ? "Без группы" : choice.Material.Group.Trim(), StringComparer.CurrentCultureIgnoreCase)
+                .Select(group => new MaterialGroupView(group.Key, group.ToList())).ToList();
+        }
+        else
+        {
+            _items.ItemsSource = choices;
+        }
         _listEmpty.Visibility = choices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 

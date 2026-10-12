@@ -425,24 +425,52 @@
             <TextBlock Text="Материалы" Style="{StaticResource SectionTitleTextBlockStyle}" />
             <Grid Grid.Row="1" RowSpacing="8">
               <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-              <Grid ColumnSpacing="8">
-                <ComboBox x:Name="MaterialSortBox" Header="Сортировка" SelectionChanged="MaterialSortChanged" SelectedIndex="0">
+              <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="180" />
+                  <ColumnDefinition Width="240" />
+                </Grid.ColumnDefinitions>
+                <ComboBox x:Name="MaterialSortBox" Header="Сортировка" SelectionChanged="MaterialSortChanged" SelectedIndex="0"
+                          HorizontalAlignment="Stretch">
                   <ComboBoxItem Content="Название А–Я" Tag="name-asc" />
                   <ComboBoxItem Content="Название Я–А" Tag="name-desc" />
                   <ComboBoxItem Content="Дата добавления" Tag="date" />
                 </ComboBox>
-                <CheckBox x:Name="MaterialGroupingBox" Grid.Column="1" Content="Группы" VerticalAlignment="Bottom" Tapped="MaterialGroupingChanged" />
+                <ComboBox x:Name="MaterialGroupActionBox" Grid.Column="1" Header="Действие с выделением"
+                          Visibility="Collapsed" SelectionChanged="MaterialGroupActionChanged" HorizontalAlignment="Stretch">
+                  <ComboBoxItem Content="Выберите действие" Tag="none" />
+                  <ComboBoxItem Content="Объединить в группу..." Tag="merge" />
+                  <ComboBoxItem Content="Убрать из группы" Tag="ungroup" />
+                </ComboBox>
               </Grid>
               <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
-                <ListView x:Name="MaterialsList" SelectionChanged="MaterialsSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
+                <Grid>
+                  <ListView x:Name="MaterialsList" SelectionMode="Multiple" SelectionChanged="MaterialsSelectionChanged"
+                            RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
+                    <ListView.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding Material.Name}" Padding="8,6" />
+                      </DataTemplate>
+                    </ListView.ItemTemplate>
+                  </ListView>
+                  <ListView x:Name="GroupedMaterialsList" Visibility="Collapsed" SelectionChanged="MaterialsSelectionChanged"
+                            RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
                   <ListView.ItemTemplate>
                     <DataTemplate>
                       <Expander Header="{Binding Name}" IsExpanded="True">
-                        <ListView ItemsSource="{Binding Items}" SelectionChanged="MaterialGroupSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" SelectionMode="Single" />
+                        <ListView ItemsSource="{Binding Items}" SelectionChanged="MaterialGroupSelectionChanged"
+                                  RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" SelectionMode="Multiple">
+                          <ListView.ItemTemplate>
+                            <DataTemplate>
+                              <TextBlock Text="{Binding Material.Name}" Padding="8,6" />
+                            </DataTemplate>
+                          </ListView.ItemTemplate>
+                        </ListView>
                       </Expander>
                     </DataTemplate>
                   </ListView.ItemTemplate>
-                </ListView>
+                  </ListView>
+                </Grid>
               </Border>
             <StackPanel x:Name="MaterialListEmptyPanel"
                         Grid.Row="1"
@@ -484,7 +512,6 @@
             </CommandBar>
             <TextBox x:Name="MaterialTypeBox" Header="Тип" Visibility="Collapsed" />
             <TextBox x:Name="MaterialNameBox" Header="Название" />
-            <TextBox x:Name="MaterialGroupBox" Header="Группа материалов" PlaceholderText="Например, Kronospan" />
             <ComboBox x:Name="MaterialUnitBox" Header="Единица">
               <ComboBoxItem Content="м²" Tag="m2" />
               <ComboBoxItem Content="пог. м" Tag="lm" />

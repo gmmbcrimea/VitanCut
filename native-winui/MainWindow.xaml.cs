@@ -40,6 +40,8 @@ public sealed partial class MainWindow : Window
     private readonly ReportWindowCoordinator _reports;
     private bool _loadingProjects;
     private bool _loadingMaterials = true;
+    private bool _materialGroupActionChanging;
+    private readonly List<MaterialChoice> _materialSelection = [];
     // XAML assigns initial control values while the window is being constructed.
     // Ignore those events until persisted preferences are loaded explicitly.
     private bool _loadingSettings = true;
@@ -84,10 +86,10 @@ public sealed partial class MainWindow : Window
             ContentHost, ProjectsPage, ProjectListPane, ProjectDetailPane, BackToProjectsButton, MetricsGrid,
             MetricAreaCard, MetricMaterialsCard, MetricPayrollCard, MetricTotalCard);
         _materialPage = new MaterialPageController(
-            App.MaterialLibrary, MaterialCategoriesList, MaterialsList, MaterialListEmptyPanel,
+            App.MaterialLibrary, MaterialCategoriesList, MaterialsList, GroupedMaterialsList, MaterialListEmptyPanel,
             MaterialParametersEmptyPanel, MaterialParametersPanel, MaterialTypeBox, MaterialNameBox,
             MaterialUnitBox, MaterialCostBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialTextureBox,
-            MaterialGroupBox, MaterialSortBox, MaterialGroupingBox);
+            MaterialSortBox);
         _catalogPage = new CatalogPageController(
             App.Catalog, CustomersList, CustomerProjectsList, CustomerProjectsTitle, CustomerProjectsSubtitle);
         _navigation = new NavigationController(
@@ -867,6 +869,9 @@ public sealed partial class MainWindow : Window
     private void RefreshMaterials(MaterialChoice? select = null)
     {
         _loadingMaterials = true;
+        _materialSelection.Clear();
+        MaterialGroupActionBox.Visibility = Visibility.Collapsed;
+        MaterialGroupActionBox.SelectedIndex = 0;
         _materialPage.Refresh(select);
         _loadingMaterials = false;
     }
@@ -937,14 +942,44 @@ public sealed partial class MainWindow : Window
 
     private void MaterialsSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        // Group rows are containers; actual material selection is handled by the nested lists.
+        if (_loadingMaterials) return;
+        if (ReferenceEquals(sender, MaterialsList))
+            SetMaterialSelection(MaterialsList.SelectedItems.OfType<MaterialChoice>());
     }
 
     private void MaterialGroupSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loadingMaterials || e.AddedItems.FirstOrDefault() is not MaterialChoice choice) return;
-        _materialPage.SelectMaterial(choice);
-        _ = UpdateMaterialTexturePreviewAsync();
+        if (_loadingMaterials) return;
+        foreach (var item in e.AddedItems.OfType<MaterialChoice>())
+            if (_materialSelection.All(selected => selected.Material.Id != item.Material.Id)) _materialSelection.Add(item);
+        foreach (var item in e.RemovedItems.OfType<MaterialChoice>())
+            _materialSelection.RemoveAll(selected => selected.Material.Id == item.Material.Id);
+        UpdateMaterialGroupAction();
+        if (e.AddedItems.OfType<MaterialChoice>().FirstOrDefault() is { } choice)
+        {
+            _materialPage.SelectMaterial(choice);
+            _ = UpdateMaterialTexturePreviewAsync();
+        }
+    }
+
+    private void SetMaterialSelection(IEnumerable<MaterialChoice> choices)
+    {
+        _materialSelection.Clear();
+        _materialSelection.AddRange(choices);
+        UpdateMaterialGroupAction();
+        if (_materialSelection.FirstOrDefault() is { } choice)
+        {
+            _materialPage.SelectMaterial(choice);
+            _ = UpdateMaterialTexturePreviewAsync();
+        }
+    }
+
+    private void UpdateMaterialGroupAction()
+    {
+        MaterialGroupActionBox.Visibility = _materialSelection.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        _materialGroupActionChanging = true;
+        MaterialGroupActionBox.SelectedIndex = 0;
+        _materialGroupActionChanging = false;
     }
 
     private void MaterialSortChanged(object sender, SelectionChangedEventArgs e)
@@ -953,10 +988,53 @@ public sealed partial class MainWindow : Window
         _materialPage.RefreshCurrentCategory();
     }
 
-    private void MaterialGroupingChanged(object sender, TappedRoutedEventArgs e)
+    private async void MaterialGroupActionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_loadingMaterials) return;
-        _materialPage.RefreshCurrentCategory();
+        if (_loadingMaterials || _materialGroupActionChanging || MaterialGroupActionBox.SelectedItem is not ComboBoxItem item) return;
+        var action = item.Tag?.ToString();
+        if (action is not ("merge" or "ungroup")) return;
+        try
+        {
+            if (action == "merge")
+            {
+                if (_materialSelection.Count < 2)
+                {
+                    NotificationCenter.Publish("Нужно выбрать несколько материалов", "Для объединения выберите минимум два материала.");
+                    return;
+                }
+                var groupName = await AskMaterialGroupNameAsync();
+                if (string.IsNullOrWhiteSpace(groupName)) return;
+                foreach (var choice in _materialSelection) choice.Material.Group = groupName.Trim();
+                App.State.Save();
+                RefreshMaterials(_materialSelection[0]);
+                NotificationCenter.Publish("Материалы объединены", $"Выбранные материалы объединены в группу «{groupName.Trim()}».");
+            }
+            else
+            {
+                foreach (var choice in _materialSelection) choice.Material.Group = string.Empty;
+                App.State.Save();
+                RefreshMaterials(_materialSelection.FirstOrDefault());
+                NotificationCenter.Publish("Материалы исключены из группы", "Выбранные материалы снова отображаются без группы.");
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            NotificationCenter.Publish("Не удалось изменить группу", error.Message);
+        }
+    }
+
+    private async Task<string?> AskMaterialGroupNameAsync()
+    {
+        var input = new TextBox { PlaceholderText = "Например, Kronospan" };
+        var dialog = new ContentDialog
+        {
+            Title = "Объединить материалы в группу",
+            Content = input,
+            PrimaryButtonText = "Объединить",
+            CloseButtonText = "Отмена",
+            XamlRoot = Root.XamlRoot
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary ? input.Text : null;
     }
 
     private void MaterialSplitterPressed(object sender, PointerRoutedEventArgs e)

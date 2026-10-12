@@ -11,7 +11,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
     public MaterialChoice AddFromEditor(MaterialPageController editor)
     {
         var type = editor.EditorGroup;
-        var material = new Material { Name = materials.CreateUniqueName("Новый материал"), Group = editor.EditorMaterialGroup };
+        var material = new Material { Name = materials.CreateUniqueName("Новый материал") };
         materials.Add(type, material);
         return new MaterialChoice(type, material);
     }
