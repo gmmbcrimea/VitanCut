@@ -412,7 +412,7 @@
             </Border>
           </Grid>
         </Border>
-        <Border x:Name="MaterialCategoriesSplitter" Grid.Column="1" Background="Transparent" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" PointerCanceled="MaterialSplitterReleased" />
+        <Border x:Name="MaterialCategoriesSplitter" Grid.Column="1" Background="Transparent" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" />
         <Border Grid.Column="2" Style="{StaticResource PaneSurfaceStyle}">
           <Grid Padding="16" RowSpacing="12">
             <Grid.RowDefinitions>
@@ -459,7 +459,7 @@
                   HorizontalAlignment="Stretch" />
           </Grid>
         </Border>
-        <Border x:Name="MaterialListSplitter" Grid.Column="3" Background="Transparent" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" PointerCanceled="MaterialSplitterReleased" />
+        <Border x:Name="MaterialListSplitter" Grid.Column="3" Background="Transparent" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" />
         <Border Grid.Column="4" Style="{StaticResource PaneSurfaceStyle}">
           <Grid Padding="20">
             <StackPanel x:Name="MaterialParametersEmptyPanel"

@@ -39,7 +39,7 @@ public sealed partial class MainWindow : Window
     private readonly OwnedWindowActivator _childWindows;
     private readonly ReportWindowCoordinator _reports;
     private bool _loadingProjects;
-    private bool _loadingMaterials;
+    private bool _loadingMaterials = true;
     // XAML assigns initial control values while the window is being constructed.
     // Ignore those events until persisted preferences are loaded explicitly.
     private bool _loadingSettings = true;
