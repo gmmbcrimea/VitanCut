@@ -992,6 +992,12 @@ public sealed partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void MaterialSplitterCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        _activeMaterialSplitter = null;
+        e.Handled = true;
+    }
+
     private async Task UpdateMaterialTexturePreviewAsync()
     {
         var material = _materialPage.SelectedMaterial?.Material;

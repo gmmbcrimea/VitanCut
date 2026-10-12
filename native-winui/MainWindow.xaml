@@ -392,12 +392,12 @@
         </Border>
       </Grid>
 
-      <Grid x:Name="MaterialsPage" Visibility="Collapsed" ColumnSpacing="20">
+      <Grid x:Name="MaterialsPage" Visibility="Collapsed" ColumnSpacing="0">
         <Grid.ColumnDefinitions>
           <ColumnDefinition x:Name="MaterialCategoriesColumn" Width="200" />
-          <ColumnDefinition Width="6" />
+          <ColumnDefinition Width="12" />
           <ColumnDefinition x:Name="MaterialListColumn" Width="280" />
-          <ColumnDefinition Width="6" />
+          <ColumnDefinition Width="12" />
           <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
         <Border Style="{StaticResource PaneSurfaceStyle}">
@@ -412,7 +412,9 @@
             </Border>
           </Grid>
         </Border>
-        <Border x:Name="MaterialCategoriesSplitter" Grid.Column="1" Background="Transparent" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" />
+        <Border x:Name="MaterialCategoriesSplitter" Grid.Column="1" Background="#34414D" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" PointerCaptureLost="MaterialSplitterCaptureLost">
+          <Border Width="2" Height="42" Background="#7B8793" CornerRadius="1" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
         <Border Grid.Column="2" Style="{StaticResource PaneSurfaceStyle}">
           <Grid Padding="16" RowSpacing="12">
             <Grid.RowDefinitions>
@@ -459,7 +461,9 @@
                   HorizontalAlignment="Stretch" />
           </Grid>
         </Border>
-        <Border x:Name="MaterialListSplitter" Grid.Column="3" Background="Transparent" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" />
+        <Border x:Name="MaterialListSplitter" Grid.Column="3" Background="#34414D" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" PointerCaptureLost="MaterialSplitterCaptureLost">
+          <Border Width="2" Height="42" Background="#7B8793" CornerRadius="1" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
         <Border Grid.Column="4" Style="{StaticResource PaneSurfaceStyle}">
           <Grid Padding="20">
             <StackPanel x:Name="MaterialParametersEmptyPanel"
