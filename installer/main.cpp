@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <stdexcept>
 #include "resource.h"
 
 #pragma comment(lib, "comctl32.lib")
@@ -22,6 +23,7 @@ constexpr wchar_t ReleasesUrl[] = L"https://api.github.com/repos/gmmbcrimea/Vita
 constexpr UINT WM_INSTALL_PROGRESS = WM_APP + 1;
 constexpr UINT WM_INSTALL_STATUS = WM_APP + 2;
 constexpr UINT WM_INSTALL_FINISHED = WM_APP + 3;
+constexpr wchar_t UninstallRegistryPath[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\VitanCut";
 
 HWND pathBox, desktopBox, startMenuBox, taskbarBox, installButton, progressBar, statusLabel;
 HFONT fontRegular, fontSmall, fontTitle, fontBold;
@@ -177,6 +179,106 @@ void TryPinToTaskbar(const fs::path& executable)
     VariantClear(&directory); shell->Release();
 }
 
+void TryTaskbarVerb(const fs::path& executable, const wchar_t* verbName)
+{
+    IShellDispatch* shell = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&shell)))) return;
+    Folder* folder = nullptr;
+    VARIANT directory; VariantInit(&directory); directory.vt = VT_BSTR; directory.bstrVal = SysAllocString(executable.parent_path().c_str());
+    if (SUCCEEDED(shell->NameSpace(directory, &folder)) && folder)
+    {
+        FolderItem* item = nullptr;
+        VARIANT name; VariantInit(&name); name.vt = VT_BSTR; name.bstrVal = SysAllocString(executable.filename().c_str());
+        if (SUCCEEDED(folder->ParseName(name.bstrVal, &item)) && item)
+        {
+            VARIANT verb; VariantInit(&verb); verb.vt = VT_BSTR; verb.bstrVal = SysAllocString(verbName);
+            item->InvokeVerb(verb); VariantClear(&verb); item->Release();
+        }
+        VariantClear(&name); folder->Release();
+    }
+    VariantClear(&directory); shell->Release();
+}
+
+fs::path GetDesktopShortcut()
+{
+    wchar_t folder[MAX_PATH]{};
+    SHGetFolderPathW(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, 0, folder);
+    return fs::path(folder) / L"VitanCut.lnk";
+}
+
+fs::path GetStartMenuShortcut()
+{
+    wchar_t folder[MAX_PATH]{};
+    SHGetFolderPathW(nullptr, CSIDL_PROGRAMS, nullptr, 0, folder);
+    return fs::path(folder) / L"VitanCut" / L"VitanCut.lnk";
+}
+
+fs::path GetCurrentExecutable()
+{
+    wchar_t path[MAX_PATH]{};
+    const auto length = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    if (length == 0 || length == MAX_PATH) throw std::runtime_error("path");
+    return fs::path(path, path + length);
+}
+
+void SetRegistryString(HKEY key, const wchar_t* name, const std::wstring& value)
+{
+    RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()), static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+}
+
+void RegisterInstallation(const fs::path& target, const fs::path& executable, const fs::path& uninstaller)
+{
+    HKEY key = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, UninstallRegistryPath, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS)
+        throw std::runtime_error("registry");
+    SetRegistryString(key, L"DisplayName", L"VitanCut");
+    SetRegistryString(key, L"DisplayVersion", L"1.1.0");
+    SetRegistryString(key, L"Publisher", L"GMMB");
+    SetRegistryString(key, L"InstallLocation", target.wstring());
+    SetRegistryString(key, L"InstallSource", target.wstring());
+    SetRegistryString(key, L"DisplayIcon", executable.wstring());
+    SetRegistryString(key, L"UninstallString", L"\"" + uninstaller.wstring() + L"\"");
+    SetRegistryString(key, L"QuietUninstallString", L"\"" + uninstaller.wstring() + L"\" /quiet");
+    DWORD enabled = 1;
+    RegSetValueExW(key, L"NoModify", 0, REG_DWORD, reinterpret_cast<const BYTE*>(&enabled), sizeof(enabled));
+    RegSetValueExW(key, L"NoRepair", 0, REG_DWORD, reinterpret_cast<const BYTE*>(&enabled), sizeof(enabled));
+    RegCloseKey(key);
+}
+
+void RemoveInstallationRegistration()
+{
+    RegDeleteTreeW(HKEY_CURRENT_USER, UninstallRegistryPath);
+}
+
+void ScheduleInstallDirectoryRemoval(const fs::path& target)
+{
+    const auto command = L"cmd.exe /d /c start \"\" /b powershell.exe -NoProfile -WindowStyle Hidden -Command \"Start-Sleep -Milliseconds 700; Remove-Item -LiteralPath '" + target.wstring() + L"' -Recurse -Force -ErrorAction SilentlyContinue\"";
+    STARTUPINFOW startup{}; startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    std::vector<wchar_t> mutableCommand(command.begin(), command.end()); mutableCommand.push_back(L'\0');
+    if (CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW | DETACHED_PROCESS, nullptr, nullptr, &startup, &process))
+    {
+        CloseHandle(process.hThread); CloseHandle(process.hProcess);
+    }
+}
+
+int RunUninstaller()
+{
+    const auto uninstaller = GetCurrentExecutable();
+    const auto target = uninstaller.parent_path();
+    if (MessageBoxW(nullptr, L"Удалить VitanCut и созданные им ярлыки?\nПользовательские данные и база в профиле Windows останутся сохранены.", L"Удаление VitanCut", MB_ICONQUESTION | MB_YESNO) != IDYES)
+        return 0;
+    TryTaskbarVerb(target / L"VitanCut.WinUI.exe", L"taskbarunpin");
+    std::error_code ignored;
+    fs::remove(GetDesktopShortcut(), ignored);
+    fs::remove(GetStartMenuShortcut(), ignored);
+    fs::remove(GetStartMenuShortcut().parent_path(), ignored);
+    RemoveInstallationRegistration();
+    ScheduleInstallDirectoryRemoval(target);
+    MessageBoxW(nullptr, L"VitanCut удалён.", L"Удаление VitanCut", MB_ICONINFORMATION | MB_OK);
+    return 0;
+}
+
 InstallResult Install(HWND window, const fs::path& target, bool desktop, bool startMenu, bool taskbar)
 {
     const auto staging = fs::temp_directory_path() / (L"VitanCut-setup-" + std::to_wstring(GetTickCount64()));
@@ -202,6 +304,9 @@ InstallResult Install(HWND window, const fs::path& target, bool desktop, bool st
             fs::copy(entry.path(), target / entry.path().filename(), fs::copy_options::recursive | fs::copy_options::overwrite_existing);
         const auto installed = target / L"VitanCut.WinUI.exe";
         if (!fs::exists(installed)) throw std::runtime_error("unpack");
+        const auto uninstaller = target / L"VitanCut.Uninstall.exe";
+        fs::copy_file(GetCurrentExecutable(), uninstaller, fs::copy_options::overwrite_existing);
+        RegisterInstallation(target, installed, uninstaller);
         if (desktop) CreateShortcut(fs::path([] { wchar_t folder[MAX_PATH]; SHGetFolderPathW(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, 0, folder); return std::wstring(folder); }()) / L"VitanCut.lnk", installed);
         if (startMenu)
         {
@@ -277,6 +382,7 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
 
 int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
 {
+    if (GetCurrentExecutable().filename() == L"VitanCut.Uninstall.exe") return RunUninstaller();
     INITCOMMONCONTROLSEX controls{ sizeof(controls), ICC_PROGRESS_CLASS | ICC_STANDARD_CLASSES }; InitCommonControlsEx(&controls); CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     fontRegular = CreateFontW(-17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
     fontSmall = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
