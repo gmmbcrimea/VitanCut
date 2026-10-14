@@ -1,0 +1,59 @@
+name: Refactor validation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore core checks
+        run: dotnet restore native-winui-tests/VitanCut.CoreChecks.csproj --source https://api.nuget.org/v3/index.json
+      - name: Restore WinUI app
+        run: dotnet restore native-winui/VitanCut.WinUI.csproj --source https://api.nuget.org/v3/index.json
+      - name: Run core checks
+        shell: pwsh
+        run: |
+          $testRoot = Join-Path $env:RUNNER_TEMP 'vitancut-core-checks'
+          New-Item -ItemType Directory -Force -Path $testRoot | Out-Null
+          $env:VITANCUT_TEST_ROOT = $testRoot
+          dotnet run --project native-winui-tests/VitanCut.CoreChecks.csproj --configuration Release --no-restore
+      - name: Build WinUI app in isolated mode
+        shell: pwsh
+        run: |
+          $env:VITANCUT_ENVIRONMENT = 'Development'
+          $env:VITANCUT_DATA_ROOT = Join-Path $env:RUNNER_TEMP 'vitancut-app-data'
+          $outDir = Join-Path $env:RUNNER_TEMP 'vitancut-build'
+          New-Item -ItemType Directory -Force -Path $env:VITANCUT_DATA_ROOT, $outDir | Out-Null
+          dotnet build native-winui/VitanCut.WinUI.csproj --configuration Release --no-restore -p:OutDir="$outDir/"
+      - name: Stage portable package and checksum
+        shell: pwsh
+        run: |
+          [xml] $project = Get-Content native-winui/VitanCut.WinUI.csproj -Raw
+          $version = [string] ($project.Project.PropertyGroup | Select-Object -First 1).Version
+          $buildDir = Join-Path $env:RUNNER_TEMP 'vitancut-build'
+          $packageDir = Join-Path $env:RUNNER_TEMP 'vitancut-package'
+          ./scripts/Stage-Portable.ps1 -BuildDirectory $buildDir -OutputDirectory $packageDir -Version $version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VitanCut-portable-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/vitancut-package/VitanCut-portable-win-x64-*.zip
+            ${{ runner.temp }}/vitancut-package/VitanCut-portable-win-x64-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+      - name: Validate tagged release metadata
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          ./scripts/Validate-Release.ps1 -Version $version

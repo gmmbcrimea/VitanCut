@@ -30,10 +30,22 @@ public sealed partial class ReportWindow
     private bool _dragMoved;
     private InteractiveSheet? _dropSheet;
     private readonly List<(Canvas Canvas, Rectangle Shape, CutPartView Part)> _ghosts = [];
+    private bool _syncingAccessibleSelection;
+    private sealed record AccessibleCutPart(string Id, string Label)
+    {
+        public override string ToString() => Label;
+    }
 
     private void InitializeCutTools(string activeId)
     {
         if (_baseline is null) return;
+        AccessibleCutParts.SelectionChanged += (_, _) =>
+        {
+            if (_syncingAccessibleSelection || _cutBusy) return;
+            _selected.Clear();
+            _selected.UnionWith(AccessibleCutParts.SelectedItems.OfType<AccessibleCutPart>().Select(part => part.Id));
+            PaintSelection();
+        };
         if (_plans.Count == 0) _plans.Add(CutPlanService.Capture(_baseline, _signature, "Автоматический", "Гильотинный", true));
         _activePlanId = _plans.FirstOrDefault(p => p.Id == activeId && CutPlanService.Restore(_baseline, p) is not null)?.Id
             ?? _plans.First(p => CutPlanService.Restore(_baseline, p) is not null).Id;
@@ -109,7 +121,15 @@ public sealed partial class ReportWindow
     {
         if (_cutReport is null) return;
         var scroll = ReportScroll.VerticalOffset;
+        var previousTarget = (TargetSheetBox.SelectedItem as ComboBoxItem)?.Tag as InteractiveSheet;
         BuildCutReport(_cutReport);
+        _syncingAccessibleSelection = true;
+        try
+        {
+            AccessibleCutParts.ItemsSource = _interactiveSheets.SelectMany(sheet => sheet.Parts.Select(part =>
+                new AccessibleCutPart(part.InstanceId, $"Лист {sheet.Number} · {part.Placement.DetailName} · {N(part.Length)} × {N(part.Width)} мм"))).ToList();
+        }
+        finally { _syncingAccessibleSelection = false; }
         SizeSheetViews();
         TargetSheetBox.Items.Clear();
         foreach (var sheet in _interactiveSheets)
@@ -117,9 +137,13 @@ public sealed partial class ReportWindow
             var group = _cutReport.Groups.First(g => g.MaterialId == sheet.MaterialId);
             TargetSheetBox.Items.Add(new ComboBoxItem { Content = $"{group.MaterialName} · {sheet.Number}", Tag = sheet });
         }
-        if (TargetSheetBox.Items.Count > 0) TargetSheetBox.SelectedIndex = 0;
+        if (TargetSheetBox.Items.Count > 0)
+            TargetSheetBox.SelectedItem = TargetSheetBox.Items.OfType<ComboBoxItem>().FirstOrDefault(item =>
+                item.Tag is InteractiveSheet sheet && sheet.MaterialId == previousTarget?.MaterialId && sheet.Number == previousTarget?.Number)
+                ?? TargetSheetBox.Items[0];
         PaintSelection();
         var metrics = CuttingMetrics.Analyze(_cutReport, UsefulRemainderBox.Value);
+        UsefulRemainderBox.Visibility = RemaindersButton.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         var sheetArea = _cutReport.Groups.SelectMany(g => g.Sheets).Sum(s => s.SheetLength * s.SheetWidth) / 1_000_000;
         CutMetricsText.Text = $"Листов: {CutOptimization.SheetCount(_cutReport)}\nПлощадь листов: {N(sheetArea)} м²\nПолезных остатков: {metrics.Remainders.Count}\nРезов: {metrics.Cuts.Count}\nДлина резов: {N(metrics.Cuts.Length / 1000)} м";
         HintText.Text = $"Листов: {CutOptimization.SheetCount(_cutReport)} · Не размещено: {_cutReport.Unplaced.Count}";
@@ -151,6 +175,18 @@ public sealed partial class ReportWindow
             part.Label.FontSize = Math.Min(14 / scale, Math.Max(1, Math.Min(part.Rect.Width, part.Rect.Height) - 4));
         }
         SelectionText.Text = $"Выделено: {_selected.Count}";
+        SelectionActionsPanel.Visibility = _selected.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        _syncingAccessibleSelection = true;
+        try
+        {
+            foreach (var part in AccessibleCutParts.Items.OfType<AccessibleCutPart>())
+            {
+                var selected = _selected.Contains(part.Id);
+                if (selected && !AccessibleCutParts.SelectedItems.Contains(part)) AccessibleCutParts.SelectedItems.Add(part);
+                if (!selected && AccessibleCutParts.SelectedItems.Contains(part)) AccessibleCutParts.SelectedItems.Remove(part);
+            }
+        }
+        finally { _syncingAccessibleSelection = false; }
         RotateSelectionButton.IsEnabled = !_cutBusy && _selected.Count > 0 && parts.Where(p => _selected.Contains(p.InstanceId)).All(p => p.AllowRotation);
         MoveSelectionButton.IsEnabled = !_cutBusy && _selected.Count > 0;
         UndoCutButton.IsEnabled = !_cutBusy && _undo.Count > 0;

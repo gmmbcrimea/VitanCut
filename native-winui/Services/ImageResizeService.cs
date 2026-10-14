@@ -30,13 +30,17 @@ public static class ImageResizeService
             await WriteAsync(input, bytes);
             input.Seek(0);
             var decoder = await BitmapDecoder.CreateAsync(input);
+            var sourceWidth = decoder.OrientedPixelWidth;
+            var sourceHeight = decoder.OrientedPixelHeight;
             var scale = cropToBounds
-                ? Math.Max((double)maxWidth / decoder.PixelWidth, (double)maxHeight / decoder.PixelHeight)
-                : Math.Min(1, Math.Min((double)maxWidth / decoder.PixelWidth, (double)maxHeight / decoder.PixelHeight));
+                ? Math.Max((double)maxWidth / sourceWidth, (double)maxHeight / sourceHeight)
+                : Math.Min(1, Math.Min((double)maxWidth / sourceWidth, (double)maxHeight / sourceHeight));
             var scaledWidth = Math.Max(1u, (uint)Math.Round(decoder.PixelWidth * scale));
             var scaledHeight = Math.Max(1u, (uint)Math.Round(decoder.PixelHeight * scale));
-            var width = cropToBounds ? maxWidth : scaledWidth;
-            var height = cropToBounds ? maxHeight : scaledHeight;
+            var orientedScaledWidth = Math.Max(1u, (uint)Math.Round(sourceWidth * scale));
+            var orientedScaledHeight = Math.Max(1u, (uint)Math.Round(sourceHeight * scale));
+            var width = cropToBounds ? maxWidth : orientedScaledWidth;
+            var height = cropToBounds ? maxHeight : orientedScaledHeight;
             var transform = new BitmapTransform
             {
                 ScaledWidth = scaledWidth,
@@ -45,10 +49,12 @@ public static class ImageResizeService
             };
             if (cropToBounds)
             {
+                var orientedCropX = (orientedScaledWidth - width) / 2;
+                var orientedCropY = (orientedScaledHeight - height) / 2;
                 transform.Bounds = new BitmapBounds
                 {
-                    X = (scaledWidth - width) / 2,
-                    Y = (scaledHeight - height) / 2,
+                    X = orientedCropX,
+                    Y = orientedCropY,
                     Width = width,
                     Height = height
                 };

@@ -13,6 +13,11 @@ public static class FormulaEvaluator
 {
     private static readonly Regex Reference = new(@"\[\[detail:(?<id>[^:\]]+):(?<side>length|width)\]\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    public static string RemapReferences(string formula, IReadOnlyDictionary<string, string> detailIds) =>
+        Reference.Replace(formula, match => detailIds.TryGetValue(match.Groups["id"].Value, out var replacement)
+            ? $"[[detail:{replacement}:{match.Groups["side"].Value}]]"
+            : match.Value);
+
     public static FormulaResult Evaluate(Product product, Detail detail, bool width = false)
     {
         try

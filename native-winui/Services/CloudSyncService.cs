@@ -7,7 +7,7 @@ using VitanCut.WinUI.Models;
 
 namespace VitanCut.WinUI.Services;
 
-public sealed class CloudSyncService(AppState state)
+public sealed class CloudSyncService
 {
     private const string DefaultProjectUrl = "https://oihkaipfyjpoekdzewzn.supabase.co";
     private const string DefaultPublishableKey = "sb_publishable_6IS_guUveBXMRS2RMuHHgw_ESWRBE0f";
@@ -16,13 +16,45 @@ public sealed class CloudSyncService(AppState state)
     private const string BaselineFileName = "vitan-cut-cloud-baseline.json";
     private const string SessionFileName = "vitan-cut-cloud-session.dat";
     private const int RecoveryCopiesLimit = 5;
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
+    private readonly AppState state;
+    private readonly HttpClient _http;
+    private readonly string _projectUrl;
+    private readonly string _publishableKey;
+    private readonly bool _allowIsolatedTransport;
+    private readonly SemaphoreSlim _operationGate = new(1, 1);
+    private int _operationInProgress;
+    private CancellationToken _activeOperationToken;
     private CloudSyncSettings _settings = new();
     private string _settingsPath = "";
     private string _baselinePath = "";
     private string _sessionPath = "";
     private string _accessToken = "";
     private string _refreshToken = "";
+
+    public CloudSyncService(AppState state)
+        : this(state, new HttpClient { Timeout = TimeSpan.FromSeconds(20) }, DefaultProjectUrl, DefaultPublishableKey, allowIsolatedTransport: false)
+    {
+    }
+
+    internal CloudSyncService(AppState state, HttpClient http, string projectUrl, string publishableKey)
+        : this(state, http, projectUrl, publishableKey, allowIsolatedTransport: true)
+    {
+        if (!Uri.TryCreate(projectUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
+            !(uri.Host.EndsWith(".test", StringComparison.OrdinalIgnoreCase) || uri.IsLoopback))
+            throw new ArgumentException("Изолированный transport разрешён только для тестового адреса.", nameof(projectUrl));
+    }
+
+    private CloudSyncService(AppState state, HttpClient http, string projectUrl, string publishableKey, bool allowIsolatedTransport)
+    {
+        this.state = state;
+        _http = http;
+        _projectUrl = projectUrl.TrimEnd('/');
+        _publishableKey = publishableKey;
+        _allowIsolatedTransport = allowIsolatedTransport;
+    }
+
+    public bool IsEnabled => state.Paths is { IsDevelopment: false } || _allowIsolatedTransport;
+    public bool IsOperationInProgress => Volatile.Read(ref _operationInProgress) != 0;
 
     public string Status { get; private set; } = "Облачная синхронизация не подключена.";
     public bool IsSignedIn => !string.IsNullOrWhiteSpace(_accessToken);
@@ -36,9 +68,28 @@ public sealed class CloudSyncService(AppState state)
 
     public void Load()
     {
+        if (state.Paths?.IsDevelopment == true)
+        {
+            _settingsPath = state.Paths.CloudSettingsPath;
+            _baselinePath = state.Paths.CloudBaselinePath;
+            _sessionPath = state.Paths.CloudSessionPath;
+            _settings = new CloudSyncSettings();
+            _accessToken = "";
+            _refreshToken = "";
+            Status = "Облачная синхронизация отключена в изолированном режиме разработки.";
+            HasError = false;
+            return;
+        }
         _settingsPath = Path.Combine(Path.GetDirectoryName(state.DatabasePath)!, SettingsFileName);
         _baselinePath = Path.Combine(Path.GetDirectoryName(state.DatabasePath)!, BaselineFileName);
         _sessionPath = Path.Combine(Path.GetDirectoryName(state.DatabasePath)!, SessionFileName);
+        try { AtomicJsonPairFile.Recover(_settingsPath + ".pair-journal.json", _settingsPath, _baselinePath); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException or InvalidDataException)
+        {
+            Status = "Не удалось восстановить состояние облачной синхронизации. Локальная база не изменена.";
+            HasError = true;
+            return;
+        }
         _refreshToken = LoadRefreshToken();
         try
         {
@@ -57,7 +108,10 @@ public sealed class CloudSyncService(AppState state)
             : "Пространство Cutlist настроено. Войдите для синхронизации.";
     }
 
-    public async Task<CloudSyncResult> SignInAsync(string email, string password)
+    public Task<CloudSyncResult> SignInAsync(string email, string password, CancellationToken cancellationToken = default) =>
+        SerializeAsync(() => SignInCoreAsync(email, password), cancellationToken);
+
+    private async Task<CloudSyncResult> SignInCoreAsync(string email, string password)
     {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password)) return Fail("Введите email и пароль пользователя Supabase.");
 
@@ -80,7 +134,10 @@ public sealed class CloudSyncService(AppState state)
         catch (JsonException) { return Fail("Supabase вернул неполный ответ авторизации."); }
     }
 
-    public async Task<CloudSyncResult> RestoreSessionAsync()
+    public Task<CloudSyncResult> RestoreSessionAsync(CancellationToken cancellationToken = default) =>
+        SerializeAsync(RestoreSessionCoreAsync, cancellationToken);
+
+    private async Task<CloudSyncResult> RestoreSessionCoreAsync()
     {
         if (string.IsNullOrWhiteSpace(_refreshToken)) return Fail("Облачная синхронизация не подключена. Войдите в Supabase в настройках.");
         var response = await SendAsync(HttpMethod.Post, "/auth/v1/token?grant_type=refresh_token", new { refresh_token = _refreshToken }, false);
@@ -103,8 +160,8 @@ public sealed class CloudSyncService(AppState state)
 
     private Task<CloudSyncResult> VerifyAndSynchronizeAsync()
     {
-        if (ShouldDownloadInitialSnapshot) return DownloadInitialSnapshotAsync();
-        return LoadBaseline() is null ? PublishImportedDatabaseAsync() : PublishAsync();
+        if (ShouldDownloadInitialSnapshot) return DownloadCoreAsync(discardLocalChanges: true);
+        return LoadBaseline() is null ? PublishImportedDatabaseCoreAsync() : PublishCoreAsync();
     }
 
     private CloudSyncResult DisconnectAfterFailure(CloudSyncResult result)
@@ -144,8 +201,12 @@ public sealed class CloudSyncService(AppState state)
         return ApplyWorkspaceResponse(response.Payload!, "Создано пространство Cutlist.");
     }
 
-    public async Task<CloudSyncResult> DownloadAsync(bool discardLocalChanges = false)
+    public Task<CloudSyncResult> DownloadAsync(bool discardLocalChanges = false, CancellationToken cancellationToken = default) =>
+        SerializeAsync(() => DownloadCoreAsync(discardLocalChanges), cancellationToken);
+
+    private async Task<CloudSyncResult> DownloadCoreAsync(bool discardLocalChanges)
     {
+        var localRevision = state.Revision;
         if (!IsSignedIn) return Fail("Сначала войдите в Supabase.");
         if (!Guid.TryParse(_settings.WorkspaceId, out var workspaceId)) return Fail("Войдите в Supabase, чтобы подключить пространство Cutlist.");
         if (!discardLocalChanges && HasUnsyncedLocalChanges)
@@ -168,11 +229,11 @@ public sealed class CloudSyncService(AppState state)
             if (document.RootElement.GetArrayLength() != 1) return Fail("Снимок рабочего пространства не найден.");
             var snapshot = document.RootElement[0];
             var payload = snapshot.GetProperty("payload").GetRawText();
-            state.ReplaceFromCloudSnapshot(payload);
+            if (state.Revision != localRevision)
+                return new CloudSyncResult(false, "Локальная база изменилась во время загрузки; новые изменения сохранены.", null, true);
             _settings.LastRevision = snapshot.GetProperty("revision").GetInt64();
-            _settings.LastSnapshotHash = SnapshotHash();
-            SaveSettings();
-            SaveBaseline(payload);
+            _settings.LastSnapshotHash = SnapshotHash(payload);
+            state.ReplaceFromCloudSnapshot(payload, databaseJson => SaveCloudCheckpoint(payload, databaseJson));
             return Ok(recoveryPath is null
                 ? "Облачная база загружена в локальную рабочую копию."
                 : $"Облачная база загружена. Локальная версия сохранена: {recoveryPath}") with { DatabaseChanged = true };
@@ -183,9 +244,13 @@ public sealed class CloudSyncService(AppState state)
         }
     }
 
-    public Task<CloudSyncResult> DownloadInitialSnapshotAsync() => DownloadAsync(discardLocalChanges: true);
+    public Task<CloudSyncResult> DownloadInitialSnapshotAsync(CancellationToken cancellationToken = default) =>
+        DownloadAsync(discardLocalChanges: true, cancellationToken);
 
-    public async Task<CloudSyncResult> PublishImportedDatabaseAsync()
+    public Task<CloudSyncResult> PublishImportedDatabaseAsync(CancellationToken cancellationToken = default) =>
+        SerializeAsync(PublishImportedDatabaseCoreAsync, cancellationToken);
+
+    private async Task<CloudSyncResult> PublishImportedDatabaseCoreAsync()
     {
         if (!IsSignedIn) return Fail("Сначала войдите в Supabase.");
         if (!Guid.TryParse(_settings.WorkspaceId, out var workspaceId))
@@ -202,9 +267,8 @@ public sealed class CloudSyncService(AppState state)
             var snapshot = document.RootElement[0];
             _settings.LastRevision = snapshot.GetProperty("revision").GetInt64();
             _settings.LastSnapshotHash = "";
-            SaveSettings();
-            SaveBaseline(snapshot.GetProperty("payload").GetRawText());
-            return await PublishAsync();
+            SaveCloudCheckpoint(snapshot.GetProperty("payload").GetRawText());
+            return await PublishCoreAsync();
         }
         catch (JsonException)
         {
@@ -212,13 +276,24 @@ public sealed class CloudSyncService(AppState state)
         }
     }
 
-    public async Task<CloudSyncResult> PublishAsync()
+    public Task<CloudSyncResult> PublishAsync(CancellationToken cancellationToken = default) =>
+        SerializeAsync(PublishCoreAsync, cancellationToken);
+
+    private async Task<CloudSyncResult> PublishCoreAsync()
     {
         if (!IsSignedIn) return Fail("Сначала войдите в Supabase.");
         if (!Guid.TryParse(_settings.WorkspaceId, out var workspaceId)) return Fail("Войдите в Supabase, чтобы подключить пространство Cutlist.");
         var baselineJson = LoadBaseline();
         if (baselineJson is null)
             return Fail("Для адресной синхронизации один раз загрузите облачную базу. Локальная работа останется без изменений.");
+
+        var localRevision = state.Revision;
+        Database localSnapshot;
+        try { localSnapshot = CloudEntityMerge.DeserializeDatabase(state.CreateCloudSnapshot()); }
+        catch (Exception error) when (error is JsonException or InvalidDataException)
+        {
+            return Fail($"Не удалось зафиксировать локальную версию для синхронизации. {error.Message}");
+        }
 
         var snapshotResponse = await SendAsync(HttpMethod.Get,
             $"/rest/v1/workspace_snapshots?workspace_id=eq.{workspaceId:D}&select=revision", null, true);
@@ -259,7 +334,7 @@ public sealed class CloudSyncService(AppState state)
             }
         }
 
-        var merge = CloudEntityMerge.Merge(baseline, state.Database, remote);
+        var merge = CloudEntityMerge.Merge(baseline, localSnapshot, remote);
         if (merge.Conflicts.Count > 0)
         {
             var recoveryPath = TrySaveRecoveryCopy("entity-conflict");
@@ -271,10 +346,8 @@ public sealed class CloudSyncService(AppState state)
 
         var remoteEntities = CloudEntityMerge.Snapshot(remote);
         var mergedEntities = CloudEntityMerge.Snapshot(merge.Database);
-        var revisionsResponse = await SendAsync(HttpMethod.Get,
-            $"/rest/v1/workspace_entities?workspace_id=eq.{workspaceId:D}&select=entity_type,entity_id,revision", null, true);
-        if (!revisionsResponse.Succeeded) return revisionsResponse;
-        var revisions = ParseEntityRevisions(revisionsResponse.Payload!);
+        var revisions = await ReadEntityRevisionsAsync(workspaceId);
+        if (revisions.Error is not null) return revisions.Error;
         var changes = remoteEntities.Keys.Union(mergedEntities.Keys)
             .Where(key => !remoteEntities.TryGetValue(key, out var remoteEntity) || !mergedEntities.TryGetValue(key, out var mergedEntity) || remoteEntity.Payload != mergedEntity.Payload)
             .Select(key => new
@@ -282,20 +355,23 @@ public sealed class CloudSyncService(AppState state)
                 entity_type = key.Type,
                 entity_id = key.Id,
                 payload = mergedEntities.TryGetValue(key, out var entity) ? JsonDocument.Parse(entity.Payload).RootElement.Clone() : JsonDocument.Parse("{}").RootElement.Clone(),
-                expected_revision = revisions.TryGetValue(key, out var revision) ? revision : 0L,
+                expected_revision = revisions.Values!.TryGetValue(key, out var revision) ? revision : 0L,
                 deleted = !mergedEntities.ContainsKey(key)
             }).ToArray();
 
         var mergedJson = CloudEntityMerge.SerializeDatabase(merge.Database);
-        var databaseChanged = !SameEntities(CloudEntityMerge.Snapshot(state.Database), mergedEntities);
+        var databaseChanged = !SameEntities(CloudEntityMerge.Snapshot(localSnapshot), mergedEntities);
         if (changes.Length == 0)
         {
-            if (databaseChanged) state.ReplaceFromCloudSnapshot(mergedJson);
+            var hasConcurrentEdits = state.Revision != localRevision;
             _settings.LastRevision = remoteRevision;
-            _settings.LastSnapshotHash = SnapshotHash();
-            SaveSettings();
-            SaveBaseline(mergedJson);
-            return Ok("Локальная база объединена с актуальной облачной версией.") with { DatabaseChanged = databaseChanged };
+            _settings.LastSnapshotHash = SnapshotHash(mergedJson);
+            if (databaseChanged && !hasConcurrentEdits)
+                state.ReplaceFromCloudSnapshot(mergedJson, databaseJson => SaveCloudCheckpoint(mergedJson, databaseJson));
+            else SaveCloudCheckpoint(mergedJson);
+            return Ok(hasConcurrentEdits
+                ? "Синхронизация завершена; новые локальные изменения будут опубликованы следующим циклом."
+                : "Локальная база объединена с актуальной облачной версией.") with { DatabaseChanged = databaseChanged && !hasConcurrentEdits };
         }
 
         var response = await SendAsync(HttpMethod.Post, "/rest/v1/rpc/sync_vitan_entity_changes", new
@@ -318,16 +394,22 @@ public sealed class CloudSyncService(AppState state)
         {
             using var document = JsonDocument.Parse(response.Payload!);
             _settings.LastRevision = document.RootElement[0].GetProperty("revision").GetInt64();
-            if (databaseChanged) state.ReplaceFromCloudSnapshot(mergedJson);
-            _settings.LastSnapshotHash = SnapshotHash();
-            SaveSettings();
-            SaveBaseline(mergedJson);
-            return Ok("Локальные изменения объединены и опубликованы в облаке.") with { DatabaseChanged = databaseChanged };
+            var hasConcurrentEdits = state.Revision != localRevision;
+            _settings.LastSnapshotHash = SnapshotHash(mergedJson);
+            if (databaseChanged && !hasConcurrentEdits)
+                state.ReplaceFromCloudSnapshot(mergedJson, databaseJson => SaveCloudCheckpoint(mergedJson, databaseJson));
+            else SaveCloudCheckpoint(mergedJson);
+            return Ok(hasConcurrentEdits
+                ? "Снимок опубликован; новые локальные изменения остались в программе и будут отправлены следующим циклом."
+                : "Локальные изменения объединены и опубликованы в облаке.") with { DatabaseChanged = databaseChanged && !hasConcurrentEdits };
         }
         catch (JsonException) { return Fail("Supabase вернул неверный ответ публикации."); }
     }
 
-    public async Task<CloudHistoryResult> GetHistoryAsync()
+    public Task<CloudHistoryResult> GetHistoryAsync(CancellationToken cancellationToken = default) =>
+        SerializeAsync(GetHistoryCoreAsync, cancellationToken);
+
+    private async Task<CloudHistoryResult> GetHistoryCoreAsync()
     {
         if (!IsSignedIn) return CloudHistoryResult.Fail("Сначала войдите в Supabase.");
         if (!Guid.TryParse(_settings.WorkspaceId, out var workspaceId))
@@ -353,8 +435,12 @@ public sealed class CloudSyncService(AppState state)
         catch (JsonException) { return CloudHistoryResult.Fail("Supabase вернул неверную историю версий."); }
     }
 
-    public async Task<CloudSyncResult> RestoreHistoryAsync(long revision)
+    public Task<CloudSyncResult> RestoreHistoryAsync(long revision, CancellationToken cancellationToken = default) =>
+        SerializeAsync(() => RestoreHistoryCoreAsync(revision), cancellationToken);
+
+    private async Task<CloudSyncResult> RestoreHistoryCoreAsync(long revision)
     {
+        var localRevision = state.Revision;
         if (!IsSignedIn) return Fail("Сначала войдите в Supabase.");
         if (!Guid.TryParse(_settings.WorkspaceId, out var workspaceId))
             return Fail("Войдите в Supabase, чтобы подключить пространство Cutlist.");
@@ -374,6 +460,9 @@ public sealed class CloudSyncService(AppState state)
             if (currentDocument.RootElement.GetArrayLength() != 1 || targetDocument.RootElement.GetArrayLength() != 1)
                 return Fail("Выбранная версия больше недоступна в облачной истории.");
 
+            if (state.Revision != localRevision)
+                return new CloudSyncResult(false, "Локальная база изменилась во время восстановления. Повторите действие.", null, true);
+
             var recoveryPath = TrySaveRecoveryCopy("before-history-restore");
             if (recoveryPath is null) return Fail("Не удалось создать локальную резервную копию. Восстановление отменено.");
 
@@ -389,23 +478,132 @@ public sealed class CloudSyncService(AppState state)
         }
     }
 
-    private async Task<CloudSyncResult> SendAsync(HttpMethod method, string path, object? body, bool withAuth)
+    private async Task<(Dictionary<CloudEntityKey, long>? Values, CloudSyncResult? Error)> ReadEntityRevisionsAsync(Guid workspaceId)
     {
+        const int pageSize = 1000;
+        var result = new Dictionary<CloudEntityKey, long>();
+        var start = 0;
+        while (true)
+        {
+            var response = await SendAsync(HttpMethod.Get,
+                $"/rest/v1/workspace_entities?workspace_id=eq.{workspaceId:D}&select=entity_type,entity_id,revision&order=entity_type.asc,entity_id.asc",
+                null, true, $"{start}-{start + pageSize - 1}");
+            if (!response.Succeeded) return (null, response);
+            if (!TryParseEntityRevisions(response.Payload!, out var page))
+                return (null, Fail("Supabase вернул неверный список версий объектов."));
+            foreach (var pair in page)
+                if (!result.TryAdd(pair.Key, pair.Value))
+                    return (null, Fail("Supabase вернул повторяющийся объект в списке версий."));
+            if (page.Count < pageSize) return (result, null);
+            start = checked(start + pageSize);
+        }
+    }
+
+    private async Task<CloudSyncResult> SendAsync(HttpMethod method, string path, object? body, bool withAuth, string? range = null)
+    {
+        if (!IsEnabled) return Fail("Облачная синхронизация отключена в изолированном режиме разработки.");
         try
         {
-            using var request = new HttpRequestMessage(method, DefaultProjectUrl + path);
-            request.Headers.Add("apikey", DefaultPublishableKey);
-            if (withAuth) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
-            if (body is not null) request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-            using var response = await _http.SendAsync(request);
-            var payload = await response.Content.ReadAsStringAsync();
-            if (response.IsSuccessStatusCode) return new CloudSyncResult(true, "", payload);
-            if (payload.Contains("revision_conflict", StringComparison.OrdinalIgnoreCase))
-                return new CloudSyncResult(false, "Облачная база изменилась на другом компьютере. Сначала загрузите её и разрешите конфликт.", payload, true);
-            return Fail(DescribeFailure(response.StatusCode, payload));
+            var response = await SendRequestWithRetryAsync(method, path, body, withAuth, range);
+            if (response.StatusCode == HttpStatusCode.Unauthorized && withAuth && !string.IsNullOrWhiteSpace(_refreshToken))
+            {
+                var refresh = await SendRequestAsync(HttpMethod.Post, "/auth/v1/token?grant_type=refresh_token",
+                    new { refresh_token = _refreshToken }, withAuth: false, range: null);
+                if ((int)refresh.StatusCode is >= 200 and < 300)
+                {
+                    try
+                    {
+                        using var document = JsonDocument.Parse(refresh.Payload);
+                        UpdateSession(document.RootElement);
+                        if (!IsSignedIn || string.IsNullOrWhiteSpace(_refreshToken))
+                            return Fail("Сеанс Supabase истёк. Войдите снова в настройках.");
+                        SaveRefreshToken();
+                        response = await SendRequestWithRetryAsync(method, path, body, withAuth: true, range);
+                    }
+                    catch (JsonException) { return Fail("Не удалось обновить сеанс Supabase. Войдите снова в настройках."); }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException)
+                    {
+                        return Fail("Не удалось сохранить обновлённый сеанс Supabase.");
+                    }
+                }
+                else
+                {
+                    _accessToken = "";
+                    return Fail(DescribeFailure(refresh.StatusCode, refresh.Payload));
+                }
+            }
+
+            if ((int)response.StatusCode is >= 200 and < 300) return new CloudSyncResult(true, "", response.Payload);
+            if (response.Payload.Contains("revision_conflict", StringComparison.OrdinalIgnoreCase))
+                return new CloudSyncResult(false, "Облачная база изменилась на другом компьютере. Сначала загрузите её и разрешите конфликт.", response.Payload, true);
+            return Fail(DescribeFailure(response.StatusCode, response.Payload));
         }
         catch (HttpRequestException) { return Fail("Нет соединения с Supabase. Проверьте интернет и попробуйте снова."); }
+        catch (OperationCanceledException) when (_activeOperationToken.IsCancellationRequested) { return Fail("Синхронизация отменена. Локальные данные не изменены."); }
         catch (TaskCanceledException) { return Fail("Supabase не ответил вовремя. Попробуйте ещё раз."); }
+    }
+
+    private async Task<(HttpStatusCode StatusCode, string Payload, TimeSpan? RetryAfter)> SendRequestAsync(
+        HttpMethod method, string path, object? body, bool withAuth, string? range)
+    {
+        using var request = new HttpRequestMessage(method, _projectUrl + path);
+        request.Headers.Add("apikey", _publishableKey);
+        if (range is not null)
+        {
+            request.Headers.TryAddWithoutValidation("Range-Unit", "items");
+            request.Headers.TryAddWithoutValidation("Range", range);
+        }
+        if (withAuth) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+        if (body is not null) request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        using var response = await _http.SendAsync(request, _activeOperationToken);
+        var retryAfter = response.Headers.RetryAfter?.Delta;
+        if (retryAfter is null && response.Headers.RetryAfter?.Date is { } retryDate)
+            retryAfter = retryDate - DateTimeOffset.UtcNow;
+        return (response.StatusCode, await response.Content.ReadAsStringAsync(_activeOperationToken), retryAfter);
+    }
+
+    private async Task<(HttpStatusCode StatusCode, string Payload, TimeSpan? RetryAfter)> SendRequestWithRetryAsync(
+        HttpMethod method, string path, object? body, bool withAuth, string? range)
+    {
+        const int maxAttempts = 3;
+        TimeSpan? retryAfter = null;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                var response = await SendRequestAsync(method, path, body, withAuth, range);
+                if (method != HttpMethod.Get || !IsTransient(response.StatusCode) || attempt >= maxAttempts)
+                    return response;
+                retryAfter = response.RetryAfter;
+            }
+            catch (HttpRequestException) when (method == HttpMethod.Get && attempt < maxAttempts) { }
+            catch (TaskCanceledException) when (method == HttpMethod.Get &&
+                                                !_activeOperationToken.IsCancellationRequested && attempt < maxAttempts) { }
+
+            var delay = TimeSpan.FromMilliseconds(150 * attempt);
+            if (retryAfter is { } serverDelay && serverDelay > delay)
+                delay = serverDelay > TimeSpan.FromSeconds(30) ? TimeSpan.FromSeconds(30) : serverDelay;
+            await Task.Delay(delay, _activeOperationToken);
+            retryAfter = null;
+        }
+    }
+
+    private static bool IsTransient(HttpStatusCode statusCode) =>
+        statusCode is HttpStatusCode.RequestTimeout or (HttpStatusCode)429 || (int)statusCode >= 500;
+
+    private async Task<T> SerializeAsync<T>(Func<Task<T>> operation, CancellationToken cancellationToken = default)
+    {
+        await _operationGate.WaitAsync(cancellationToken);
+        var previousToken = _activeOperationToken;
+        _activeOperationToken = cancellationToken;
+        Volatile.Write(ref _operationInProgress, 1);
+        try { return await operation(); }
+        finally
+        {
+            _activeOperationToken = previousToken;
+            Volatile.Write(ref _operationInProgress, 0);
+            _operationGate.Release();
+        }
     }
 
     private CloudSyncResult ApplyWorkspaceResponse(string payload, string message)
@@ -417,8 +615,7 @@ public sealed class CloudSyncService(AppState state)
             SetWorkspaceId(row.GetProperty("workspace_id").GetGuid().ToString(), save: false);
             _settings.LastRevision = row.GetProperty("revision").GetInt64();
             _settings.LastSnapshotHash = SnapshotHash();
-            SaveSettings();
-            SaveBaseline(state.CreateCloudSnapshot());
+            SaveCloudCheckpoint(state.CreateCloudSnapshot());
             return new CloudSyncResult(true, message, payload, DatabaseChanged: true);
         }
         catch (JsonException) { return Fail("Supabase вернул неверный ответ рабочего пространства."); }
@@ -459,16 +656,26 @@ public sealed class CloudSyncService(AppState state)
         }
     }
 
-    private Dictionary<CloudEntityKey, long> ParseEntityRevisions(string payload)
+    private static bool TryParseEntityRevisions(string payload, out Dictionary<CloudEntityKey, long> revisions)
     {
+        revisions = [];
         try
         {
             using var document = JsonDocument.Parse(payload);
-            return document.RootElement.EnumerateArray().ToDictionary(
-                row => new CloudEntityKey(row.GetProperty("entity_type").GetString() ?? "", row.GetProperty("entity_id").GetString() ?? ""),
-                row => row.GetProperty("revision").GetInt64());
+            if (document.RootElement.ValueKind != JsonValueKind.Array) return false;
+            foreach (var row in document.RootElement.EnumerateArray())
+            {
+                var key = new CloudEntityKey(row.GetProperty("entity_type").GetString() ?? "", row.GetProperty("entity_id").GetString() ?? "");
+                if (string.IsNullOrWhiteSpace(key.Type) || string.IsNullOrWhiteSpace(key.Id) ||
+                    !revisions.TryAdd(key, row.GetProperty("revision").GetInt64())) return false;
+            }
+            return true;
         }
-        catch (JsonException) { return []; }
+        catch (Exception error) when (error is JsonException or InvalidOperationException or KeyNotFoundException or FormatException)
+        {
+            revisions = [];
+            return false;
+        }
     }
 
     private string? LoadBaseline()
@@ -477,10 +684,24 @@ public sealed class CloudSyncService(AppState state)
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; }
     }
 
-    private void SaveBaseline(string json)
+    private void SaveCloudCheckpoint(string baselineJson, string? databaseJson = null)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_baselinePath)!);
-        File.WriteAllText(_baselinePath, json);
+        var previousSettings = File.Exists(_settingsPath)
+            ? JsonSerializer.Deserialize<CloudSyncSettings>(File.ReadAllText(_settingsPath)) ?? new CloudSyncSettings()
+            : new CloudSyncSettings();
+        try
+        {
+            databaseJson ??= state.CreateCloudSnapshot();
+            if (File.Exists(state.DatabasePath))
+                AtomicJsonFile.Write(state.DatabasePath + ".bak", File.ReadAllText(state.DatabasePath));
+            AtomicJsonPairFile.Write(_settingsPath, JsonSerializer.Serialize(_settings), _baselinePath, baselineJson,
+                state.DatabasePath, databaseJson);
+        }
+        catch
+        {
+            _settings = previousSettings;
+            throw;
+        }
     }
 
     private void UpdateSession(JsonElement response)
@@ -518,7 +739,15 @@ public sealed class CloudSyncService(AppState state)
     private string SnapshotHash() => SnapshotHash(state.CreateCloudSnapshot());
     private static bool SameEntities(IReadOnlyDictionary<CloudEntityKey, CloudEntity> left, IReadOnlyDictionary<CloudEntityKey, CloudEntity> right) =>
         left.Count == right.Count && left.All(pair => right.TryGetValue(pair.Key, out var entity) && entity.Payload == pair.Value.Payload);
-    private static string SnapshotHash(string json) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(json)));
+    private static string SnapshotHash(string json)
+    {
+        var entities = CloudEntityMerge.Snapshot(CloudEntityMerge.DeserializeDatabase(json));
+        var canonical = JsonSerializer.Serialize(entities.Values
+            .OrderBy(entity => entity.Key.Type, StringComparer.Ordinal)
+            .ThenBy(entity => entity.Key.Id, StringComparer.Ordinal)
+            .Select(entity => new { entity.Key.Type, entity.Key.Id, entity.Payload }));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
+    }
 
     internal static string DescribeFailure(HttpStatusCode statusCode, string payload)
     {
@@ -565,8 +794,7 @@ public sealed class CloudSyncService(AppState state)
 
     private void SaveSettings()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
-        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(_settings));
+        AtomicJsonFile.Write(_settingsPath, JsonSerializer.Serialize(_settings));
     }
 }
 

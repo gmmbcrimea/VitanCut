@@ -38,7 +38,7 @@
     <ScrollViewer x:Name="ProductScrollViewer" Grid.Row="1"
                   Padding="24,0,24,0"
                   HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
-                  VerticalScrollBarVisibility="Hidden">
+                  VerticalScrollBarVisibility="Auto">
       <StackPanel Spacing="16">
         <Border x:Name="CatalogPickerCard" Style="{StaticResource PaneSurfaceStyle}" Padding="16">
           <Grid ColumnSpacing="12">
@@ -134,7 +134,7 @@
             </Grid>
 
             <ScrollViewer x:Name="DetailsTableViewport" Grid.Row="1" Grid.RowSpan="2"
-                          HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Hidden"
+                          HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto"
                           VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled"
                           SizeChanged="DetailsTableViewportSizeChanged">
             <Grid x:Name="DetailsTable" RowSpacing="12">

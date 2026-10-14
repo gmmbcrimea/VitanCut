@@ -18,16 +18,27 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Validate release metadata
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          ./scripts/Validate-Release.ps1 -Version $version
+
       - name: Build release
-        run: dotnet build native-winui/VitanCut.WinUI.csproj -c Release -p:Platform=x64
+        run: dotnet publish native-winui/VitanCut.WinUI.csproj -c Release -r win-x64 --self-contained true -o release-app
+
+      - name: Run core checks
+        shell: pwsh
+        run: |
+          $env:VITANCUT_TEST_ROOT = Join-Path $env:RUNNER_TEMP 'vitancut-release-checks'
+          dotnet run --project native-winui-tests/VitanCut.CoreChecks.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw "Core checks failed" }
 
       - name: Pack portable archive
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
-          $source = "native-winui/bin/x64/Release/net8.0-windows10.0.26100.0/win-x64"
-          $archive = "VitanCut-portable-win-x64-$version.zip"
-          Compress-Archive -Path "$source/*" -DestinationPath $archive -CompressionLevel Optimal
+          ./scripts/Stage-Portable.ps1 -BuildDirectory "release-app" -OutputDirectory "release-artifacts" -Version $version
 
       - name: Load version-specific release notes
         id: notes
@@ -42,4 +53,6 @@ jobs:
         with:
           generate_release_notes: false
           body_path: ${{ steps.notes.outputs.path }}
-          files: VitanCut-portable-win-x64-*.zip
+          files: |
+            release-artifacts/VitanCut-portable-win-x64-*.zip
+            release-artifacts/VitanCut-portable-win-x64-*.zip.sha256

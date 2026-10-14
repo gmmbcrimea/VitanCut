@@ -4,6 +4,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 
 namespace VitanCut.WinUI.Services;
 
@@ -33,6 +35,8 @@ public sealed class NotificationOverlay : Grid
     private readonly DispatcherQueueTimer _timer;
     private readonly Flyout _historyFlyout;
     private readonly StackPanel _historyList;
+    private Storyboard? _animation;
+    private long _animationVersion;
 
     public NotificationOverlay()
     {
@@ -46,7 +50,7 @@ public sealed class NotificationOverlay : Grid
             Spacing = 8,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(16)
+            Margin = new Thickness(16, 16, 21, 21)
         };
 
         _title = new TextBlock { FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
@@ -70,6 +74,7 @@ public sealed class NotificationOverlay : Grid
         _historyButton = new Button
         {
             Content = new FontIcon { Glyph = "\uE7F4", FontSize = 17 },
+            Tag = "icon-tool",
             Width = 42,
             Height = 42,
             Padding = new Thickness(0),
@@ -78,6 +83,8 @@ public sealed class NotificationOverlay : Grid
             VerticalContentAlignment = VerticalAlignment.Center
         };
         ToolTipService.SetToolTip(_historyButton, "Центр уведомлений");
+        AutomationProperties.SetName(_historyButton, "Центр уведомлений");
+        AutomationProperties.SetLiveSetting(_toast, AutomationLiveSetting.Polite);
 
         _historyList = new StackPanel { Spacing = 10 };
         _historyFlyout = new Flyout
@@ -126,7 +133,9 @@ public sealed class NotificationOverlay : Grid
         {
             _title.Text = item.Title;
             _message.Text = item.Message;
+            AutomationProperties.SetName(_toast, item.Title + ". " + item.Message);
             _toast.Visibility = Visibility.Visible;
+            FrameworkElementAutomationPeer.FromElement(_toast)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
             _timer.Stop();
             AnimateToast(0, 1, null);
             _timer.Start();
@@ -137,7 +146,16 @@ public sealed class NotificationOverlay : Grid
 
     private void AnimateToast(double from, double to, Action? completed)
     {
+        var version = ++_animationVersion;
+        _animation?.Stop();
+        if (!App.Preferences.Current.AnimationsEnabled)
+        {
+            _toast.Opacity = to;
+            completed?.Invoke();
+            return;
+        }
         var storyboard = new Storyboard();
+        _animation = storyboard;
         var animation = new DoubleAnimation
         {
             From = from,
@@ -145,7 +163,10 @@ public sealed class NotificationOverlay : Grid
             Duration = new Duration(TimeSpan.FromMilliseconds(180)),
             EnableDependentAnimation = true
         };
-        animation.Completed += (_, _) => completed?.Invoke();
+        animation.Completed += (_, _) =>
+        {
+            if (version == _animationVersion) completed?.Invoke();
+        };
         Storyboard.SetTarget(animation, _toast);
         Storyboard.SetTargetProperty(animation, "Opacity");
         storyboard.Children.Add(animation);

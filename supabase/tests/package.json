@@ -1,0 +1,11 @@
+{
+  "name": "vitancut-supabase-migration-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node run-migration-checks.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.9"
+  }
+}

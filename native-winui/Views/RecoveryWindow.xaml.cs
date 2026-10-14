@@ -22,7 +22,7 @@ public sealed class RecoveryWindow : Window
         Title = "Восстановление VitanCut";
         SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
 
-        var layout = new Grid { Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 32, 38, 45)), Padding = new Thickness(24) };
+        var layout = new Grid { Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["PanelSurfaceBrush"], Padding = new Thickness(24) };
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -62,6 +62,7 @@ public sealed class RecoveryWindow : Window
         Grid.SetRow(actions, 4);
         layout.Children.Add(actions);
         Content = layout;
+        App.Preferences.Apply(this);
 
         ShowError(error, canRollback);
         AppWindow.Resize(new Windows.Graphics.SizeInt32(620, 440));

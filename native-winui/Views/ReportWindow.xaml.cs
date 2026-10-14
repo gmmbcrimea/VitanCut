@@ -29,13 +29,16 @@ public sealed partial class ReportWindow : Window
     private CutReport? _cutReport;
     private readonly DetailingReport? _detailingReport;
     private readonly Func<Task>? _openAdditionalCut;
+    private bool? _narrowLayout;
 
     public ReportWindow(CutReport report, IReadOnlyList<SavedCutPlan> plans, string activeId, Action<IReadOnlyList<SavedCutPlan>, string> savePlans,
         Func<Task>? openAdditionalCut = null, bool isAdditional = false)
     {
         InitializeComponent();
+        InitializeResponsiveLayout();
         var notifications = new NotificationOverlay();
         Grid.SetColumnSpan(notifications, 2);
+        Grid.SetRowSpan(notifications, 3);
         Root.Children.Add(notifications);
         _cutReport = report;
         _baseline = report;
@@ -56,7 +59,7 @@ public sealed partial class ReportWindow : Window
         SubtitleText.Text = $"{report.ProjectName} · {report.Counterparty} · {report.Address}";
         CutTools.Visibility = Visibility.Visible;
         AdditionalCutButton.Visibility = _openAdditionalCut is null ? Visibility.Collapsed : Visibility.Visible;
-        SaveReportButton.Content = "Сохранить раскрой";
+        ToolTipService.SetToolTip(SaveReportButton, "Сохранить раскрой");
         App.Preferences.Apply(this);
         AppWindow.Resize(new SizeInt32(1180, 820));
         InitializeCutTools(activeId);
@@ -69,8 +72,10 @@ public sealed partial class ReportWindow : Window
     public ReportWindow(DetailingReport report)
     {
         InitializeComponent();
+        InitializeResponsiveLayout();
         var notifications = new NotificationOverlay();
         Grid.SetColumnSpan(notifications, 2);
+        Grid.SetRowSpan(notifications, 3);
         Root.Children.Add(notifications);
         _detailingReport = report;
         SaveReportButton.Click += SaveReportClick;
@@ -79,11 +84,42 @@ public sealed partial class ReportWindow : Window
         TitleText.Text = "Деталировка";
         SubtitleText.Text = $"{report.ProjectName} · {report.Counterparty} · {report.Address}";
         HintText.Text = "";
-        SaveReportButton.Content = "Сохранить деталировку";
+        ToolTipService.SetToolTip(SaveReportButton, "Сохранить деталировку");
         DetailingTools.Visibility = Visibility.Visible;
         App.Preferences.Apply(this);
         AppWindow.Resize(new SizeInt32(1180, 820));
         BuildDetailingReport(report);
+    }
+
+    private void InitializeResponsiveLayout()
+    {
+        Root.SizeChanged += (_, _) => UpdateResponsiveLayout();
+        Root.Loaded += (_, _) => UpdateResponsiveLayout();
+    }
+
+    private void UpdateResponsiveLayout()
+    {
+        if (Root.ActualWidth <= 0) return;
+        var narrow = UiLayout.ReportIsNarrow(Root.ActualWidth);
+        if (_narrowLayout == narrow) return;
+        _narrowLayout = narrow;
+        Root.ColumnDefinitions[0].Width = new GridLength(narrow ? 0 : 244);
+        ReportToolsToggle.Visibility = narrow ? Visibility.Visible : Visibility.Collapsed;
+        Grid.SetRow(ReportSidebar, narrow ? 1 : 0);
+        Grid.SetRowSpan(ReportSidebar, narrow ? 1 : 3);
+        Grid.SetColumnSpan(ReportSidebar, narrow ? 2 : 1);
+        ReportSidebar.MaxHeight = narrow ? 240 : double.PositiveInfinity;
+        ReportSidebar.Visibility = !narrow || ReportToolsToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        Grid.SetRow(ReportBody, narrow ? 2 : 0);
+        Grid.SetRowSpan(ReportBody, narrow ? 1 : 3);
+        Grid.SetColumn(ReportBody, narrow ? 0 : 1);
+        Grid.SetColumnSpan(ReportBody, narrow ? 2 : 1);
+    }
+
+    private void ReportToolsToggled(object sender, RoutedEventArgs e)
+    {
+        if (_narrowLayout == true)
+            ReportSidebar.Visibility = ReportToolsToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void DspOnlyToggled(object sender, RoutedEventArgs e)
@@ -93,6 +129,7 @@ public sealed partial class ReportWindow : Window
 
     private void BuildCutReport(CutReport report)
     {
+        using var measurement = App.UiPerformance.Measure(UiWork.CuttingReport);
         ContentPanel.Children.Clear();
         _interactiveSheets.Clear();
         if (!report.Groups.Any())
@@ -116,7 +153,7 @@ public sealed partial class ReportWindow : Window
             ContentPanel.Children.Add(new Expander
             {
                 Header = $"Не размещено: {report.Unplaced.Count}", HorizontalAlignment = HorizontalAlignment.Stretch,
-                Content = new ScrollViewer { Content = warning, MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden }
+                Content = new ScrollViewer { Content = warning, MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }
             });
         }
         foreach (var group in report.Groups)
@@ -469,7 +506,9 @@ public sealed partial class ReportWindow : Window
         SetExportBusy(true);
         try
         {
-            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"vitan-cut-{Guid.NewGuid():N}.pdf");
+            var temporaryRoot = App.Paths.IsDevelopment ? App.Paths.TemporaryDirectory : System.IO.Path.GetTempPath();
+            System.IO.Directory.CreateDirectory(temporaryRoot);
+            var path = System.IO.Path.Combine(temporaryRoot, $"vitan-cut-{Guid.NewGuid():N}.pdf");
             if (CurrentCutReport() is { } cut) await Task.Run(() => ReportDocumentService.SavePdf(cut, path));
             else if (CurrentDetailingReport() is { } detailing) await Task.Run(() => ReportDocumentService.SavePdf(detailing, path));
             else return;
@@ -497,11 +536,14 @@ public sealed partial class ReportWindow : Window
     }
     private void BuildDetailingReport(DetailingReport report)
     {
+        using var measurement = App.UiPerformance.Measure(UiWork.DetailingReport);
         var shownReport = DspOnlySwitch.IsOn ? CuttingService.FilterDetailingReportToDsp(report) : report;
         ContentPanel.Children.Clear();
         if (!shownReport.Products.Any())
         {
-            ContentPanel.Children.Add(EmptyState("Деталей ДСП нет", "В изделиях не найдено деталей с материалом ДСП."));
+            ContentPanel.Children.Add(DspOnlySwitch.IsOn
+                ? EmptyState("Деталей ДСП нет", "В изделиях не найдено деталей с материалом ДСП.")
+                : EmptyState("Деталей пока нет", "В проекте нет деталей для деталировки."));
             return;
         }
 
@@ -526,7 +568,13 @@ public sealed partial class ReportWindow : Window
             if (report.IncludeImages)
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            if (report.IncludeImages) grid.Children.Add(ProductVisual(product));
+            var visual = report.IncludeImages ? ProductVisual(product) : null;
+            if (visual is not null)
+            {
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                grid.Children.Add(visual);
+            }
 
             var body = new StackPanel { Spacing = 14 };
             Grid.SetColumn(body, report.IncludeImages ? 1 : 0);
@@ -536,6 +584,22 @@ public sealed partial class ReportWindow : Window
                 body.Children.Add(new TextBlock { Text = "Фиксированные размеры: " + string.Join(" · ", product.FixedSizes.Select(size => $"{size.Name}: {N(size.Value)} мм")), TextWrapping = TextWrapping.Wrap, Opacity = 0.72 });
             body.Children.Add(DetailingTable(product));
             grid.Children.Add(body);
+            if (visual is FrameworkElement image)
+            {
+                bool? beside = null;
+                grid.SizeChanged += (_, _) =>
+                {
+                    var next = UiLayout.ReportImageBesideTable(grid.ActualWidth);
+                    if (beside == next) return;
+                    beside = next;
+                    grid.ColumnDefinitions[0].Width = new GridLength(next ? 220 : 0);
+                    Grid.SetColumn(image, next ? 0 : 1);
+                    Grid.SetRow(body, next ? 0 : 1);
+                    image.Width = 220;
+                    image.HorizontalAlignment = HorizontalAlignment.Left;
+                    image.Margin = new Thickness(0, 0, 0, next ? 0 : 12);
+                };
+            }
             section.Children.Add(grid);
             ContentPanel.Children.Add(section);
         }
@@ -594,7 +658,7 @@ public sealed partial class ReportWindow : Window
 
     private static UIElement DetailingTable(DetailingProduct product)
     {
-        var table = new Grid { RowSpacing = 0 };
+        var table = new Grid { RowSpacing = 0, MinWidth = 760 };
         var widths = new[] { 2.1, 2.2, 0.8, 0.8, 0.8, 0.9, 1.0 };
         foreach (var width in widths)
         {
@@ -622,7 +686,14 @@ public sealed partial class ReportWindow : Window
             ], false, row.RotationLocked);
         }
 
-        return table;
+        var viewport = new ScrollViewer
+        {
+            Content = table, HorizontalScrollMode = ScrollMode.Enabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollMode = ScrollMode.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            IsTabStop = true
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(viewport, $"Деталировка изделия {product.Name}");
+        return viewport;
     }
 
     private static FontIcon RotationLockIcon() => new()
@@ -648,10 +719,10 @@ public sealed partial class ReportWindow : Window
             {
                 Text = cells[i],
                 TextWrapping = TextWrapping.Wrap,
-                Opacity = header ? 0.72 : 1,
+                Opacity = header ? 0.9 : 1,
+                TextAlignment = i >= 2 ? TextAlignment.Right : TextAlignment.Left,
                 FontWeight = header ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal
             };
-            cell.Child = text;
             if (i == 0 && rotationLocked)
             {
                 var content = new Grid { ColumnSpacing = 6 };
@@ -664,6 +735,7 @@ public sealed partial class ReportWindow : Window
                 content.Children.Add(text);
                 cell.Child = content;
             }
+            else cell.Child = text;
             Grid.SetRow(cell, rowIndex);
             Grid.SetColumn(cell, i);
             table.Children.Add(cell);
@@ -687,7 +759,7 @@ public sealed partial class ReportWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var stack = new StackPanel { Spacing = 3 };
-        stack.Children.Add(new TextBlock { Text = title, FontSize = 22, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        stack.Children.Add(new TextBlock { Text = title, FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
         if (!string.IsNullOrWhiteSpace(subtitle))
         {
             stack.Children.Add(new TextBlock { Text = subtitle, Opacity = 0.68, TextWrapping = TextWrapping.Wrap });
@@ -708,13 +780,13 @@ public sealed partial class ReportWindow : Window
     {
         var panel = new StackPanel
         {
-            Width = 420,
-            HorizontalAlignment = HorizontalAlignment.Center,
+            MaxWidth = 420,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Center,
             Spacing = 8,
-            Margin = new Thickness(0, 120, 0, 0)
+            Margin = new Thickness(0, 32, 0, 0)
         };
-        panel.Children.Add(new TextBlock { Text = title, FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextAlignment = TextAlignment.Center });
+        panel.Children.Add(new TextBlock { Text = title, FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(new TextBlock { Text = text, Opacity = 0.68, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap });
         return panel;
     }

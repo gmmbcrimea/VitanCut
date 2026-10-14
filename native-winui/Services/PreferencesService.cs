@@ -11,80 +11,71 @@ public sealed class PreferencesService(AppState state)
 
     public void SetTheme(string theme)
     {
-        Current.Theme = theme is "light" or "dark" ? theme : "auto";
-        Commit();
+        Commit(() => Current.Theme = theme is "light" or "dark" ? theme : "auto");
     }
 
     public void SetAccent(string accent)
     {
-        Current.AccentColor = AccentPalette.Find(accent).Id;
-        Commit();
+        Commit(() => Current.AccentColor = AccentPalette.Find(accent).Id);
     }
 
     public void SetCompactMode(bool value)
     {
-        Current.CompactMode = value;
-        Commit();
+        Commit(() => Current.CompactMode = value);
     }
 
     public void SetAnimationsEnabled(bool value)
     {
-        Current.AnimationsEnabled = value;
-        Commit();
+        Commit(() => Current.AnimationsEnabled = value);
     }
 
     public void SetCursorRevealEnabled(bool value)
     {
-        Current.CursorRevealEnabled = value;
-        Commit();
+        Commit(() => Current.CursorRevealEnabled = value);
     }
 
     public void SetCutPalette(string palette)
     {
-        Current.CutPalette = palette is "green" or "yellow" or "orange" or "purple" ? palette : "blue";
-        Commit();
+        Commit(() => Current.CutPalette = palette is "green" or "yellow" or "orange" or "purple" ? palette : "blue");
     }
 
 
     public void SetCutLayoutOptions(double trim, double gap)
     {
         if (!double.IsFinite(trim) || !double.IsFinite(gap)) return;
-        Current.CutTrim = Math.Max(0, trim);
-        Current.CutGap = Math.Max(0, gap);
-        Commit();
+        Commit(() =>
+        {
+            Current.CutTrim = Math.Max(0, trim);
+            Current.CutGap = Math.Max(0, gap);
+        });
     }
     public void SetCutUsefulRemainder(double minimum)
     {
         if (!double.IsFinite(minimum)) return;
-        Current.CutUsefulRemainder = Math.Max(0, minimum);
-        Commit();
+        Commit(() => Current.CutUsefulRemainder = Math.Max(0, minimum));
     }
     public void SetCloudPublishIntervalMinutes(int minutes)
     {
-        Current.CloudPublishIntervalMinutes = minutes is 5 or 15 or 30 or 60 ? minutes : 15;
-        Commit();
+        Commit(() => Current.CloudPublishIntervalMinutes = minutes is 5 or 15 or 30 or 60 ? minutes : 15);
     }
     public void SetCutExportFormat(string format)
     {
-        Current.CutExportFormat = format == "xlsx" ? "xlsx" : "pdf";
-        Commit();
+        Commit(() => Current.CutExportFormat = format == "xlsx" ? "xlsx" : "pdf");
     }
 
     public void SetDetailingIncludeImages(bool value)
     {
-        Current.DetailingIncludeImages = value;
-        Commit();
+        Commit(() => Current.DetailingIncludeImages = value);
     }
     public void SetDetailingExportFormat(string format)
     {
-        Current.DetailingExportFormat = format == "xlsx" ? "xlsx" : "pdf";
-        Commit();
+        Commit(() => Current.DetailingExportFormat = format == "xlsx" ? "xlsx" : "pdf");
     }
     public void Apply(Window window) => ThemeService.Apply(window, Current);
 
-    private void Commit()
+    private void Commit(Action mutation)
     {
-        state.Save();
+        state.CommitMutation(mutation);
         Changed?.Invoke(this, EventArgs.Empty);
     }
 }

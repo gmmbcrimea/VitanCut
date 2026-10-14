@@ -22,55 +22,57 @@ public sealed class ProjectService(AppState state)
 
     public void Add(Project project)
     {
-        state.Database.Projects.Add(project);
-        EnsureCounterparty(project.Counterparty);
-        state.Save();
+        state.CommitMutation(() =>
+        {
+            state.Database.Projects.Add(project);
+            EnsureCounterparty(project.Counterparty);
+        });
     }
 
     public void UpdateProject(Project project, string name, string counterparty, string address)
     {
         project = Resolve(project);
-        project.Name = name;
-        project.Counterparty = counterparty;
-        project.Address = address;
-        Touch(project);
-        EnsureCounterparty(counterparty);
-        state.Save();
+        state.CommitMutation(() =>
+        {
+            project.Name = name;
+            project.Counterparty = counterparty;
+            project.Address = address;
+            Touch(project);
+            EnsureCounterparty(counterparty);
+        });
     }
 
     public void Delete(Project project)
     {
         project = Resolve(project);
-        state.Database.Projects.Remove(project);
-        state.Save();
+        state.CommitMutation(() => state.Database.Projects.Remove(project));
     }
 
     public void SaveProduct(Project project, Product? previous, Product saved)
     {
         project = Resolve(project);
-        if (previous is null)
+        state.CommitMutation(() =>
         {
-            saved.Id = Ids.NewId();
-            project.Products.Add(saved);
-        }
-        else
-        {
-            var index = project.Products.FindIndex(product => product.Id == previous.Id);
-            if (index >= 0)
+            if (previous is null)
             {
+                saved.Id = Ids.NewId();
+                project.Products.Add(saved);
+            }
+            else
+            {
+                var index = project.Products.FindIndex(product => product.Id == previous.Id);
+                if (index < 0) throw new InvalidOperationException("Изделие проекта уже удалено или изменено в облаке.");
                 saved.Id = project.Products[index].Id;
                 project.Products[index] = saved;
             }
-        }
-
-        Touch(project);
-        state.Save();
+            Touch(project);
+        });
     }
 
     public void SaveCutLayout(Project project, IEnumerable<CutLayoutOverride> layout)
     {
         project = Resolve(project);
-        project.CutLayout = layout.Select(item => new CutLayoutOverride
+        var savedLayout = layout.Select(item => new CutLayoutOverride
         {
             InstanceId = item.InstanceId,
             BaseLength = item.BaseLength,
@@ -81,8 +83,7 @@ public sealed class ProjectService(AppState state)
             Width = item.Width,
             Rotated = item.Rotated
         }).ToList();
-        Touch(project);
-        state.Save();
+        state.CommitMutation(() => { project.CutLayout = savedLayout; Touch(project); });
     }
     public void SaveCutPlans(Project project, IReadOnlyList<SavedCutPlan> plans, string activeId, string expectedSignature, CutReportScope scope = CutReportScope.All)
     {
@@ -94,57 +95,58 @@ public sealed class ProjectService(AppState state)
             if (CutPlanService.Restore(baseline, plan) is null) throw new InvalidOperationException("Раскладка содержит пересечения или неверные размеры.");
         if (scope == CutReportScope.Additional)
         {
-            var old = project.AdditionalCutPlans;
-            var oldActive = project.ActiveAdditionalCutPlanId;
-            project.AdditionalCutPlans = plans.Select(CutPlanService.Copy).ToList();
-            project.ActiveAdditionalCutPlanId = activeId;
-            try { state.Save(); }
-            catch { project.AdditionalCutPlans = old; project.ActiveAdditionalCutPlanId = oldActive; throw; }
+            var savedPlans = plans.Select(CutPlanService.Copy).ToList();
+            state.CommitMutation(() =>
+            {
+                project.AdditionalCutPlans = savedPlans;
+                project.ActiveAdditionalCutPlanId = activeId;
+            });
             return;
         }
-        var mainOld = project.CutPlans;
-        var mainOldActive = project.ActiveCutPlanId;
-        project.CutPlans = plans.Select(CutPlanService.Copy).ToList();
-        project.ActiveCutPlanId = activeId;
-        try { state.Save(); }
-        catch { project.CutPlans = mainOld; project.ActiveCutPlanId = mainOldActive; throw; }
+        var savedMainPlans = plans.Select(CutPlanService.Copy).ToList();
+        state.CommitMutation(() =>
+        {
+            project.CutPlans = savedMainPlans;
+            project.ActiveCutPlanId = activeId;
+        });
     }
     public void DeleteProduct(Project project, Product product)
     {
         project = Resolve(project);
-        project.Products.RemoveAll(item => item.Id == product.Id);
-        Touch(project);
-        state.Save();
+        state.CommitMutation(() =>
+        {
+            var removed = project.Products.RemoveAll(item => item.Id == product.Id);
+            if (removed == 0) throw new InvalidOperationException("Изделие проекта уже удалено.");
+            Touch(project);
+        });
     }
 
     public void AddPayroll(Project project, Payroll payroll)
     {
         project = Resolve(project);
-        project.Payrolls.Add(payroll);
-        Touch(project);
-        state.Save();
+        state.CommitMutation(() => { project.Payrolls.Add(payroll); Touch(project); });
     }
 
     public void UpdatePayroll(Project project, int index, string mode, double amount, double rate, string note)
     {
         project = Resolve(project);
         if (index < 0 || index >= project.Payrolls.Count) return;
-        var payroll = project.Payrolls[index];
-        payroll.Mode = mode;
-        payroll.Amount = amount;
-        payroll.Rate = rate;
-        payroll.Note = note;
-        Touch(project);
-        state.Save();
+        state.CommitMutation(() =>
+        {
+            var payroll = project.Payrolls[index];
+            payroll.Mode = mode;
+            payroll.Amount = amount;
+            payroll.Rate = rate;
+            payroll.Note = note;
+            Touch(project);
+        });
     }
 
     public void DeletePayroll(Project project, int index)
     {
         project = Resolve(project);
         if (index < 0 || index >= project.Payrolls.Count) return;
-        project.Payrolls.RemoveAt(index);
-        Touch(project);
-        state.Save();
+        state.CommitMutation(() => { project.Payrolls.RemoveAt(index); Touch(project); });
     }
 
     private void EnsureCounterparty(string counterparty)

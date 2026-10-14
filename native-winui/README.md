@@ -1,5 +1,17 @@
 # Vitan-Cut WinUI
 
+This is the active native Windows app source. Archived WinUI pages are preserved under `audit/reference/dead-ui` and are not part of the build.
+
+## Isolated Development
+
+Run the application only with `VITANCUT_ENVIRONMENT=Development` and `VITANCUT_DATA_ROOT` pointing to a disposable directory outside the application folder. This mode keeps the database, cloud settings/session, logs, rollback and print PDFs under that root. Supabase, GitHub updates and rollback are disabled.
+
+Run core checks with `VITANCUT_TEST_ROOT` set to a disposable folder inside the repository. Test fixtures use synthetic databases and a fake HTTP handler.
+
+## Historical Notes
+
+The remaining design notes below describe earlier plans and are retained as history.
+
 This is the new primary native Windows path for Vitan-Cut:
 
 - WinUI 3
@@ -51,11 +63,11 @@ See [QA-2026-09-07.md](QA-2026-09-07.md) for the current verified changes, regre
 Run the core regression checks from the repository root:
 
 ```powershell
-$env:DOTNET_CLI_HOME = Join-Path (Get-Location) '.dotnet-home'
+$env:VITANCUT_TEST_ROOT = Join-Path (Get-Location) '.test-runtime/checks'
 dotnet run --project native-winui-tests/VitanCut.CoreChecks.csproj
 ```
 
-The checks use a temporary database. Set `VITANCUT_DATABASE_PATH` in the app process environment to use a separate database for UI testing. Successful saves retain the previous file as `database.json.bak`; failed database reads never overwrite the original.
+The checks use synthetic databases. For UI testing, set `VITANCUT_ENVIRONMENT=Development` and a separate `VITANCUT_DATA_ROOT` outside the executable directory. Cloud synchronization and updates are disabled in that mode. Successful saves retain the previous file as `database.json.bak`; failed database reads never overwrite the original.
 
 - Main projects dashboard matching the requested layout: top bar, left projects column, right project/empty state column.
 - Project sorting by created date, updated date, name, or counterparty.

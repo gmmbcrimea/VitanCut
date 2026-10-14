@@ -6,9 +6,22 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../native-winui/Services/UiLayout.cs" Link="Services/UiLayout.cs" />
+    <Compile Include="../native-winui/Services/UiTextSearch.cs" Link="Services/UiTextSearch.cs" />
+    <Compile Include="../native-winui/Services/UiRequestGate.cs" Link="Services/UiRequestGate.cs" />
+    <Compile Include="../native-winui/Services/CloudUiPresentation.cs" Link="Services/CloudUiPresentation.cs" />
+    <Compile Include="../native-winui/Services/UpdateUiPreview.cs" Link="Services/UpdateUiPreview.cs" />
+    <Compile Include="../native-winui/Services/RevealGeometry.cs" Link="Services/RevealGeometry.cs" />
+    <Compile Include="../native-winui/Services/FormulaSuggestionInsertion.cs" Link="Services/FormulaSuggestionInsertion.cs" />
+    <Compile Include="../native-winui/Services/UiReviewPaths.cs" Link="Services/UiReviewPaths.cs" />
+    <Compile Include="../native-winui/Services/UiPerformanceLog.cs" Link="Services/UiPerformanceLog.cs" />
     <Compile Include="../native-winui/Models/Domain.cs" Link="Models/Domain.cs" />
     <Compile Include="../native-winui/Models/AccentPalette.cs" Link="Models/AccentPalette.cs" />
     <Compile Include="../native-winui/Services/AppState.cs" Link="Services/AppState.cs" />
+    <Compile Include="../native-winui/Services/AppPaths.cs" Link="Services/AppPaths.cs" />
+    <Compile Include="../native-winui/Services/AtomicJsonFile.cs" Link="Services/AtomicJsonFile.cs" />
+    <Compile Include="../native-winui/Services/AtomicJsonPairFile.cs" Link="Services/AtomicJsonPairFile.cs" />
+    <Compile Include="../native-winui/Services/MaterialSelectionModel.cs" Link="Services/MaterialSelectionModel.cs" />
     <Compile Include="../native-winui/Services/AppUpdateService.cs" Link="Services/AppUpdateService.cs" />
     <Compile Include="../native-winui/Services/CloudSyncService.cs" Link="Services/CloudSyncService.cs" />
     <Compile Include="../native-winui/Services/CloudEntityMerge.cs" Link="Services/CloudEntityMerge.cs" />
@@ -20,7 +33,8 @@
     <Compile Include="../native-winui/Services/MaterialService.cs" Link="Services/MaterialService.cs" />
     <Compile Include="../native-winui/Services/ProjectService.cs" Link="Services/ProjectService.cs" />
     <Compile Include="../native-winui/Services/ReportDocumentService.cs" Link="Services/ReportDocumentService.cs" />
-    <PackageReference Include="ClosedXML" Version="0.102.3" />
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
+    <PackageReference Include="System.IO.Packaging" Version="8.0.1" />
     <PackageReference Include="RectangleBinPack.CSharp" Version="1.0.4" />
     <Compile Include="../native-winui/Services/CutOptimization.cs" Link="Services/CutOptimization.cs" />
     <Compile Include="../native-winui/Services/CutMetrics.cs" Link="Services/CutMetrics.cs" />

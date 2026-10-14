@@ -399,13 +399,25 @@ public static class CuttingService
     {
         var left = candidate.Free.X;
         var top = candidate.Free.Y;
-        var xs = sheet.Parts.SelectMany(part => new[] { part.X, part.X + part.Length }).Append(options.Trim).Append(sheet.Length - options.Trim).ToList();
-        var ys = sheet.Parts.SelectMany(part => new[] { part.Y, part.Y + part.Width }).Append(options.Trim).Append(sheet.Width - options.Trim).ToList();
-        return NewCoordinateCount(left, left + candidate.Length, xs) + NewCoordinateCount(top, top + candidate.Width, ys);
+        var added = 0;
+        if (IsNewCutCoordinate(left, sheet.Parts, true, options.Trim, sheet.Length - options.Trim)) added++;
+        if (IsNewCutCoordinate(left + candidate.Length, sheet.Parts, true, options.Trim, sheet.Length - options.Trim)) added++;
+        if (IsNewCutCoordinate(top, sheet.Parts, false, options.Trim, sheet.Width - options.Trim)) added++;
+        if (IsNewCutCoordinate(top + candidate.Width, sheet.Parts, false, options.Trim, sheet.Width - options.Trim)) added++;
+        return added;
     }
 
-    private static int NewCoordinateCount(double first, double second, IReadOnlyCollection<double> existing) =>
-        new[] { first, second }.Count(value => existing.All(other => Math.Abs(value - other) > 1e-6));
+    private static bool IsNewCutCoordinate(double value, IReadOnlyList<PlacedPart> parts, bool vertical, double nearEdge, double farEdge)
+    {
+        if (Math.Abs(value - nearEdge) <= 1e-6 || Math.Abs(value - farEdge) <= 1e-6) return false;
+        foreach (var part in parts)
+        {
+            var start = vertical ? part.X : part.Y;
+            var end = start + (vertical ? part.Length : part.Width);
+            if (Math.Abs(value - start) <= 1e-6 || Math.Abs(value - end) <= 1e-6) return false;
+        }
+        return true;
+    }
 
     private static void Place(SheetPlan sheet, Part part, PlacementCandidate candidate, CutOptions options)
     {

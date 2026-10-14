@@ -65,7 +65,7 @@ public sealed class ProjectLayoutController
         }
 
         // Use the actual data pane, not the window width: navigation occupies space too.
-        var detailWidth = IsNarrow ? _root.ActualWidth - 80 : _root.ActualWidth - 400;
+        var detailWidth = _detailPane.ActualWidth > 0 ? _detailPane.ActualWidth - 56 : _root.ActualWidth - (IsNarrow ? 56 : 352);
         UpdateMetricLayout(detailWidth);
     }
 

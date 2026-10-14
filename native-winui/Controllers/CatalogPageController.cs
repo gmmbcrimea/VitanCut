@@ -50,6 +50,7 @@ public sealed class CatalogPageController
 
     public void RenderProducts()
     {
+        using var measurement = App.UiPerformance.Measure(UiWork.Catalog);
         var counterparty = SelectedCounterparty;
         var products = string.IsNullOrWhiteSpace(counterparty)
             ? new List<CustomerProductItem>()

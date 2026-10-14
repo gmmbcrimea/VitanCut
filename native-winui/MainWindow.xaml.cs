@@ -1,5 +1,6 @@
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -10,7 +11,9 @@ using VitanCut.WinUI.Models;
 using VitanCut.WinUI.Controllers;
 using VitanCut.WinUI.Services;
 using Windows.Storage.Pickers;
+using Windows.System;
 using Windows.UI;
+using Windows.UI.Core;
 using WinRT.Interop;
 
 namespace VitanCut.WinUI;
@@ -20,6 +23,7 @@ public sealed partial class MainWindow : Window
     private const int MinimumWindowWidth = 980;
     private const int MinimumWindowHeight = 620;
     private const int WmGetMinMaxInfo = 0x0024;
+
 
     private readonly WindowSubclassProc _minSizeSubclassProc;
     private readonly ProjectPageController _projectPage;
@@ -42,13 +46,15 @@ public sealed partial class MainWindow : Window
     private bool _loadingMaterials = true;
     private bool _materialGroupActionChanging;
     private readonly List<MaterialChoice> _materialSelection = [];
+    private readonly MaterialSelectionModel _materialSelectionModel = new();
+    private readonly UiRequestGate _materialPreviewRequests = new();
+    private readonly UiRequestGate _materialFocusRequests = new();
     // XAML assigns initial control values while the window is being constructed.
     // Ignore those events until persisted preferences are loaded explicitly.
     private bool _loadingSettings = true;
     private bool _firstLoad = true;
     private bool _showingProjectListOnNarrow = true;
-    private bool _catalogActionConfigured;
-    private Border? _activeMaterialSplitter;
+    private Button? _activeMaterialSplitter;
     private double _materialSplitterStartX;
     private double _materialSplitterStartWidth;
     private Border? _updateCard;
@@ -59,8 +65,14 @@ public sealed partial class MainWindow : Window
     private Button? _installUpdateButton;
     private Button? _checkUpdatesButton;
     private ProgressBar? _updateProgress;
+    private UpdateUiPreview? _updatePreview = null;
+    private ComboBox? _cloudIntervalBox;
+    private TextBlock? _cloudBadgeTitle;
+    private Button? _cloudSyncNowButton;
+    private int _cloudUiOperations;
     private Timer? _updateTimer;
     private Timer? _cloudPublishTimer;
+    private Views.CloudPublishWindow? _activeCloudPublishWindow;
     private int _activeCloudPublishInterval;
     private bool _cloudPublishInProgress;
     private bool _shutdownInProgress;
@@ -73,6 +85,13 @@ public sealed partial class MainWindow : Window
     {
         _minSizeSubclassProc = MinSizeSubclassProc;
         InitializeComponent();
+        foreach (var splitter in new[] { MaterialCategoriesSplitter, MaterialListSplitter })
+        {
+            splitter.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(MaterialSplitterPressed), true);
+            splitter.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(MaterialSplitterMoved), true);
+            splitter.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(MaterialSplitterReleased), true);
+            splitter.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(MaterialSplitterCaptureLost), true);
+        }
         var notifications = new NotificationOverlay();
         Grid.SetRowSpan(notifications, 2);
         Grid.SetColumnSpan(notifications, 2);
@@ -102,7 +121,6 @@ public sealed partial class MainWindow : Window
             ContentHost, ThemeBox, AccentBox, CompactModeSwitch, AnimationsSwitch, CutExportFormatBox, DetailingExportFormatBox, CutTrimBox, CutGapBox,
             AppearancePanel, CuttingPanel, DetailingPanel, DatabasePanel,
             ProjectsPage, CustomersPage, MaterialsPage, CatalogPage, SettingsPage);
-        ArrangeSettingsColumns();
         _dialogs = new DialogService(() => Root.XamlRoot, App.Catalog);
         _childWindows = new OwnedWindowActivator(this);
         _productWindows = new ProductWindowCoordinator(_childWindows, App.Projects, App.Catalog);
@@ -114,21 +132,18 @@ public sealed partial class MainWindow : Window
         _materialCommands = new MaterialCommandsController(App.MaterialLibrary, _dialogs);
         _nestedScrolling = new NestedScrollController(ProjectPanel);
         Title = "Vitan-Cut";
-        CustomersTabButton.Content = "Каталог";
         CatalogTabButton.Visibility = Visibility.Collapsed;
         ConfigureTopNavigation();
         ConfigureCloudSurface();
         ConfigureUpdateSurface();
-        CustomerProjectsTitle.Loaded += (_, _) => ConfigureCatalogActions();
-        ConfigureMaterialParameterActions();
         ConfigureTitleBar();
         AppWindow.Closing += MainWindowClosing;
+        Closed += (_, _) => { App.UiPerformance.Flush(); Application.Current.Exit(); };
         App.Preferences.Apply(this);
         ApplyTitleBarForeground();
         Root.SizeChanged += (_, _) => UpdateResponsiveLayout();
         Root.Loaded += async (_, _) =>
         {
-            ArrangeSettingsColumns();
             UpdateResponsiveLayout();
             await InitializeOnlineServicesAsync();
             StartBackgroundTimers();
@@ -155,7 +170,7 @@ public sealed partial class MainWindow : Window
     {
         var content = new StackPanel { Orientation = Orientation.Vertical, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
         content.Children.Add(new SymbolIcon { Symbol = symbol });
-        content.Children.Add(new TextBlock { Text = label, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
+        content.Children.Add(new TextBlock { Text = label, Style = (Style)Application.Current.Resources["CommandLabelStyle"], FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
         button.Content = content;
         ToolTipService.SetToolTip(button, label);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
@@ -163,9 +178,7 @@ public sealed partial class MainWindow : Window
 
     private void ConfigureCloudSurface()
     {
-        var cloudCard = DatabasePanel.Children.OfType<Border>().LastOrDefault();
-        if (cloudCard?.Child is not StackPanel cloudPanel) return;
-        if (cloudPanel.Children[0] is Grid header && header.Children.OfType<Border>().FirstOrDefault() is { } iconSurface)
+        if (CloudIconSurface is { } iconSurface)
         {
             iconSurface.Width = 180;
             iconSurface.Height = 36;
@@ -177,7 +190,7 @@ public sealed partial class MainWindow : Window
                 Width = 180,
                 Height = 36
             };
-            if (header.Children.OfType<StackPanel>().FirstOrDefault() is { } title) title.Visibility = Visibility.Collapsed;
+            CloudHeaderText.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -202,8 +215,12 @@ public sealed partial class MainWindow : Window
             Minimum = 0,
             Maximum = 100,
             Height = 6,
+            MinHeight = 6,
+            Foreground = (Brush)Application.Current.Resources["AppAccentBrush"],
             Visibility = Visibility.Collapsed
         };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_updateProgress, "Скачивание обновления");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(_updateDescription, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
 
         var header = new Grid { ColumnSpacing = 14 };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -231,12 +248,19 @@ public sealed partial class MainWindow : Window
         };
         // Keep maintenance tools together in the right settings column, before the cloud connection card.
         DatabasePanel.Children.Insert(1, _updateCard);
+#if VITANCUT_UI_REVIEW
+        _updatePreview = UpdateUiPreview.Create(App.Paths.IsDevelopment,
+            Environment.GetEnvironmentVariable("VITANCUT_UI_UPDATE_PREVIEW"),
+            typeof(App).Assembly.GetName().Version ?? new Version(1, 0, 0));
+        if (_updatePreview is not null) ApplyUpdatePreview(_updatePreview);
+#endif
     }
 
     private void RefreshUpdateSurface(AppUpdateInfo update)
     {
         if (_updateCard is null || _updateTitle is null || _updateDescription is null || _updateNotes is null || _updateIcon is null || _installUpdateButton is null || _checkUpdatesButton is null || _updateProgress is null) return;
         _checkUpdatesButton.IsEnabled = true;
+        _installUpdateButton.IsEnabled = update.CanInstall && update.LatestVersion is not null;
         _checkUpdatesButton.Content = "Проверить сейчас";
         _updateProgress.Visibility = Visibility.Collapsed;
         _updateDescription.Text = update.Message;
@@ -246,37 +270,98 @@ public sealed partial class MainWindow : Window
         {
             case UpdateAvailability.UpToDate:
                 _updateIcon.Symbol = Symbol.Accept;
-                _updateIcon.Foreground = new SolidColorBrush(Color.FromArgb(255, 62, 207, 142));
+                _updateIcon.Foreground = (Brush)Application.Current.Resources["UiSuccessBrush"];
                 _updateTitle.Text = "Приложение обновлено";
-                _updateCard.BorderBrush = new SolidColorBrush(Color.FromArgb(165, 62, 207, 142));
+                _updateCard.BorderBrush = (Brush)Application.Current.Resources["UiSuccessBrush"];
                 _installUpdateButton.Visibility = Visibility.Collapsed;
                 break;
             case UpdateAvailability.Available:
                 _updateIcon.Symbol = Symbol.Important;
-                _updateIcon.Foreground = new SolidColorBrush(Color.FromArgb(255, 255, 107, 107));
+                _updateIcon.Foreground = (Brush)Application.Current.Resources["UiDangerBrush"];
                 _updateTitle.Text = "Доступно обновление";
-                _updateCard.BorderBrush = new SolidColorBrush(Color.FromArgb(175, 255, 107, 107));
-                _installUpdateButton.Content = $"Обновить до {AppUpdateService.FormatVersion(update.LatestVersion!)}";
+                _updateCard.BorderBrush = (Brush)Application.Current.Resources["UiDangerBrush"];
+                _installUpdateButton.Content = update.LatestVersion is { } latest ? $"Обновить до {AppUpdateService.FormatVersion(latest)}" : "Обновить";
                 _installUpdateButton.Visibility = Visibility.Visible;
                 break;
             default:
                 _updateIcon.Symbol = Symbol.Important;
-                _updateIcon.Foreground = new SolidColorBrush(Color.FromArgb(255, 242, 192, 108));
+                _updateIcon.Foreground = (Brush)Application.Current.Resources["UiWarningTextBrush"];
                 _updateTitle.Text = "Не удалось проверить обновления";
-                _updateCard.BorderBrush = new SolidColorBrush(Color.FromArgb(125, 242, 192, 108));
+                _updateCard.BorderBrush = (Brush)Application.Current.Resources["UiWarningTextBrush"];
                 _installUpdateButton.Visibility = Visibility.Collapsed;
                 break;
         }
     }
 
+    private void ApplyUpdatePreview(UpdateUiPreview preview)
+    {
+        RefreshUpdateSurface(preview.Info);
+        _checkUpdatesButton!.IsEnabled = false;
+        _installUpdateButton!.IsEnabled = false;
+        if (preview.Checking)
+        {
+            _updateTitle!.Text = "Проверка обновлений";
+            _updateIcon!.Symbol = Symbol.Sync;
+            _updateIcon.Foreground = (Brush)Application.Current.Resources["AppTextBrush"];
+            _updateCard!.BorderBrush = (Brush)Application.Current.Resources["PanelStrokeBrush"];
+            _checkUpdatesButton.Content = "Проверяем...";
+            _updateProgress!.Visibility = Visibility.Visible;
+            _updateProgress.IsIndeterminate = true;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_updateProgress, "Проверка обновлений");
+        }
+        if (preview.Downloading)
+        {
+            if (_updateProgress!.IsLoaded) ShowUpdateDownloadProgress(preview.Percent);
+            else
+            {
+                _updateProgress.Visibility = Visibility.Visible;
+                _updateProgress.Loaded += UpdatePreviewProgressLoaded;
+            }
+            _installUpdateButton.Content = "Скачивание обновления...";
+            if (preview.Restarting) ShowUpdateRestartPreview();
+        }
+    }
+
+    private void UpdatePreviewProgressLoaded(object sender, RoutedEventArgs e)
+    {
+        _updateProgress!.Loaded -= UpdatePreviewProgressLoaded;
+        if (_updatePreview is not { Downloading: true } preview) return;
+        ShowUpdateDownloadProgress(preview.Percent);
+        if (preview.Restarting) ShowUpdateRestartPreview();
+    }
+
+    private void ShowUpdateRestartPreview()
+    {
+        _updateDescription!.Text = "Файлы подготовлены. Перезапуск приложения...";
+        _installUpdateButton!.Content = "Перезапуск...";
+    }
+
+    private void ShowUpdateDownloadProgress(double? percent)
+    {
+        if (_updateProgress is null || _updateDescription is null) return;
+        _updateProgress.Visibility = Visibility.Visible;
+        _updateProgress.IsIndeterminate = percent is null;
+        if (percent is { } value)
+        {
+            _updateProgress.Value = Math.Clamp(value, 0, 100);
+            _updateDescription.Text = $"Скачивание обновления: {_updateProgress.Value:0}%";
+        }
+        else _updateDescription.Text = "Скачивание обновления...";
+    }
+
     private async Task InitializeOnlineServicesAsync()
     {
+        if (!App.Cloud.IsEnabled)
+        {
+            RefreshCloudSettings();
+            return;
+        }
         await RestoreCloudSessionAfterLaunchAsync();
     }
 
     private void StartBackgroundTimers()
     {
-        _updateTimer ??= new Timer(_ => DispatcherQueue.TryEnqueue(async () => await CheckForUpdatesAsync()));
+        _updateTimer ??= new Timer(_ => QueueBackgroundOperation(CheckForUpdatesAsync, "Не удалось проверить обновления"));
         _updateTimer.Change(TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(30));
         ConfigureCloudPublishTimer();
         Closed += (_, _) =>
@@ -288,17 +373,50 @@ public sealed partial class MainWindow : Window
 
     private void MainWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
-        if (_shutdownRequested || _shutdownInProgress) return;
-        if (!App.Cloud.HasUnsyncedLocalChanges) return;
+        if (_shutdownRequested) return;
+        if (_shutdownInProgress)
+        {
+            args.Cancel = true;
+            return;
+        }
+
+        var cloudOperationInProgress = App.Cloud.IsOperationInProgress;
+        _shutdownInProgress = true;
+        StopBackgroundTimers();
+        if (!App.Cloud.HasUnsyncedLocalChanges && !cloudOperationInProgress)
+        {
+            _shutdownRequested = true;
+            return;
+        }
 
         args.Cancel = true;
-        _shutdownInProgress = true;
         _ = PublishBeforeExitAsync();
+    }
+
+    private void StopBackgroundTimers()
+    {
+        _updateTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _cloudPublishTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    }
+
+    private void QueueBackgroundOperation(Func<Task> operation, string failureTitle)
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            if (_shutdownRequested || _shutdownInProgress) return;
+            try { await operation(); }
+            catch (Exception error)
+            {
+                if (_shutdownRequested || _shutdownInProgress) return;
+                NotificationCenter.Publish(failureTitle, error.Message);
+            }
+        });
     }
 
     private async Task PublishBeforeExitAsync()
     {
-        var progressWindow = new Views.CloudPublishWindow();
+        var progressWindow = _activeCloudPublishWindow ?? new Views.CloudPublishWindow();
+        _activeCloudPublishWindow = progressWindow;
         progressWindow.Activate();
         AppWindow.Hide();
 
@@ -313,12 +431,15 @@ public sealed partial class MainWindow : Window
         await Task.Delay(result.Succeeded ? 900 : 3200);
         _shutdownRequested = true;
         progressWindow.Close();
+        _activeCloudPublishWindow = null;
         Application.Current.Exit();
     }
 
     private async Task CheckForUpdatesAsync()
     {
+        if (_shutdownRequested || _shutdownInProgress || _updatePreview is not null) return;
         var update = await App.Updates.CheckAsync();
+        if (_shutdownRequested || _shutdownInProgress) return;
         RefreshUpdateSurface(update);
         if (update.Availability != UpdateAvailability.Available) return;
 
@@ -327,14 +448,17 @@ public sealed partial class MainWindow : Window
 
     private async void CheckUpdatesClick(object sender, RoutedEventArgs e)
     {
-        if (_checkUpdatesButton is null) return;
+        if (_checkUpdatesButton is null || _updatePreview is not null) return;
         _checkUpdatesButton.IsEnabled = false;
         _checkUpdatesButton.Content = "Проверяем...";
         try { await CheckForUpdatesAsync(); }
         finally
         {
-            _checkUpdatesButton.IsEnabled = true;
-            _checkUpdatesButton.Content = "Проверить сейчас";
+            if (!_shutdownRequested && !_shutdownInProgress)
+            {
+                _checkUpdatesButton.IsEnabled = true;
+                _checkUpdatesButton.Content = "Проверить сейчас";
+            }
         }
     }
 
@@ -349,18 +473,18 @@ public sealed partial class MainWindow : Window
 
         var minutes = App.Preferences.Current.CloudPublishIntervalMinutes;
         if (_cloudPublishTimer is not null && _activeCloudPublishInterval == minutes) return;
-        _cloudPublishTimer ??= new Timer(_ => DispatcherQueue.TryEnqueue(async () => await PublishCloudChangesAutomaticallyAsync()));
+        _cloudPublishTimer ??= new Timer(_ => QueueBackgroundOperation(PublishCloudChangesAutomaticallyAsync, "Не удалось выполнить облачную синхронизацию"));
         _cloudPublishTimer.Change(TimeSpan.FromMinutes(minutes), TimeSpan.FromMinutes(minutes));
         _activeCloudPublishInterval = minutes;
     }
 
     private async Task PublishCloudChangesAutomaticallyAsync()
     {
-        if (_cloudPublishInProgress || !App.Cloud.IsSignedIn) return;
+        if (_shutdownRequested || _shutdownInProgress || _cloudPublishInProgress || !App.Cloud.IsSignedIn) return;
         _cloudPublishInProgress = true;
         try
         {
-            var result = await App.Cloud.PublishAsync();
+            var result = await RunCloudOperationAsync(() => App.Cloud.PublishAsync());
             if (result.Succeeded)
             {
                 NotificationCenter.Publish("Облачная синхронизация", "Изменения успешно опубликованы в Supabase.");
@@ -380,6 +504,7 @@ public sealed partial class MainWindow : Window
 
     private async void InstallUpdateClick(object sender, RoutedEventArgs e)
     {
+        if (_updatePreview is not null) return;
         var update = App.Updates.LastCheck;
         if (update is null || !update.CanInstall) return;
         if (_installUpdateButton is not null)
@@ -395,21 +520,7 @@ public sealed partial class MainWindow : Window
             _updateProgress.Visibility = Visibility.Visible;
         }
 
-        var progress = new Progress<UpdateDownloadProgress>(status =>
-        {
-            if (_updateProgress is null || _updateDescription is null) return;
-            if (status.Percent is { } percent)
-            {
-                _updateProgress.IsIndeterminate = false;
-                _updateProgress.Value = percent;
-                _updateDescription.Text = $"Скачивание обновления: {percent:0}%";
-            }
-            else
-            {
-                _updateProgress.IsIndeterminate = true;
-                _updateDescription.Text = "Скачивание обновления...";
-            }
-        });
+        var progress = new Progress<UpdateDownloadProgress>(status => ShowUpdateDownloadProgress(status.Percent));
 
         if (await App.Updates.InstallAsync(update, progress))
         {
@@ -434,26 +545,6 @@ public sealed partial class MainWindow : Window
         NotificationCenter.Publish("Не удалось установить обновление", "Проверьте подключение к сети и права на изменение папки приложения.");
     }
 
-    private void ArrangeSettingsColumns()
-    {
-        var leftColumn = SettingsColumnsHost.Children.OfType<StackPanel>()
-            .FirstOrDefault(panel => !ReferenceEquals(panel, SettingsRightColumn) && Grid.GetColumn(panel) == 0);
-        if (leftColumn is null) return;
-
-        // Remove from both known columns before inserting. This works both during initial
-        // XAML construction and after a responsive layout pass.
-        leftColumn.Children.Remove(DatabasePanel);
-        leftColumn.Children.Remove(CuttingPanel);
-        leftColumn.Children.Remove(DetailingPanel);
-        SettingsRightColumn.Children.Remove(DatabasePanel);
-        SettingsRightColumn.Children.Remove(CuttingPanel);
-        SettingsRightColumn.Children.Remove(DetailingPanel);
-
-        var nextToAppearance = Math.Max(0, leftColumn.Children.IndexOf(AppearancePanel) + 1);
-        leftColumn.Children.Insert(nextToAppearance, CuttingPanel);
-        leftColumn.Children.Insert(nextToAppearance + 1, DetailingPanel);
-        SettingsRightColumn.Children.Insert(0, DatabasePanel);
-    }
     private void ConfigureTitleBar()
     {
         ExtendsContentIntoTitleBar = true;
@@ -486,32 +577,6 @@ public sealed partial class MainWindow : Window
         SetWindowSubclass(WindowNative.GetWindowHandle(this), _minSizeSubclassProc, new UIntPtr(1), UIntPtr.Zero);
     }
 
-    private void ConfigureMaterialParameterActions()
-    {
-        // The editor needs a visible save command; creation belongs to the material list.
-    }
-
-    private void ConfigureCatalogActions()
-    {
-        if (_catalogActionConfigured) return;
-        if (VisualTreeHelper.GetParent(CustomerProjectsTitle) is not StackPanel header ||
-            VisualTreeHelper.GetParent(header) is not Grid container)
-        {
-            return;
-        }
-
-        var addButton = new Button
-        {
-            Content = "Добавить изделие",
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Style = (Style)Application.Current.Resources["AccentButtonStyle"]
-        };
-        addButton.Click += AddCatalogProductClick;
-        container.Children.Add(addButton);
-        _catalogActionConfigured = true;
-    }
-
     private void TopTabClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: string tab }) ShowTab(tab);
@@ -531,7 +596,7 @@ public sealed partial class MainWindow : Window
         _nestedScrolling.Attach(PayrollsList);
 
     private void ConfigureContextMenuSelection() =>
-        _contextMenus.Configure(ProjectsList, ProductsList, PayrollsList, CustomersList, CustomerProjectsList, MaterialsList);
+        _contextMenus.Configure(BuildContextMenu, ProjectsList, ProductsList, PayrollsList, CustomersList, CustomerProjectsList, MaterialsList);
 
     private void ListViewRightTappedSelectItem(object sender, RightTappedRoutedEventArgs e) =>
         _contextMenus.Show(sender, e, BuildContextMenu);
@@ -611,6 +676,10 @@ public sealed partial class MainWindow : Window
 
         if (menuData is MaterialChoice choice)
         {
+            if (_materialSelection.Count > 1)
+                Add("Объединить в группу...", () => MaterialGroupActionBox.SelectedIndex = 1);
+            if (_materialSelection.Any(selected => !string.IsNullOrWhiteSpace(selected.Material.Group)))
+                Add("Убрать из группы", () => MaterialGroupActionBox.SelectedIndex = 2);
             Add("Изменить", () =>
             {
                 _materialPage.SelectMaterial(choice);
@@ -873,6 +942,7 @@ public sealed partial class MainWindow : Window
         MaterialGroupActionBox.Visibility = Visibility.Collapsed;
         MaterialGroupActionBox.SelectedIndex = 0;
         _materialPage.Refresh(select);
+        _materialSelectionModel.Reset(_materialPage.ChoicesInViewOrder.Select(choice => choice.Material.Id));
         _loadingMaterials = false;
     }
 
@@ -908,7 +978,6 @@ public sealed partial class MainWindow : Window
     private void SettingsSaveClick(object sender, RoutedEventArgs e)
     {
         _settingsPage.CommitCutLayout(App.Preferences);
-        App.State.Save();
         ShowSuccess("Настройки сохранены");
     }
 
@@ -931,12 +1000,19 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void RefreshCurrentMaterialCategory() => _materialPage.RefreshCurrentCategory();
+    private void RefreshCurrentMaterialCategory()
+    {
+        _loadingMaterials = true;
+        _materialPage.RefreshCurrentCategory();
+        ResetMaterialSelection();
+        _loadingMaterials = false;
+    }
     private void MaterialCategoriesSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loadingMaterials) return;
         _loadingMaterials = true;
         _materialPage.OnCategoryChanged();
+        ResetMaterialSelection();
         _loadingMaterials = false;
     }
 
@@ -944,39 +1020,120 @@ public sealed partial class MainWindow : Window
     {
         if (_loadingMaterials) return;
         if (ReferenceEquals(sender, MaterialsList))
+        {
             SetMaterialSelection(MaterialsList.SelectedItems.OfType<MaterialChoice>());
+            if (!IsKeyDown(VirtualKey.Control) && !IsKeyDown(VirtualKey.Shift))
+                _materialSelectionModel.ReplaceSelection(_materialSelection.Select(choice => choice.Material.Id));
+        }
     }
 
     private void MaterialGroupSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loadingMaterials) return;
+        if (e.AddedItems.Count > 0 && !IsKeyDown(VirtualKey.Control) && !IsKeyDown(VirtualKey.Shift) && sender is ListView currentList)
+        {
+            _materialSelection.Clear();
+            _loadingMaterials = true;
+            try
+            {
+                MaterialsList.SelectedItems.Clear();
+                foreach (var list in DescendantListViews(GroupedMaterialsList))
+                    if (!ReferenceEquals(list, currentList)) list.SelectedItems.Clear();
+            }
+            finally { _loadingMaterials = false; }
+        }
         foreach (var item in e.AddedItems.OfType<MaterialChoice>())
             if (_materialSelection.All(selected => selected.Material.Id != item.Material.Id)) _materialSelection.Add(item);
         foreach (var item in e.RemovedItems.OfType<MaterialChoice>())
             _materialSelection.RemoveAll(selected => selected.Material.Id == item.Material.Id);
+        if (!IsKeyDown(VirtualKey.Control) && !IsKeyDown(VirtualKey.Shift))
+            _materialSelectionModel.ReplaceSelection(_materialSelection.Select(choice => choice.Material.Id));
         UpdateMaterialGroupAction();
-        if (e.AddedItems.OfType<MaterialChoice>().FirstOrDefault() is { } choice)
+        var editorChoice = e.AddedItems.OfType<MaterialChoice>().FirstOrDefault()
+            ?? (sender as ListView)?.SelectedItems.OfType<MaterialChoice>().FirstOrDefault();
+        if (editorChoice is { } choice)
         {
             _materialPage.SelectMaterial(choice);
             _ = UpdateMaterialTexturePreviewAsync();
         }
     }
 
-    private void SetMaterialSelection(IEnumerable<MaterialChoice> choices)
+    private static bool IsKeyDown(VirtualKey key) =>
+        (InputKeyboardSource.GetKeyStateForCurrentThread(key) & CoreVirtualKeyStates.Down) != 0;
+
+    private void MaterialItemClicked(object sender, ItemClickEventArgs e)
+    {
+        if (_loadingMaterials || e.ClickedItem is not MaterialChoice clicked) return;
+        _materialFocusRequests.Begin();
+        var choices = VisibleMaterialChoices();
+        _materialSelectionModel.SetVisibleOrder(choices.Select(choice => choice.Material.Id));
+        _materialSelectionModel.Apply(clicked.Material.Id, IsKeyDown(VirtualKey.Control), IsKeyDown(VirtualKey.Shift));
+        ApplyMaterialSelection(choices, clicked);
+    }
+
+    private IReadOnlyList<MaterialChoice> VisibleMaterialChoices() => GroupedMaterialsList.Visibility == Visibility.Visible
+        ? GroupedMaterialsList.Items.OfType<MaterialGroupView>()
+            .Where(group => group.Name.Length == 0 || group.IsExpanded).SelectMany(group => group.Items).ToList()
+        : MaterialsList.Items.OfType<MaterialChoice>().ToList();
+
+    private void ApplyMaterialSelection(IReadOnlyList<MaterialChoice> choices, MaterialChoice? editorChoice)
+    {
+        var selected = choices.Where(choice => _materialSelectionModel.SelectedIds.Contains(choice.Material.Id)).ToList();
+
+        _loadingMaterials = true;
+        try
+        {
+            MaterialsList.SelectedItems.Clear();
+            foreach (var list in DescendantListViews(GroupedMaterialsList)) list.SelectedItems.Clear();
+            var selectedIds = _materialSelectionModel.SelectedIds;
+            if (MaterialsList.Visibility == Visibility.Visible)
+                foreach (var choice in MaterialsList.Items.OfType<MaterialChoice>().Where(choice => selectedIds.Contains(choice.Material.Id)))
+                    MaterialsList.SelectedItems.Add(choice);
+            foreach (var list in DescendantListViews(GroupedMaterialsList))
+                foreach (var choice in list.Items.OfType<MaterialChoice>().Where(choice => selectedIds.Contains(choice.Material.Id)))
+                    list.SelectedItems.Add(choice);
+        }
+        finally { _loadingMaterials = false; }
+
+        SetMaterialSelection(selected, editorChoice);
+    }
+
+    private static IEnumerable<ListView> DescendantListViews(DependencyObject root)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is ListView list) yield return list;
+            foreach (var nested in DescendantListViews(child)) yield return nested;
+        }
+    }
+
+    private void SetMaterialSelection(IEnumerable<MaterialChoice> choices, MaterialChoice? focusChoice = null)
     {
         _materialSelection.Clear();
         _materialSelection.AddRange(choices);
         UpdateMaterialGroupAction();
-        if (_materialSelection.FirstOrDefault() is { } choice)
+        var focused = focusChoice ?? _materialSelection.FirstOrDefault();
+        if (focused is { } choice)
         {
             _materialPage.SelectMaterial(choice);
             _ = UpdateMaterialTexturePreviewAsync();
         }
     }
 
+    private void ResetMaterialSelection()
+    {
+        _materialFocusRequests.Begin();
+        _materialSelection.Clear();
+        _materialSelectionModel.Reset(_materialPage.ChoicesInViewOrder.Select(choice => choice.Material.Id));
+        MaterialsList.SelectedItems.Clear();
+        foreach (var list in DescendantListViews(GroupedMaterialsList)) list.SelectedItems.Clear();
+        UpdateMaterialGroupAction();
+    }
+
     private void UpdateMaterialGroupAction()
     {
-        MaterialGroupActionBox.Visibility = _materialSelection.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        MaterialGroupActionBox.Visibility = Visibility.Collapsed;
         _materialGroupActionChanging = true;
         MaterialGroupActionBox.SelectedIndex = 0;
         _materialGroupActionChanging = false;
@@ -985,7 +1142,68 @@ public sealed partial class MainWindow : Window
     private void MaterialSortChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loadingMaterials) return;
+        _loadingMaterials = true;
         _materialPage.RefreshCurrentCategory();
+        ResetMaterialSelection();
+        _loadingMaterials = false;
+    }
+
+    private void MaterialListKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Handled || sender is not ListView list) return;
+        MaterialChoice? focused = null;
+        for (var element = e.OriginalSource as DependencyObject; element is not null && !ReferenceEquals(element, list); element = VisualTreeHelper.GetParent(element))
+            if (element is ListViewItem { Content: MaterialChoice choice }) { focused = choice; break; }
+        focused ??= list.SelectedItem as MaterialChoice;
+        if (e.Key == VirtualKey.Space && IsKeyDown(VirtualKey.Control) && !IsKeyDown(VirtualKey.Shift) && focused is not null)
+        {
+            var choices = VisibleMaterialChoices();
+            _materialSelectionModel.SetVisibleOrder(choices.Select(choice => choice.Material.Id));
+            _materialSelectionModel.Apply(focused.Material.Id, control: true, shift: false);
+            e.Handled = true;
+            ApplyMaterialSelection(choices, _materialPage.SelectedMaterial);
+            FocusMaterialRow(focused);
+            return;
+        }
+        if (e.Key is VirtualKey.Up or VirtualKey.Down or VirtualKey.Home or VirtualKey.End)
+        {
+            if (focused is null) return;
+            var choices = VisibleMaterialChoices();
+            _materialSelectionModel.SetVisibleOrder(choices.Select(choice => choice.Material.Id));
+            var delta = e.Key switch { VirtualKey.Up => -1, VirtualKey.Down => 1, VirtualKey.Home => int.MinValue, _ => int.MaxValue };
+            var control = IsKeyDown(VirtualKey.Control);
+            var shift = IsKeyDown(VirtualKey.Shift);
+            var targetId = _materialSelectionModel.Move(focused.Material.Id, delta, control, shift);
+            var target = choices.FirstOrDefault(choice => choice.Material.Id == targetId);
+            if (target is null) return;
+            e.Handled = true;
+            ApplyMaterialSelection(choices, control && !shift ? _materialPage.SelectedMaterial : target);
+            FocusMaterialRow(target);
+            return;
+        }
+        if (e.Key != VirtualKey.Application && !(e.Key == VirtualKey.F10 && IsKeyDown(VirtualKey.Shift))) return;
+        BuildContextMenu(list, focused).ShowAt(list);
+        e.Handled = true;
+    }
+
+    private void FocusMaterialRow(MaterialChoice target)
+    {
+        var focusRequest = _materialFocusRequests.Begin();
+        var lists = MaterialsList.Visibility == Visibility.Visible ? new[] { MaterialsList } : DescendantListViews(GroupedMaterialsList);
+        foreach (var destination in lists)
+        {
+            if (!destination.Items.Contains(target)) continue;
+            destination.ScrollIntoView(target);
+            if (destination.ContainerFromItem(target) is ListViewItem realized)
+                realized.Focus(FocusState.Keyboard);
+            else destination.DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!_materialFocusRequests.IsCurrent(focusRequest) || MaterialsPage.Visibility != Visibility.Visible) return;
+                if (destination.ContainerFromItem(target) is ListViewItem container)
+                    container.Focus(FocusState.Keyboard);
+            });
+            break;
+        }
     }
 
     private async void MaterialGroupActionChanged(object sender, SelectionChangedEventArgs e)
@@ -1004,15 +1222,25 @@ public sealed partial class MainWindow : Window
                 }
                 var groupName = await AskMaterialGroupNameAsync();
                 if (string.IsNullOrWhiteSpace(groupName)) return;
-                foreach (var choice in _materialSelection) choice.Material.Group = groupName.Trim();
-                App.State.Save();
+                var selectedIds = _materialSelection.Select(choice => choice.Material.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                App.State.CommitMutation(() =>
+                {
+                    foreach (var material in App.State.Database.Materials.Values.SelectMany(materials => materials)
+                                 .Where(material => selectedIds.Contains(material.Id)))
+                        material.Group = groupName.Trim();
+                });
                 RefreshMaterials(_materialSelection[0]);
                 NotificationCenter.Publish("Материалы объединены", $"Выбранные материалы объединены в группу «{groupName.Trim()}».");
             }
             else
             {
-                foreach (var choice in _materialSelection) choice.Material.Group = string.Empty;
-                App.State.Save();
+                var selectedIds = _materialSelection.Select(choice => choice.Material.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                App.State.CommitMutation(() =>
+                {
+                    foreach (var material in App.State.Database.Materials.Values.SelectMany(materials => materials)
+                                 .Where(material => selectedIds.Contains(material.Id)))
+                        material.Group = string.Empty;
+                });
                 RefreshMaterials(_materialSelection.FirstOrDefault());
                 NotificationCenter.Publish("Материалы исключены из группы", "Выбранные материалы снова отображаются без группы.");
             }
@@ -1039,7 +1267,8 @@ public sealed partial class MainWindow : Window
 
     private void MaterialSplitterPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (sender is not Border splitter) return;
+        if (sender is not Button splitter) return;
+        splitter.Focus(FocusState.Pointer);
         _activeMaterialSplitter = splitter;
         _materialSplitterStartX = e.GetCurrentPoint(MaterialsPage).Position.X;
         _materialSplitterStartWidth = splitter == MaterialCategoriesSplitter
@@ -1053,9 +1282,9 @@ public sealed partial class MainWindow : Window
     {
         if (_activeMaterialSplitter is null || !e.Pointer.IsInContact) return;
         var delta = e.GetCurrentPoint(MaterialsPage).Position.X - _materialSplitterStartX;
-        var minimum = _activeMaterialSplitter == MaterialCategoriesSplitter ? 150 : 220;
-        var maximum = _activeMaterialSplitter == MaterialCategoriesSplitter ? 360 : 520;
-        var width = Math.Clamp(_materialSplitterStartWidth + (_activeMaterialSplitter == MaterialCategoriesSplitter ? delta : delta), minimum, maximum);
+        var categories = _activeMaterialSplitter == MaterialCategoriesSplitter;
+        var other = categories ? MaterialListColumn.Width.Value : MaterialCategoriesColumn.Width.Value;
+        var width = UiLayout.MaterialColumnWidth(_materialSplitterStartWidth + delta, MaterialsPage.ActualWidth, other, categories);
         if (_activeMaterialSplitter == MaterialCategoriesSplitter)
             MaterialCategoriesColumn.Width = new GridLength(width);
         else
@@ -1076,21 +1305,35 @@ public sealed partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void MaterialSplitterKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key is not (VirtualKey.Left or VirtualKey.Right)) return;
+        var categories = ReferenceEquals(sender, MaterialCategoriesSplitter);
+        var column = categories ? MaterialCategoriesColumn : MaterialListColumn;
+        var other = categories ? MaterialListColumn.Width.Value : MaterialCategoriesColumn.Width.Value;
+        var step = e.Key == VirtualKey.Left ? -16 : 16;
+        column.Width = new GridLength(UiLayout.MaterialColumnWidth(column.Width.Value + step, MaterialsPage.ActualWidth, other, categories));
+        e.Handled = true;
+    }
+
     private async Task UpdateMaterialTexturePreviewAsync()
     {
+        var request = _materialPreviewRequests.Begin();
         var material = _materialPage.SelectedMaterial?.Material;
         var source = material?.Texture ?? "";
         if (material is not null && source.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) && ProductImageData.Read(source) is { } bytes)
         {
             var normalized = await ImageResizeService.ResizeAsync(bytes, 100, 100, cropToBounds: true);
+            if (!_materialPreviewRequests.IsCurrent(request) || material != _materialPage.SelectedMaterial?.Material) return;
             if (!string.IsNullOrWhiteSpace(normalized) && normalized != source)
             {
                 material.Texture = normalized;
                 source = normalized;
             }
         }
-        var loaded = await ImagePreviewService.SetAsync(MaterialTexturePreview, source);
-        MaterialTexturePreview.Visibility = loaded ? Visibility.Visible : Visibility.Collapsed;
+        if (!_materialPreviewRequests.IsCurrent(request)) return;
+        await ImagePreviewService.SetVisibleAsync(MaterialTexturePreview, source,
+            isCurrent: () => _materialPreviewRequests.IsCurrent(request) && material == _materialPage.SelectedMaterial?.Material);
     }
 
     private async void PickMaterialTextureClick(object sender, RoutedEventArgs e)
@@ -1223,7 +1466,7 @@ public sealed partial class MainWindow : Window
     private async void ProductThumbnailLoaded(object sender, RoutedEventArgs e)
     {
         if (sender is Image image)
-            image.Visibility = await ImagePreviewService.SetAsync(image, image.Tag as string ?? "") ? Visibility.Visible : Visibility.Collapsed;
+            await ImagePreviewService.SetVisibleAsync(image, image.Tag as string ?? "");
     }
 
     private void CreateDetailingClick(object sender, RoutedEventArgs e)
@@ -1250,7 +1493,7 @@ public sealed partial class MainWindow : Window
 
             if (App.Cloud.IsSignedIn)
             {
-                var cloudResult = await App.Cloud.PublishImportedDatabaseAsync();
+                var cloudResult = await RunCloudOperationAsync(() => App.Cloud.PublishImportedDatabaseAsync());
                 if (cloudResult.Succeeded)
                     result = result with { Title = "База импортирована и опубликована", Message = "Импортированная база сохранена локально и в Supabase." };
                 else
@@ -1279,31 +1522,60 @@ public sealed partial class MainWindow : Window
     private void RefreshCloudSettings()
     {
         if (CloudSyncStatusText is null) return;
-        var cloudCard = DatabasePanel.Children.OfType<Border>().LastOrDefault();
-        if (cloudCard?.Child is not StackPanel cloudPanel) return;
-        var loginGrid = cloudPanel.Children.OfType<Grid>().FirstOrDefault(grid => grid.Children.Contains(CloudEmailBox));
-        var description = cloudPanel.Children.OfType<TextBlock>().FirstOrDefault();
-        var statusBadge = cloudPanel.Children.OfType<Border>().FirstOrDefault();
-        var actions = cloudPanel.Children.OfType<StackPanel>()
-            .FirstOrDefault(panel => panel.Orientation == Orientation.Horizontal && panel.Children.OfType<Button>().Any());
-        var connected = App.Cloud.IsSignedIn;
+        var cloudCard = CloudCard;
+        var loginGrid = CloudLoginGrid;
+        var description = CloudDescription;
+        var statusBadge = CloudStatusBadge;
+        var actions = CloudActionsPanel;
+        CloudUiSnapshot? preview = null;
+#if VITANCUT_UI_REVIEW
+        preview = CloudUiSnapshot.Preview(App.Paths.IsDevelopment,
+            Environment.GetEnvironmentVariable("VITANCUT_UI_CLOUD_PREVIEW"));
+#endif
+        var snapshot = preview ?? new CloudUiSnapshot(App.Cloud.IsEnabled, App.Cloud.IsSignedIn,
+            _cloudUiOperations > 0 || App.Cloud.IsOperationInProgress, App.Cloud.HasError, App.Cloud.Status);
+        var view = snapshot.Presentation;
+        var controlsEnabled = view.ControlsEnabled && preview is null;
+        var connected = view.ShowBadge;
+        CloudOperationProgress.IsIndeterminate = view.IsBusy;
+        CloudOperationProgress.Visibility = view.IsBusy ? Visibility.Visible : Visibility.Collapsed;
+        CloudEmailBox.IsEnabled = controlsEnabled;
+        CloudPasswordBox.IsEnabled = controlsEnabled;
+        CloudSignInButton.IsEnabled = controlsEnabled;
 
-        if (loginGrid is not null) loginGrid.Visibility = connected ? Visibility.Collapsed : Visibility.Visible;
+        if (!snapshot.Enabled)
+        {
+            if (loginGrid is not null) loginGrid.Visibility = Visibility.Collapsed;
+            if (description is not null)
+            {
+                description.Text = "Облачные функции отключены в изолированном режиме разработки.";
+                description.Visibility = Visibility.Visible;
+            }
+            if (actions is not null) actions.Visibility = Visibility.Collapsed;
+            if (statusBadge is not null) statusBadge.Visibility = Visibility.Collapsed;
+            CloudSyncStatusText.Text = "Тестовые данные хранятся локально.";
+            CloudSyncStatusText.Foreground = new SolidColorBrush(Color.FromArgb(255, 175, 175, 175));
+            CloudSyncStatusText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        if (loginGrid is not null) loginGrid.Visibility = view.ShowLogin ? Visibility.Visible : Visibility.Collapsed;
         if (description is not null) description.Visibility = Visibility.Collapsed;
         if (actions is not null) actions.Visibility = Visibility.Collapsed;
         CloudSyncStatusText.Visibility = Visibility.Collapsed;
-        CloudSyncStatusText.Text = App.Cloud.Status;
-        CloudSyncStatusText.Foreground = new SolidColorBrush(App.Cloud.HasError
+        CloudSyncStatusText.Text = snapshot.Status;
+        CloudSyncStatusText.Foreground = new SolidColorBrush(snapshot.Error
             ? Color.FromArgb(255, 255, 107, 107)
             : Color.FromArgb(255, 175, 175, 175));
-        CloudSyncStatusText.Visibility = !connected && App.Cloud.HasError ? Visibility.Visible : Visibility.Collapsed;
+        CloudSyncStatusText.Visibility = view.ShowStatus ? Visibility.Visible : Visibility.Collapsed;
 
         if (statusBadge is not null)
         {
             statusBadge.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
             statusBadge.BorderThickness = new Thickness(1);
-            statusBadge.BorderBrush = new SolidColorBrush(Color.FromArgb(150, 62, 207, 142));
-            statusBadge.Background = new LinearGradientBrush
+            statusBadge.BorderBrush = snapshot.Error ? (Brush)Application.Current.Resources["UiDangerBrush"]
+                : new SolidColorBrush(Color.FromArgb(150, 62, 207, 142));
+            statusBadge.Background = view.IsHealthy ? new LinearGradientBrush
             {
                 StartPoint = new Windows.Foundation.Point(0, 0),
                 EndPoint = new Windows.Foundation.Point(1, 1),
@@ -1312,8 +1584,13 @@ public sealed partial class MainWindow : Window
                     new GradientStop { Color = Color.FromArgb(230, 18, 62, 45), Offset = 0 },
                     new GradientStop { Color = Color.FromArgb(230, 20, 102, 70), Offset = 1 }
                 }
-            };
+            } : new SolidColorBrush(snapshot.Error && !view.IsBusy
+                ? Color.FromArgb(255, 56, 27, 31) : Color.FromArgb(255, 28, 40, 35));
+            if (_cloudIntervalBox is null)
+            {
             var intervalBox = new ComboBox { Width = 150 };
+            _cloudIntervalBox = intervalBox;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(intervalBox, "Интервал автопубликации");
             foreach (var minutes in new[] { 5, 15, 30, 60 })
                 intervalBox.Items.Add(new ComboBoxItem { Content = $"Раз в {minutes} мин.", Tag = minutes });
             intervalBox.SelectedIndex = new[] { 5, 15, 30, 60 }.ToList().IndexOf(App.Preferences.Current.CloudPublishIntervalMinutes);
@@ -1326,22 +1603,32 @@ public sealed partial class MainWindow : Window
             Grid.SetColumn(intervalBox, 1);
             schedule.Children.Add(intervalBox);
             var syncNow = new Button { Content = "Синхронизировать сейчас", HorizontalAlignment = HorizontalAlignment.Left };
+            _cloudSyncNowButton = syncNow;
             syncNow.Click += ManualCloudSyncClick;
+            _cloudBadgeTitle = new TextBlock { Text = "Облачная синхронизация работает", Foreground = new SolidColorBrush(Colors.White), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(_cloudBadgeTitle, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
 
             statusBadge.Child = new StackPanel
             {
                 Spacing = 8,
                 Children =
                 {
-                    new TextBlock { Text = "Облачная синхронизация работает", Foreground = new SolidColorBrush(Colors.White), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
+                    _cloudBadgeTitle,
                     new TextBlock { Text = "Supabase · Cutlist", Foreground = new SolidColorBrush(Color.FromArgb(220, 218, 255, 232)), FontSize = 12 },
                     schedule,
                     syncNow
                 }
             };
+            }
+            if (_cloudBadgeTitle is not null)
+                _cloudBadgeTitle.Text = view.Title;
+            if (_cloudSyncNowButton is not null) _cloudSyncNowButton.IsEnabled = controlsEnabled;
+            _cloudIntervalBox!.IsEnabled = controlsEnabled;
+            var desiredInterval = new[] { 5, 15, 30, 60 }.ToList().IndexOf(App.Preferences.Current.CloudPublishIntervalMinutes);
+            if (_cloudIntervalBox!.SelectedIndex != desiredInterval) _cloudIntervalBox.SelectedIndex = desiredInterval;
         }
 
-        cloudCard.Background = connected
+        cloudCard.Background = view.IsHealthy
             ? new LinearGradientBrush
             {
                 StartPoint = new Windows.Foundation.Point(0, 0),
@@ -1353,11 +1640,25 @@ public sealed partial class MainWindow : Window
                 }
             }
             : new SolidColorBrush(Color.FromArgb(255, 24, 24, 24));
-        cloudCard.BorderBrush = new SolidColorBrush(connected
-            ? Color.FromArgb(175, 62, 207, 142)
-            : App.Cloud.HasError ? Color.FromArgb(220, 255, 107, 107) : Color.FromArgb(255, 48, 48, 48));
-        CloudSyncStatusText.Text = App.Cloud.Status;
+        cloudCard.BorderBrush = snapshot.Error ? (Brush)Application.Current.Resources["UiDangerBrush"]
+            : new SolidColorBrush(connected ? Color.FromArgb(175, 62, 207, 142) : Color.FromArgb(255, 48, 48, 48));
+        CloudSyncStatusText.Text = view.IsBusy ? view.Title : snapshot.Status;
         ConfigureCloudPublishTimer();
+    }
+
+    private async Task<T> RunCloudOperationAsync<T>(Func<Task<T>> operation)
+    {
+        _cloudUiOperations++;
+        try
+        {
+            RefreshCloudSettings();
+            return await operation();
+        }
+        finally
+        {
+            _cloudUiOperations--;
+            RefreshCloudSettings();
+        }
     }
 
     private void CloudPublishIntervalChanged(object sender, SelectionChangedEventArgs e)
@@ -1369,7 +1670,7 @@ public sealed partial class MainWindow : Window
 
     private async void CloudSignInClick(object sender, RoutedEventArgs e)
     {
-        var result = await App.Cloud.SignInAsync(CloudEmailBox.Text, CloudPasswordBox.Password);
+        var result = await RunCloudOperationAsync(() => App.Cloud.SignInAsync(CloudEmailBox.Text, CloudPasswordBox.Password));
         if (result.Succeeded && result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
         ShowCloudResult(result);
         RefreshCloudSettings();
@@ -1406,10 +1707,11 @@ public sealed partial class MainWindow : Window
     {
         if (sender is Button button) button.IsEnabled = false;
         var progressWindow = new Views.CloudPublishWindow();
+        _activeCloudPublishWindow = progressWindow;
         progressWindow.Activate();
         try
         {
-            var result = await App.Cloud.PublishAsync();
+            var result = await RunCloudOperationAsync(() => App.Cloud.PublishAsync());
             if (!result.Succeeded) result = App.Cloud.RequireSignInAfterSyncFailure(result);
             ShowCloudResult(result);
             if (result.Succeeded && result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
@@ -1427,14 +1729,18 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
-            progressWindow.Close();
-            if (sender is Button control) control.IsEnabled = true;
+            if (!_shutdownInProgress)
+            {
+                progressWindow.Close();
+                if (ReferenceEquals(_activeCloudPublishWindow, progressWindow)) _activeCloudPublishWindow = null;
+                if (sender is Button control) control.IsEnabled = true;
+            }
         }
     }
 
     private async Task RestoreCloudSessionAfterLaunchAsync()
     {
-        var result = await App.Cloud.RestoreSessionAsync();
+        var result = await RunCloudOperationAsync(() => App.Cloud.RestoreSessionAsync());
         RefreshCloudSettings();
         if (result.Succeeded)
         {
@@ -1464,7 +1770,7 @@ public sealed partial class MainWindow : Window
             discardLocalChanges = true;
         }
 
-        var result = await App.Cloud.DownloadAsync(discardLocalChanges);
+        var result = await RunCloudOperationAsync(() => App.Cloud.DownloadAsync(discardLocalChanges));
         ShowCloudResult(result);
         if (result.Succeeded) RefreshAfterCloudDatabaseLoad();
         RefreshCloudSettings();
@@ -1472,13 +1778,13 @@ public sealed partial class MainWindow : Window
 
     private async void PublishCloudDatabaseClick(object sender, RoutedEventArgs e)
     {
-        ShowCloudResult(await App.Cloud.PublishAsync());
+        ShowCloudResult(await RunCloudOperationAsync(() => App.Cloud.PublishAsync()));
         RefreshCloudSettings();
     }
 
     private async void CloudHistoryClick(object sender, RoutedEventArgs e)
     {
-        var history = await App.Cloud.GetHistoryAsync();
+        var history = await RunCloudOperationAsync(() => App.Cloud.GetHistoryAsync());
         if (!history.Succeeded)
         {
             ShowCloudResult(new CloudSyncResult(false, history.Message));
@@ -1513,7 +1819,7 @@ public sealed partial class MainWindow : Window
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || picker.SelectedItem is not ComboBoxItem { Tag: CloudSnapshotVersion selectedVersion }) return;
 
-        var result = await App.Cloud.RestoreHistoryAsync(selectedVersion.Revision);
+        var result = await RunCloudOperationAsync(() => App.Cloud.RestoreHistoryAsync(selectedVersion.Revision));
         ShowCloudResult(result);
         if (result.Succeeded) RefreshAfterCloudDatabaseLoad();
         RefreshCloudSettings();
@@ -1529,13 +1835,14 @@ public sealed partial class MainWindow : Window
         _projectLayout.Update(SelectedProject is not null, _showingProjectListOnNarrow);
         if (ProjectWorkListsGrid is not null)
         {
-            var stackLists = Root.ActualWidth < 1280;
+            var stackLists = ProjectDetailPane.ActualWidth > 0 && ProjectDetailPane.ActualWidth < 850;
             ProjectWorkListsGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
             ProjectWorkListsGrid.ColumnDefinitions[1].Width = stackLists ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
             ProjectWorkListsGrid.RowDefinitions[1].Height = stackLists ? GridLength.Auto : new GridLength(0);
             Grid.SetColumn(PayrollPanel, stackLists ? 0 : 1);
             Grid.SetRow(PayrollPanel, stackLists ? 1 : 0);
-            var listHeight = Math.Max(360, Root.ActualHeight - 500);
+            var headerHeight = ProjectWorkListsGrid.TransformToVisual(ProjectPanel).TransformPoint(new Windows.Foundation.Point()).Y + ProjectPanel.VerticalOffset;
+            var listHeight = UiLayout.WorkListHeight(ProjectPanel.ActualHeight, headerHeight);
             const double listPanelChrome = 88;
             ProjectWorkListsGrid.MaxHeight = (listHeight + listPanelChrome) * (stackLists ? 2 : 1) + (stackLists ? 12 : 0);
             ProductsList.Height = listHeight;

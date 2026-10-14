@@ -1,12 +1,13 @@
-# GitHub Releases
+# Release validation
 
-Vitan-Cut reads the newest GitHub Release on startup. The release tag must be a version such as `v1.0.1`; a portable asset whose name includes `portable` and ends in `.zip` is required for one-click updates.
+The primary repository contains the 1.2.5 sources, including the accepted UI changes. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
 
-## Publish a version
+## Validate version metadata
 
-1. Raise `Version`, `AssemblyVersion`, `FileVersion`, and `InformationalVersion` together in `VitanCut.WinUI.csproj`.
-2. Add `release-notes/vX.Y.Z.md` with only the changes in that version. The release workflow uses this file verbatim and does not generate a cumulative changelog.
-3. Run `powershell -ExecutionPolicy Bypass -File native-winui/package-portable.ps1 -Version X.Y.Z`.
-4. Push the matching tag, for example `git push origin vX.Y.Z`. GitHub Actions builds the archive and creates the public GitHub Release automatically.
+Keep `Version`, `AssemblyVersion`, `FileVersion`, and `InformationalVersion` in `VitanCut.WinUI.csproj` consistent and add `release-notes/vX.Y.Z.md` containing only that version's changes. Validate them with:
 
-The application checks `https://github.com/gmmbcrimea/VitanCut/releases`. If the repository is moved, change `RepositoryOwner` and `RepositoryName` in `Services/AppUpdateService.cs` before publishing the next version.
+```powershell
+./scripts/Validate-Release.ps1 -Version X.Y.Z
+```
+
+The workflow `.github/workflows/release.yml` publishes portable archives on version tags with version-specific notes. `.github/workflows/refactor-validation.yml` performs additional checks. No GitHub publication was requested for the local 1.2.0 migration. Installer and live cloud deployment checks remain documented in the historical audit.

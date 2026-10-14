@@ -12,7 +12,7 @@ public sealed partial class CloudPublishWindow : Window
     {
         InitializeComponent();
         App.Preferences.Apply(this);
-        AppWindow.Resize(new SizeInt32(460, 180));
+        AppWindow.Resize(new SizeInt32(520, 260));
     }
 
     public void Complete(bool succeeded, string message)

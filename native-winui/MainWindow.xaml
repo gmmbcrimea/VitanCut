@@ -10,6 +10,11 @@
   </Window.SystemBackdrop>
 
   <Grid x:Name="Root" Background="{StaticResource GlassChromeBrush}">
+    <Grid.Resources>
+      <DataTemplate x:Key="MaterialChoiceTemplate">
+        <TextBlock Text="{Binding Material.Name}" Padding="8,6" TextTrimming="CharacterEllipsis" />
+      </DataTemplate>
+    </Grid.Resources>
     <Grid.RowDefinitions>
       <RowDefinition Height="44" />
       <RowDefinition Height="*" />
@@ -39,7 +44,7 @@
         <Image Width="80" Height="64" Source="Assets/logo.png" Stretch="Uniform" />
         <StackPanel Grid.Row="1" Spacing="10">
           <Button x:Name="ProjectsTabButton" Content="Проекты" Tag="projects" Click="TopTabClick" Style="{StaticResource TopNavButtonStyle}" />
-          <Button x:Name="CustomersTabButton" Content="Заказчики" Tag="customers" Click="TopTabClick" Style="{StaticResource TopNavButtonStyle}" />
+          <Button x:Name="CustomersTabButton" Content="Каталог" Tag="customers" Click="TopTabClick" Style="{StaticResource TopNavButtonStyle}" />
           <Button x:Name="MaterialsTabButton" Content="Материалы" Tag="materials" Click="TopTabClick" Style="{StaticResource TopNavButtonStyle}" />
           <Button x:Name="CatalogTabButton" Content="Каталог" Tag="catalog" Click="TopTabClick" Style="{StaticResource TopNavButtonStyle}" />
         </StackPanel>
@@ -242,7 +247,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                   </Grid.RowDefinitions>
-                  <TextBlock Text="Изделия" Style="{StaticResource SectionTitleTextBlockStyle}" />
+                  <TextBlock Text="Изделия" Style="{StaticResource CardTitleTextBlockStyle}" />
                   <Grid Grid.Row="1" MinHeight="360">
                     <Border Style="{StaticResource ListSurfaceStyle}">
                       <ListView x:Name="ProductsList"
@@ -357,21 +362,20 @@
               <RowDefinition Height="Auto" />
               <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <StackPanel Spacing="4">
-              <TextBlock x:Name="CustomerProjectsTitle" Text="Проекты заказчика" Style="{StaticResource SectionTitleTextBlockStyle}" />
-              <TextBlock x:Name="CustomerProjectsSubtitle" Text="Выберите заказчика слева." Style="{StaticResource MutedTextBlockStyle}" />
-            </StackPanel>
+            <Grid ColumnSpacing="12">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <StackPanel Spacing="4">
+                <TextBlock x:Name="CustomerProjectsTitle" Text="Изделия заказчика" Style="{StaticResource SectionTitleTextBlockStyle}" TextWrapping="Wrap" />
+                <TextBlock x:Name="CustomerProjectsSubtitle" Text="Выберите заказчика слева." Style="{StaticResource MutedTextBlockStyle}" TextWrapping="Wrap" />
+              </StackPanel>
+              <Button x:Name="AddCatalogProductButton" Grid.Column="1" VerticalAlignment="Top" Click="AddCatalogProductClick" Style="{StaticResource AccentButtonStyle}" AutomationProperties.Name="Добавить изделие в каталог">
+                <StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Add"/><TextBlock Text="Добавить изделие"/></StackPanel>
+              </Button>
+            </Grid>
             <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
               <ListView x:Name="CustomerProjectsList"
                         DoubleTapped="CustomerProjectsDoubleTapped"
                         RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
-                <ListView.ContextFlyout>
-                  <MenuFlyout>
-                    <MenuFlyoutItem Text="Добавить" Click="AddProjectClick" />
-                    <MenuFlyoutItem Text="Изменить" Click="OpenCustomerProjectClick" />
-                    <MenuFlyoutItem Text="Удалить" Click="DeleteProjectClick" />
-                  </MenuFlyout>
-                </ListView.ContextFlyout>
                 <ListView.ItemTemplate>
                   <DataTemplate x:DataType="models:CustomerProductItem">
                     <Grid Padding="12" RowSpacing="4">
@@ -412,9 +416,9 @@
             </Border>
           </Grid>
         </Border>
-        <Border x:Name="MaterialCategoriesSplitter" Grid.Column="1" Background="#34414D" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" PointerCaptureLost="MaterialSplitterCaptureLost">
+        <Button x:Name="MaterialCategoriesSplitter" Grid.Column="1" Tag="splitter" Style="{StaticResource MaterialSplitterStyle}" AutomationProperties.Name="Ширина категорий" ToolTipService.ToolTip="Ширина категорий" KeyDown="MaterialSplitterKeyDown">
           <Border Width="2" Height="42" Background="#7B8793" CornerRadius="1" HorizontalAlignment="Center" VerticalAlignment="Center" />
-        </Border>
+        </Button>
         <Border Grid.Column="2" Style="{StaticResource PaneSurfaceStyle}">
           <Grid Padding="16" RowSpacing="12">
             <Grid.RowDefinitions>
@@ -425,18 +429,15 @@
             <TextBlock Text="Материалы" Style="{StaticResource SectionTitleTextBlockStyle}" />
             <Grid Grid.Row="1" RowSpacing="8">
               <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-              <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="180" />
-                  <ColumnDefinition Width="240" />
-                </Grid.ColumnDefinitions>
+              <Grid RowSpacing="8">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <ComboBox x:Name="MaterialSortBox" Header="Сортировка" SelectionChanged="MaterialSortChanged" SelectedIndex="0"
                           HorizontalAlignment="Stretch">
                   <ComboBoxItem Content="Название А–Я" Tag="name-asc" />
                   <ComboBoxItem Content="Название Я–А" Tag="name-desc" />
                   <ComboBoxItem Content="Дата добавления" Tag="date" />
                 </ComboBox>
-                <ComboBox x:Name="MaterialGroupActionBox" Grid.Column="1" Header="Действие с выделением"
+                <ComboBox x:Name="MaterialGroupActionBox" Grid.Row="1" Header="Действие с выделением"
                           Visibility="Collapsed" SelectionChanged="MaterialGroupActionChanged" HorizontalAlignment="Stretch">
                   <ComboBoxItem Content="Выберите действие" Tag="none" />
                   <ComboBoxItem Content="Объединить в группу..." Tag="merge" />
@@ -445,7 +446,7 @@
               </Grid>
               <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
                 <Grid>
-                  <ListView x:Name="MaterialsList" SelectionMode="Extended" SelectionChanged="MaterialsSelectionChanged"
+                  <ListView x:Name="MaterialsList" PreviewKeyDown="MaterialListKeyDown" SelectionMode="Extended" SelectionChanged="MaterialsSelectionChanged" ItemClick="MaterialItemClicked" IsItemClickEnabled="True"
                             RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
                     <ListView.ItemTemplate>
                       <DataTemplate>
@@ -455,10 +456,18 @@
                   </ListView>
                   <ListView x:Name="GroupedMaterialsList" Visibility="Collapsed" SelectionChanged="MaterialsSelectionChanged"
                             RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
+                  <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                      <Setter Property="Padding" Value="0" />
+                      <Setter Property="Margin" Value="0" />
+                    </Style>
+                  </ListView.ItemContainerStyle>
                   <ListView.ItemTemplate>
                     <DataTemplate>
-                      <Expander Header="{Binding Name}" IsExpanded="True">
-                        <ListView ItemsSource="{Binding Items}" SelectionChanged="MaterialGroupSelectionChanged"
+                      <Grid>
+                      <Expander Header="{Binding Name}" AutomationProperties.Name="{Binding Name}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" Visibility="{Binding GroupVisibility}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                        <ListView ItemsSource="{Binding Items}" PreviewKeyDown="MaterialListKeyDown" SelectionChanged="MaterialGroupSelectionChanged" ItemClick="MaterialItemClicked" IsItemClickEnabled="True"
                                   RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" SelectionMode="Extended">
                           <ListView.ItemTemplate>
                             <DataTemplate>
@@ -467,6 +476,10 @@
                           </ListView.ItemTemplate>
                         </ListView>
                       </Expander>
+                      <ListView ItemsSource="{Binding Items}" PreviewKeyDown="MaterialListKeyDown" Visibility="{Binding PlainVisibility}" SelectionMode="Extended" ItemTemplate="{StaticResource MaterialChoiceTemplate}"
+                                SelectionChanged="MaterialGroupSelectionChanged" ItemClick="MaterialItemClicked" IsItemClickEnabled="True"
+                                RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" />
+                      </Grid>
                     </DataTemplate>
                   </ListView.ItemTemplate>
                   </ListView>
@@ -489,9 +502,9 @@
                   HorizontalAlignment="Stretch" />
           </Grid>
         </Border>
-        <Border x:Name="MaterialListSplitter" Grid.Column="3" Background="#34414D" PointerPressed="MaterialSplitterPressed" PointerMoved="MaterialSplitterMoved" PointerReleased="MaterialSplitterReleased" PointerCaptureLost="MaterialSplitterCaptureLost">
+        <Button x:Name="MaterialListSplitter" Grid.Column="3" Tag="splitter" Style="{StaticResource MaterialSplitterStyle}" AutomationProperties.Name="Ширина материалов" ToolTipService.ToolTip="Ширина материалов" KeyDown="MaterialSplitterKeyDown">
           <Border Width="2" Height="42" Background="#7B8793" CornerRadius="1" HorizontalAlignment="Center" VerticalAlignment="Center" />
-        </Border>
+        </Button>
         <Border Grid.Column="4" Style="{StaticResource PaneSurfaceStyle}">
           <Grid Padding="20">
             <StackPanel x:Name="MaterialParametersEmptyPanel"
@@ -505,6 +518,7 @@
                          TextAlignment="Center"
                          TextWrapping="Wrap" />
             </StackPanel>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel x:Name="MaterialParametersPanel" Spacing="12" MaxWidth="560" Visibility="Collapsed">
             <CommandBar DefaultLabelPosition="Right" Background="Transparent">
               <AppBarButton Icon="Save" Label="Сохранить" Click="SaveMaterialClick" />
@@ -537,6 +551,7 @@
               </StackPanel>
             </Grid>
           </StackPanel>
+          </ScrollViewer>
           </Grid>
         </Border>
       </Grid>
@@ -562,10 +577,25 @@
                 <TextBlock Text="Настройки" FontSize="30" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <Button Grid.Column="1" Content="Сохранить" Style="{StaticResource AccentButtonStyle}" MinWidth="164" Click="SettingsSaveClick" />
               </Grid>
-              <Grid x:Name="SettingsColumnsHost" ColumnSpacing="14"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="0"/></Grid.RowDefinitions><StackPanel Grid.Column="0" Spacing="14"><StackPanel x:Name="AppearancePanel" Spacing="12">
-                <Border Style="{StaticResource SettingsSectionStyle}" Padding="22"><Grid ColumnSpacing="48"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Spacing="12"><TextBlock Text="Настройки вида" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Тема приложения"/><ComboBox x:Name="ThemeBox" SelectionChanged="ThemeChanged" SelectedIndex="-1"><ComboBoxItem Content="Системная" Tag="auto"/><ComboBoxItem Content="Светлая" Tag="light"/><ComboBoxItem Content="Тёмная" Tag="dark"/></ComboBox><TextBlock Text="Акцентный цвет"/><ComboBox x:Name="AccentBox" SelectionChanged="AccentChanged" /></StackPanel><StackPanel Grid.Column="1" Spacing="18" VerticalAlignment="Center"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Компактный режим" FontWeight="SemiBold"/><TextBlock Text="Уменьшает отступы и плотность элементов" Style="{StaticResource MutedTextBlockStyle}"/></StackPanel><ToggleSwitch x:Name="CompactModeSwitch" Grid.Column="1" Toggled="CompactModeToggled"/></Grid><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Анимация интерфейса" FontWeight="SemiBold"/><TextBlock Text="Плавное открытие экранов и панелей" Style="{StaticResource MutedTextBlockStyle}"/></StackPanel><ToggleSwitch x:Name="AnimationsSwitch" Grid.Column="1" Toggled="AnimationsToggled"/></Grid><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Подсветка под курсором" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/><ToggleSwitch x:Name="CursorRevealSwitch" Grid.Column="1" Toggled="CursorRevealToggled"/></Grid></StackPanel></Grid></Border>
-              </StackPanel>
-              <StackPanel x:Name="DatabasePanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="22"><Grid ColumnSpacing="20"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Spacing="6"><TextBlock Text="База данных" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Импорт и экспорт локальной базы в формате JSON" Style="{StaticResource MutedTextBlockStyle}"/></StackPanel><Button Grid.Column="1" Content="Импорт базы" Click="ImportDatabaseClick" MinWidth="180"/><Button Grid.Column="2" Content="Экспорт базы" Click="ExportDatabaseClick" MinWidth="180"/></Grid></Border><Border Background="#181818" BorderBrush="#303030" BorderThickness="1" CornerRadius="12" Padding="24"><StackPanel Spacing="18"><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Border Width="36" Height="36" Background="#3ECF8E" CornerRadius="9"><TextBlock Text="S" Foreground="#101010" FontWeight="SemiBold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel Grid.Column="1" Spacing="2"><TextBlock Text="supabase" Foreground="#F5F5F5" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="Облачная база Cutlist" Foreground="#AFAFAF"/></StackPanel></Grid><TextBlock Text="После входа приложение само подключает общее пространство Cutlist. Конфликт версий не перезаписывает данные." Foreground="#B8B8B8" TextWrapping="Wrap"/><Grid ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="CloudEmailBox" Header="Email" PlaceholderText="name@company.ru" InputScope="EmailSmtpAddress"/><PasswordBox x:Name="CloudPasswordBox" Grid.Column="1" Header="Пароль" PasswordRevealMode="Peek"/><Button Grid.Column="2" Content="Войти" Background="#3ECF8E" Foreground="#101010" VerticalAlignment="Bottom" Click="CloudSignInClick"/></Grid><Border Background="#242424" BorderBrush="#3ECF8E" BorderThickness="1" CornerRadius="8" Padding="12,9"><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="Пространство" Foreground="#AFAFAF"/><TextBlock Text="Cutlist" Foreground="#F5F5F5" FontWeight="SemiBold"/></StackPanel></Border><StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Загрузить из облака" Click="DownloadCloudDatabaseClick"/><Button Content="Опубликовать изменения" Background="#3ECF8E" Foreground="#101010" Click="PublishCloudDatabaseClick"/></StackPanel><TextBlock x:Name="CloudSyncStatusText" Foreground="#AFAFAF" TextWrapping="Wrap"/></StackPanel></Border><InfoBar x:Name="DatabaseInfoBar" IsOpen="False" IsClosable="True" /></StackPanel></StackPanel><StackPanel x:Name="SettingsRightColumn" Grid.Column="1" Spacing="14"><StackPanel x:Name="CuttingPanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="22"><Grid ColumnSpacing="32"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Spacing="8"><TextBlock Text="Настройки раскроя" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Формат экспорта раскроя"/><ComboBox x:Name="CutExportFormatBox" SelectedIndex="0" SelectionChanged="CutExportFormatChanged"><ComboBoxItem Content="PDF — Документ (.pdf)" Tag="pdf"/><ComboBoxItem Content="Excel — Таблица (.xlsx)" Tag="xlsx"/></ComboBox><StackPanel Orientation="Horizontal" Spacing="12"><NumberBox x:Name="CutTrimBox" Header="Подрезка, мм" Width="150" Minimum="0" ValueChanged="CutLayoutOptionsChanged"/><NumberBox x:Name="CutGapBox" Header="Зазор, мм" Width="150" Minimum="0" ValueChanged="CutLayoutOptionsChanged"/></StackPanel></StackPanel><StackPanel Grid.Column="1" Spacing="8"><TextBlock Text="Цвета раскроя"/><StackPanel Orientation="Horizontal" Spacing="10"><Button Tag="blue" Click="CutColorClick" Width="42" Height="42" Background="#7FBBE8"/><Button Tag="green" Click="CutColorClick" Width="42" Height="42" Background="#B6D983"/><Button Tag="yellow" Click="CutColorClick" Width="42" Height="42" Background="#FFD166"/><Button Tag="orange" Click="CutColorClick" Width="42" Height="42" Background="#EF8354"/><Button Tag="purple" Click="CutColorClick" Width="42" Height="42" Background="#B487E8"/></StackPanel></StackPanel></Grid></Border></StackPanel><StackPanel x:Name="DetailingPanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="22"><Grid ColumnSpacing="32"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Spacing="8"><TextBlock Text="Настройки деталировки" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Формат экспорта деталировки"/><ComboBox x:Name="DetailingExportFormatBox" SelectedIndex="0" SelectionChanged="DetailingExportFormatChanged"><ComboBoxItem Content="PDF — Документ (.pdf)" Tag="pdf"/><ComboBoxItem Content="Excel — Таблица (.xlsx)" Tag="xlsx"/></ComboBox></StackPanel><Grid Grid.Column="1"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Включать изображения" FontWeight="SemiBold"/><TextBlock Text="Добавлять изображения изделий в деталировку" Style="{StaticResource MutedTextBlockStyle}"/></StackPanel><ToggleSwitch x:Name="DetailingImagesSwitch" Grid.Column="1" Toggled="DetailingImagesToggled" /></Grid></Grid></Border></StackPanel></StackPanel></Grid>
+<Grid x:Name="SettingsColumnsHost" ColumnSpacing="16" RowSpacing="16">
+<Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+<Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="0"/></Grid.RowDefinitions>
+<StackPanel x:Name="SettingsLeftColumn" Spacing="16">
+<StackPanel x:Name="AppearancePanel"><Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}"><StackPanel Spacing="12">
+<TextBlock Text="Настройки вида" Style="{StaticResource CardTitleTextBlockStyle}"/>
+<Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+<ComboBox x:Name="ThemeBox" Header="Тема приложения" HorizontalAlignment="Stretch" SelectionChanged="ThemeChanged" SelectedIndex="-1"><ComboBoxItem Content="Системная" Tag="auto"/><ComboBoxItem Content="Светлая" Tag="light"/><ComboBoxItem Content="Тёмная" Tag="dark"/></ComboBox>
+<ComboBox x:Name="AccentBox" Grid.Column="1" Header="Акцентный цвет" HorizontalAlignment="Stretch" SelectionChanged="AccentChanged"/></Grid>
+<ToggleSwitch x:Name="CompactModeSwitch" Header="Компактный режим" Toggled="CompactModeToggled"/>
+<ToggleSwitch x:Name="AnimationsSwitch" Header="Анимации интерфейса" Toggled="AnimationsToggled"/>
+<ToggleSwitch x:Name="CursorRevealSwitch" Header="Подсветка под курсором" Toggled="CursorRevealToggled"/>
+</StackPanel></Border></StackPanel>
+<StackPanel x:Name="CuttingPanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}"><Grid ColumnSpacing="16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><StackPanel Spacing="8"><TextBlock Text="Настройки раскроя" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Формат экспорта раскроя"/><ComboBox x:Name="CutExportFormatBox" AutomationProperties.Name="Формат экспорта раскроя" SelectedIndex="0" SelectionChanged="CutExportFormatChanged"><ComboBoxItem Content="PDF — Документ (.pdf)" Tag="pdf"/><ComboBoxItem Content="Excel — Таблица (.xlsx)" Tag="xlsx"/></ComboBox><StackPanel Orientation="Horizontal" Spacing="12"><NumberBox x:Name="CutTrimBox" Header="Подрезка, мм" Width="150" Minimum="0" ValueChanged="CutLayoutOptionsChanged"/><NumberBox x:Name="CutGapBox" Header="Зазор, мм" Width="150" Minimum="0" ValueChanged="CutLayoutOptionsChanged"/></StackPanel></StackPanel><StackPanel Grid.Row="1" Spacing="8" Margin="0,12,0,0"><TextBlock Text="Цвета раскроя"/><StackPanel Orientation="Horizontal" Spacing="10"><Button Tag="blue" AutomationProperties.Name="Голубая палитра" ToolTipService.ToolTip="Голубая палитра" Click="CutColorClick" Width="42" Height="42" Background="#7FBBE8"/><Button Tag="green" AutomationProperties.Name="Зелёная палитра" ToolTipService.ToolTip="Зелёная палитра" Click="CutColorClick" Width="42" Height="42" Background="#B6D983"/><Button Tag="yellow" AutomationProperties.Name="Жёлтая палитра" ToolTipService.ToolTip="Жёлтая палитра" Click="CutColorClick" Width="42" Height="42" Background="#FFD166"/><Button Tag="orange" AutomationProperties.Name="Оранжевая палитра" ToolTipService.ToolTip="Оранжевая палитра" Click="CutColorClick" Width="42" Height="42" Background="#EF8354"/><Button Tag="purple" AutomationProperties.Name="Фиолетовая палитра" ToolTipService.ToolTip="Фиолетовая палитра" Click="CutColorClick" Width="42" Height="42" Background="#B487E8"/></StackPanel></StackPanel></Grid></Border></StackPanel>
+<StackPanel x:Name="DetailingPanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Spacing="8"><TextBlock Text="Настройки деталировки" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Формат экспорта деталировки"/><ComboBox x:Name="DetailingExportFormatBox" AutomationProperties.Name="Формат экспорта деталировки" SelectedIndex="0" SelectionChanged="DetailingExportFormatChanged"><ComboBoxItem Content="PDF — Документ (.pdf)" Tag="pdf"/><ComboBoxItem Content="Excel — Таблица (.xlsx)" Tag="xlsx"/></ComboBox></StackPanel><Grid Grid.Column="1"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Включать изображения" TextWrapping="Wrap" FontWeight="SemiBold"/><TextBlock Text="Добавлять изображения изделий в деталировку" Style="{StaticResource MutedTextBlockStyle}"/></StackPanel><ToggleSwitch x:Name="DetailingImagesSwitch" AutomationProperties.Name="Добавлять изображения в деталировку" Grid.Column="1" Toggled="DetailingImagesToggled" /></Grid></Grid></Border></StackPanel>
+</StackPanel>
+<StackPanel x:Name="SettingsRightColumn" Grid.Column="1" Spacing="16">
+<StackPanel x:Name="DatabasePanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}"><Grid ColumnSpacing="12" RowSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><StackPanel Grid.ColumnSpan="2" Spacing="6"><TextBlock Text="База данных" Style="{StaticResource CardTitleTextBlockStyle}"/><TextBlock Text="Импорт и экспорт локальной базы в формате JSON" Style="{StaticResource MutedTextBlockStyle}"/></StackPanel><Button Grid.Row="1" Content="Импорт базы" Click="ImportDatabaseClick" MinWidth="0" HorizontalAlignment="Stretch"/><Button Grid.Row="1" Grid.Column="1" Content="Экспорт базы" Click="ExportDatabaseClick" MinWidth="0" HorizontalAlignment="Stretch"/></Grid></Border><Border x:Name="CloudCard" Background="#181818" BorderBrush="#303030" BorderThickness="1" CornerRadius="8" Padding="16"><StackPanel Spacing="18"><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Border x:Name="CloudIconSurface" Width="36" Height="36" Background="#3ECF8E" CornerRadius="9"><TextBlock Text="S" Foreground="#101010" FontWeight="SemiBold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel x:Name="CloudHeaderText" Grid.Column="1" Spacing="2"><TextBlock Text="supabase" Foreground="#F5F5F5" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="Облачная база Cutlist" Foreground="#AFAFAF"/></StackPanel></Grid><TextBlock x:Name="CloudDescription" Text="После входа приложение само подключает общее пространство Cutlist. Конфликт версий не перезаписывает данные." Foreground="#B8B8B8" TextWrapping="Wrap"/><Grid x:Name="CloudLoginGrid" ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="CloudEmailBox" Header="Email" PlaceholderText="name@company.ru" InputScope="EmailSmtpAddress"/><PasswordBox x:Name="CloudPasswordBox" Grid.Column="1" Header="Пароль" PasswordRevealMode="Peek"/><Button x:Name="CloudSignInButton" Grid.Column="2" Content="Войти" Background="#3ECF8E" Foreground="#101010" VerticalAlignment="Bottom" Click="CloudSignInClick"/></Grid><ProgressBar x:Name="CloudOperationProgress" Visibility="Collapsed" IsIndeterminate="False" AutomationProperties.Name="Синхронизация с облаком"/><Border x:Name="CloudStatusBadge" Background="#242424" BorderBrush="#3ECF8E" BorderThickness="1" CornerRadius="8" Padding="12,9"><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="Пространство" Foreground="#AFAFAF"/><TextBlock Text="Cutlist" Foreground="#F5F5F5" FontWeight="SemiBold"/></StackPanel></Border><StackPanel x:Name="CloudActionsPanel" Orientation="Horizontal" Spacing="8"><Button Content="Загрузить из облака" Click="DownloadCloudDatabaseClick"/><Button Content="Опубликовать изменения" Background="#3ECF8E" Foreground="#101010" Click="PublishCloudDatabaseClick"/></StackPanel><TextBlock x:Name="CloudSyncStatusText" AutomationProperties.LiveSetting="Polite" Foreground="#AFAFAF" TextWrapping="Wrap"/></StackPanel></Border><InfoBar x:Name="DatabaseInfoBar" IsOpen="False" IsClosable="True" /></StackPanel>
+</StackPanel></Grid>
             </StackPanel>
           </ScrollViewer>
         </Border>

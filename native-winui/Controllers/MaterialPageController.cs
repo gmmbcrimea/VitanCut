@@ -47,6 +47,7 @@ public sealed class MaterialPageController
 
     public string? SelectedCategory => _categories.SelectedItem as string;
     public MaterialChoice? SelectedMaterial => _selectedMaterial;
+    public IReadOnlyList<MaterialChoice> ChoicesInViewOrder => SortChoices(_materials.GetChoices(SelectedCategory));
     public string EditorName => string.IsNullOrWhiteSpace(_name.Text) ? "Новый материал" : _name.Text.Trim();
     public string EditorGroup => string.IsNullOrWhiteSpace(_type.Text) ? "Прочее" : _type.Text.Trim();
 
@@ -114,17 +115,23 @@ public sealed class MaterialPageController
 
     private void BindItems()
     {
+        using var measurement = App.UiPerformance.Measure(UiWork.Materials);
+        var expansion = (_groupedItems.ItemsSource as IEnumerable<MaterialGroupView>)?
+            .ToDictionary(group => group.Name, group => group.IsExpanded);
         _items.ItemsSource = null;
         _groupedItems.ItemsSource = null;
-        var choices = SortChoices(_materials.GetChoices(SelectedCategory));
+        var choices = ChoicesInViewOrder.ToList();
         var hasGroups = choices.Any(choice => !string.IsNullOrWhiteSpace(choice.Material.Group));
         _items.Visibility = hasGroups ? Visibility.Collapsed : Visibility.Visible;
         _groupedItems.Visibility = hasGroups ? Visibility.Visible : Visibility.Collapsed;
         if (hasGroups)
         {
             _groupedItems.ItemsSource = choices
-                .GroupBy(choice => string.IsNullOrWhiteSpace(choice.Material.Group) ? "Без группы" : choice.Material.Group.Trim(), StringComparer.CurrentCultureIgnoreCase)
-                .Select(group => new MaterialGroupView(group.Key, group.ToList())).ToList();
+                .GroupBy(choice => string.IsNullOrWhiteSpace(choice.Material.Group) ? "" : choice.Material.Group.Trim(), StringComparer.CurrentCultureIgnoreCase)
+                .Select(group => new MaterialGroupView(group.Key, group.ToList())
+                {
+                    IsExpanded = expansion?.GetValueOrDefault(group.Key, true) ?? true
+                }).ToList();
         }
         else
         {
@@ -151,6 +158,9 @@ public sealed class MaterialPageController
 
 public sealed class MaterialGroupView(string name, IReadOnlyList<MaterialChoice> items)
 {
+    public bool IsExpanded { get; set; } = true;
+    public Visibility GroupVisibility => Name.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility PlainVisibility => Name.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     public string Name { get; } = name;
     public IReadOnlyList<MaterialChoice> Items { get; } = items;
 }

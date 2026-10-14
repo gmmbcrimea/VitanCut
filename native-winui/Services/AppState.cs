@@ -6,7 +6,10 @@ namespace VitanCut.WinUI.Services;
 
 public sealed class AppState
 {
+    public AppState(AppPaths? paths = null) => Paths = paths;
+
     private bool _canSave;
+    private long _revision;
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -17,11 +20,28 @@ public sealed class AppState
 
     public Database Database { get; private set; } = new();
     public string DatabasePath { get; private set; } = "";
+    public AppPaths? Paths { get; private set; }
+    public long Revision => Interlocked.Read(ref _revision);
 
     public void Load(string? path = null)
     {
         _canSave = false;
-        DatabasePath = path is null ? ResolveDatabasePath() : Path.GetFullPath(path);
+        if (path is null)
+        {
+            Paths ??= AppPaths.ForCurrentProcess(AppContext.BaseDirectory);
+            DatabasePath = Paths.IsDevelopment ? Paths.DatabasePath : ResolveProductionDatabasePath();
+            if (!Paths.IsDevelopment && IsProtectedInstallationDirectory(AppContext.BaseDirectory))
+                MigrateInstalledData(Path.Combine(AppContext.BaseDirectory, "data"), Paths.DataRoot);
+            if (!Paths.IsDevelopment && !string.Equals(Path.GetDirectoryName(DatabasePath), Paths.DataRoot, StringComparison.OrdinalIgnoreCase))
+                Paths = AppPaths.ForDatabaseFile(DatabasePath, isDevelopment: false);
+        }
+        else
+        {
+            DatabasePath = Path.GetFullPath(path);
+            Paths = AppPaths.ForDatabaseFile(DatabasePath);
+        }
+        AtomicJsonPairFile.Recover(Paths!.CloudSettingsPath + ".pair-journal.json",
+            Paths.CloudSettingsPath, Paths.CloudBaselinePath, DatabasePath);
         if (!File.Exists(DatabasePath))
         {
             Database = new Database();
@@ -42,36 +62,80 @@ public sealed class AppState
 
         Normalize();
         _canSave = true;
+        Interlocked.Exchange(ref _revision, 0);
     }
 
     public void Save()
     {
         if (!_canSave) throw new InvalidOperationException("База не открыта. Сохранение отменено.");
         Normalize();
-        WriteDatabase(DatabasePath, JsonSerializer.Serialize(Database, _jsonOptions), DatabasePath + ".bak");
+        WriteDatabase(DatabasePath, SerializeDatabase(Database), DatabasePath + ".bak");
+        Interlocked.Increment(ref _revision);
+    }
+
+    public void CommitMutation(Action mutation)
+    {
+        if (!_canSave) throw new InvalidOperationException("База не открыта. Изменение отменено.");
+        var previous = SerializeDatabase(Database);
+        try
+        {
+            mutation();
+            Save();
+        }
+        catch
+        {
+            Database = ReadDatabase(previous);
+            Normalize();
+            throw;
+        }
     }
 
     public string CreateCloudSnapshot()
     {
         if (!_canSave) throw new InvalidOperationException("База не открыта.");
-        Normalize();
-        return JsonSerializer.Serialize(Database, _jsonOptions);
+        return SerializeDatabase(Database);
     }
 
-    public void ReplaceFromCloudSnapshot(string json)
+    public void ReplaceFromCloudSnapshot(string json, Action<string>? durableCommit = null)
     {
         if (!_canSave) throw new InvalidOperationException("База не открыта.");
         var imported = ReadDatabase(json);
-        Database = imported;
-        Normalize();
-        Save();
+        var previous = Database;
+        var local = Database.Preferences;
+        imported.Preferences ??= new AppPreferences();
+        imported.Preferences.Theme = local.Theme;
+        imported.Preferences.AccentColor = local.AccentColor;
+        imported.Preferences.CompactMode = local.CompactMode;
+        imported.Preferences.AnimationsEnabled = local.AnimationsEnabled;
+        imported.Preferences.CursorRevealEnabled = local.CursorRevealEnabled;
+        imported.Preferences.DetailingExportFormat = local.DetailingExportFormat;
+        imported.Preferences.DetailingIncludeImages = local.DetailingIncludeImages;
+        imported.Preferences.CloudPublishIntervalMinutes = local.CloudPublishIntervalMinutes;
+        imported.Preferences.RotationDefaultsMigrated = local.RotationDefaultsMigrated;
+        imported.Preferences.SystemThemeDefaultMigrated = local.SystemThemeDefaultMigrated;
+        imported.Preferences.ThemeDefaultsVersion = local.ThemeDefaultsVersion;
+        try
+        {
+            Database = imported;
+            Normalize();
+            if (durableCommit is null) Save();
+            else
+            {
+                durableCommit(SerializeDatabase(Database));
+                Interlocked.Increment(ref _revision);
+            }
+        }
+        catch
+        {
+            Database = previous;
+            Normalize();
+            throw;
+        }
     }
 
     public string ExportJson()
     {
-        Normalize();
-        var options = new JsonSerializerOptions(_jsonOptions) { WriteIndented = true };
-        return JsonSerializer.Serialize(Database, options);
+        return SerializeDatabase(Database, indented: true);
     }
 
     public void ImportJson(string json)
@@ -100,6 +164,13 @@ public sealed class AppState
             throw new InvalidDataException("Файл не содержит базу проектов, материалов или каталога.");
         return JsonSerializer.Deserialize<Database>(json, _jsonOptions)
             ?? throw new InvalidDataException("Файл не похож на базу Vitan-Cut.");
+    }
+
+    private string SerializeDatabase(Database database, bool indented = false)
+    {
+        if (!indented) return JsonSerializer.Serialize(database, _jsonOptions);
+        var options = new JsonSerializerOptions(_jsonOptions) { WriteIndented = true };
+        return JsonSerializer.Serialize(database, options);
     }
 
     public IEnumerable<MaterialChoice> MaterialChoices() =>
@@ -180,6 +251,24 @@ public sealed class AppState
             material.Id = Empty(material.Id, Ids.NewId());
             material.Unit = Empty(material.Unit, "pc");
         }
+
+        EnsureUnique(Database.Projects.Select(project => project.Id), "project");
+        EnsureUnique(Database.Materials.SelectMany(group => group.Value).Select(material => material.Id), "material");
+        EnsureUnique(Database.Catalog.Values.SelectMany(products => products).Select(product => product.Id), "catalog product");
+        foreach (var project in Database.Projects)
+        {
+            EnsureUnique(project.Products.Select(product => product.Id), $"product in project '{project.Name}'");
+            foreach (var product in project.Products)
+                EnsureUnique(product.Details.Select(detail => detail.Id), $"detail in product '{product.Name}'");
+        }
+        foreach (var product in Database.Catalog.Values.SelectMany(products => products))
+            EnsureUnique(product.Details.Select(detail => detail.Id), $"detail in product '{product.Name}'");
+    }
+
+    private static void EnsureUnique(IEnumerable<string> values, string kind)
+    {
+        if (values.GroupBy(value => value, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+            throw new InvalidDataException($"В базе обнаружены повторяющиеся идентификаторы: {kind}.");
     }
 
     private static string Empty(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value;
@@ -201,7 +290,7 @@ public sealed class AppState
         }
     }
 
-    private static string ResolveDatabasePath()
+    private static string ResolveProductionDatabasePath()
     {
         var overridePath = Environment.GetEnvironmentVariable("VITANCUT_DATABASE_PATH");
         if (!string.IsNullOrWhiteSpace(overridePath)) return Path.GetFullPath(overridePath);

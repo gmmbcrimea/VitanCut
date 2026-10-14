@@ -13,7 +13,15 @@ namespace VitanCut.WinUI.Services;
 public static class ThemeService
 {
     private static readonly ConditionalWeakTable<Window, Registration> Registrations = new();
-    private static readonly ConditionalWeakTable<FrameworkElement, Metrics> OriginalMetrics = new();
+    // Native elements outlive temporary .NET projection wrappers returned during traversal.
+    private static readonly DependencyProperty OriginalPaddingProperty = DependencyProperty.RegisterAttached(
+        "DensityOriginalPadding", typeof(Thickness), typeof(ThemeService), new PropertyMetadata(default(Thickness)));
+    private static readonly DependencyProperty OriginalSpacingProperty = DependencyProperty.RegisterAttached(
+        "DensityOriginalSpacing", typeof(double), typeof(ThemeService), new PropertyMetadata(0d));
+    private static readonly DependencyProperty OriginalColumnSpacingProperty = DependencyProperty.RegisterAttached(
+        "DensityOriginalColumnSpacing", typeof(double), typeof(ThemeService), new PropertyMetadata(0d));
+    private static readonly DependencyProperty OriginalRowSpacingProperty = DependencyProperty.RegisterAttached(
+        "DensityOriginalRowSpacing", typeof(double), typeof(ThemeService), new PropertyMetadata(0d));
 
     public static void Apply(Window window, AppPreferences preferences)
     {
@@ -94,29 +102,49 @@ public static class ThemeService
         bar.ButtonPressedBackgroundColor = dark ? Color.FromArgb(255, 65, 65, 65) : Color.FromArgb(255, 210, 210, 210);
     }
 
-    private sealed record Metrics(Thickness Padding, double Spacing);
+    private readonly record struct Metrics(Thickness Padding, double Spacing, double ColumnSpacing = 0, double RowSpacing = 0);
+    private static Metrics OriginalMetrics(FrameworkElement element, Thickness padding, double spacing = 0, double columnSpacing = 0, double rowSpacing = 0)
+    {
+        if (element.ReadLocalValue(OriginalPaddingProperty) == DependencyProperty.UnsetValue)
+        {
+            element.SetValue(OriginalPaddingProperty, padding);
+            element.SetValue(OriginalSpacingProperty, spacing);
+            element.SetValue(OriginalColumnSpacingProperty, columnSpacing);
+            element.SetValue(OriginalRowSpacingProperty, rowSpacing);
+        }
+        return new Metrics((Thickness)element.GetValue(OriginalPaddingProperty),
+            (double)element.GetValue(OriginalSpacingProperty),
+            (double)element.GetValue(OriginalColumnSpacingProperty),
+            (double)element.GetValue(OriginalRowSpacingProperty));
+    }
+    private static Thickness DensePadding(Thickness padding) => new(
+        UiLayout.CompactInset(padding.Left), UiLayout.CompactInset(padding.Top),
+        UiLayout.CompactInset(padding.Right), UiLayout.CompactInset(padding.Bottom));
     public static void ApplyLayout(FrameworkElement root, AppPreferences preferences)
     {
         var compact = preferences.CompactMode;
         if (root is ScrollViewer scroll)
         {
+            var original = OriginalMetrics(root, scroll.Padding);
+            scroll.Padding = compact ? DensePadding(original.Padding) : original.Padding;
             if (scroll.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled)
-                scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
+                scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             if (scroll.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled)
-                scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
+                scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
             if (scroll.Content is FrameworkElement scrollContent)
                 ApplyLayout(scrollContent, preferences);
             return;
         }
         if (root is Button button)
         {
-            if (button.Tag is "cut-tool") return;
+            if (button.Tag is "cut-tool" or "splitter" or "icon-tool") return;
             button.MinHeight = compact ? 32 : 40;
-            button.Padding = compact ? new Thickness(12, 5, 12, 5) : new Thickness(16, 8, 16, 8);
+            button.Padding = compact ? new Thickness(8, 3, 8, 3) : new Thickness(16, 8, 16, 8);
             CommandAppearance.Decorate(button);
             if (button.Tag is "projects" or "customers" or "materials" or "catalog" or "settings")
             {
                 button.Padding = new Thickness(4);
+                button.Height = compact ? 60 : 76;
                 return;
             }
             if (button.Content is FrameworkElement buttonContent)
@@ -126,7 +154,7 @@ public static class ThemeService
         if (root is TextBox text)
         {
             text.MinHeight = compact ? 32 : 40;
-            text.Padding = compact ? new Thickness(10, 4, 10, 4) : new Thickness(12, 8, 12, 8);
+            text.Padding = compact ? new Thickness(8, 3, 8, 3) : new Thickness(12, 8, 12, 8);
             return;
         }
         if (root is NumberBox or ComboBox or ToggleSwitch or CheckBox or RadioButton)
@@ -137,16 +165,23 @@ public static class ThemeService
         }
         if (root is Border { Shadow: ThemeShadow } elevated)
             elevated.Translation = new Vector3(0, 0, new UISettings().AdvancedEffectsEnabled && !new AccessibilitySettings().HighContrast ? 12 : 0);
-        if (root is Border border && border.Padding.Top > 0)
+        if (root is Border border)
         {
-            var original = OriginalMetrics.GetValue(root, _ => new Metrics(border.Padding, 0));
-            var p = original.Padding;
-            border.Padding = compact ? new Thickness(p.Left * .7, p.Top * .7, p.Right * .7, p.Bottom * .7) : p;
+            var original = OriginalMetrics(root, border.Padding);
+            border.Padding = compact ? DensePadding(original.Padding) : original.Padding;
+        }
+        if (root is Grid grid)
+        {
+            var original = OriginalMetrics(root, grid.Padding, columnSpacing: grid.ColumnSpacing, rowSpacing: grid.RowSpacing);
+            grid.Padding = compact ? DensePadding(original.Padding) : original.Padding;
+            grid.ColumnSpacing = compact ? UiLayout.CompactGap(original.ColumnSpacing) : original.ColumnSpacing;
+            grid.RowSpacing = compact ? UiLayout.CompactGap(original.RowSpacing) : original.RowSpacing;
         }
         if (root is StackPanel stack)
         {
-            var original = OriginalMetrics.GetValue(root, _ => new Metrics(default, stack.Spacing));
-            stack.Spacing = compact ? original.Spacing * .65 : original.Spacing;
+            var original = OriginalMetrics(root, stack.Padding, stack.Spacing);
+            stack.Padding = compact ? DensePadding(original.Padding) : original.Padding;
+            stack.Spacing = compact ? UiLayout.CompactGap(original.Spacing) : original.Spacing;
         }
         if (root is Panel panel)
             panel.ChildrenTransitions = preferences.AnimationsEnabled ? null : new TransitionCollection();
@@ -168,6 +203,8 @@ public static class ThemeService
             ApplyLayout(content, preferences);
             return;
         }
+        // Native templates manage their own density and focus visuals.
+        if (root is Control) return;
         for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
             if (VisualTreeHelper.GetChild(root, index) is FrameworkElement child) ApplyLayout(child, preferences);
     }
@@ -187,6 +224,9 @@ public static class ThemeService
         SetBrush("SoftPanelBrush", dark ? "#1C2227" : "#E5EBF0");
         SetBrush("PanelStrokeBrush", dark ? "#708EA0AF" : "#70808B96");
         SetBrush("AppTextBrush", dark ? "#F2F5F7" : "#172025");
+        SetBrush("UiDangerBrush", dark ? "#FFB4AB" : "#B42318");
+        SetBrush("UiSuccessBrush", dark ? "#7EDAC7" : "#087443");
+        SetBrush("UiWarningTextBrush", dark ? "#F2C06C" : "#97600F");
         SetBrush("MetricAreaBrush", dark ? "#7EDAC7" : "#087E74");
         SetBrush("MetricMaterialBrush", dark ? "#B8C7D1" : "#63737D");
         SetBrush("MetricPayrollBrush", dark ? "#F2C06C" : "#97600F");
@@ -210,7 +250,7 @@ public static class ThemeService
         if (contrast)
         {
             foreach (var key in new[] { "PageSurfaceBrush", "PanelSurfaceBrush", "SidebarSurfaceBrush", "SectionSurfaceBrush", "SoftPanelBrush", "ButtonBackground", "ButtonBackgroundPointerOver", "ButtonBackgroundPressed", "TextControlBackground", "TextControlBackgroundPointerOver", "TextControlBackgroundFocused" }) SetColor(key, background);
-            foreach (var key in new[] { "AppTextBrush", "PanelStrokeBrush", "MetricAreaBrush", "MetricMaterialBrush", "MetricPayrollBrush", "ButtonBorderBrush", "TextControlBorderBrush", "ButtonBorderBrushPointerOver", "TextControlBorderBrushPointerOver" }) SetColor(key, foreground);
+            foreach (var key in new[] { "AppTextBrush", "UiDangerBrush", "UiSuccessBrush", "UiWarningTextBrush", "PanelStrokeBrush", "MetricAreaBrush", "MetricMaterialBrush", "MetricPayrollBrush", "ButtonBorderBrush", "TextControlBorderBrush", "ButtonBorderBrushPointerOver", "TextControlBorderBrushPointerOver" }) SetColor(key, foreground);
             foreach (var stop in ((LinearGradientBrush)Application.Current.Resources["GlassEdgeBrush"]).GradientStops) stop.Color = foreground;
             foreach (var stop in ((LinearGradientBrush)Application.Current.Resources["MetricSurfaceBrush"]).GradientStops) stop.Color = background;
             foreach (var stop in ((LinearGradientBrush)Application.Current.Resources["PaneGlassBrush"]).GradientStops) stop.Color = background;

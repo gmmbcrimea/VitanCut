@@ -52,51 +52,46 @@ public sealed class MaterialService(AppState state)
         Validate(material);
         if (material.CreatedAt == DateTimeOffset.MinValue) material.CreatedAt = DateTimeOffset.Now;
         group = string.IsNullOrWhiteSpace(group) ? "Прочее" : group.Trim();
-        state.Database.Materials.TryAdd(group, []);
-        if (!state.Database.MaterialGroups.Contains(group)) state.Database.MaterialGroups.Add(group);
-        state.Database.Materials[group].Add(material);
-        try { state.Save(); }
-        catch { state.Database.Materials[group].Remove(material); throw; }
+        state.CommitMutation(() =>
+        {
+            state.Database.Materials.TryAdd(group, []);
+            if (!state.Database.MaterialGroups.Contains(group)) state.Database.MaterialGroups.Add(group);
+            state.Database.Materials[group].Add(material);
+        });
     }
 
     public MaterialChoice Save(MaterialChoice choice, string group)
     {
-        Validate(choice.Material, choice.Material);
+        if (!state.Database.Materials.TryGetValue(choice.Type, out var sourceMaterials))
+            throw new InvalidOperationException("Материал уже удалён или изменён в облаке.");
+        var material = sourceMaterials.FirstOrDefault(item => item.Id == choice.Material.Id)
+            ?? throw new InvalidOperationException("Материал уже удалён или изменён в облаке.");
+        Validate(material, material);
         group = string.IsNullOrWhiteSpace(group) ? choice.Type : group.Trim();
         var changed = !string.Equals(group, choice.Type, StringComparison.Ordinal);
         var details = state.Database.Projects.SelectMany(project => project.Products)
             .Concat(state.Database.Catalog.Values.SelectMany(products => products)).SelectMany(product => product.Details)
-            .Where(detail => detail.Type == choice.Type && detail.MaterialId == choice.Material.Id).ToList();
-        if (changed)
-        {
-            state.Database.Materials[choice.Type].Remove(choice.Material);
-            state.Database.Materials.TryAdd(group, []);
-            if (!state.Database.MaterialGroups.Contains(group)) state.Database.MaterialGroups.Add(group);
-            state.Database.Materials[group].Add(choice.Material);
-            foreach (var detail in details) detail.Type = group;
-        }
-        try { state.Save(); }
-        catch
+            .Where(detail => detail.Type == choice.Type && detail.MaterialId == material.Id).ToList();
+        state.CommitMutation(() =>
         {
             if (changed)
             {
-                state.Database.Materials[group].Remove(choice.Material);
-                state.Database.Materials[choice.Type].Add(choice.Material);
-                foreach (var detail in details) detail.Type = choice.Type;
+                sourceMaterials.Remove(material);
+                state.Database.Materials.TryAdd(group, []);
+                if (!state.Database.MaterialGroups.Contains(group)) state.Database.MaterialGroups.Add(group);
+                state.Database.Materials[group].Add(material);
+                foreach (var detail in details) detail.Type = group;
             }
-            throw;
-        }
-        return new MaterialChoice(group, choice.Material);
+        });
+        return new MaterialChoice(group, material);
     }
 
     public void Delete(MaterialChoice choice)
     {
         if (IsUsed(choice)) throw new InvalidOperationException("Материал используется в проекте или каталоге.");
         if (!state.Database.Materials.TryGetValue(choice.Type, out var materials)) return;
-        var index = materials.IndexOf(choice.Material);
+        var index = materials.FindIndex(item => item.Id == choice.Material.Id);
         if (index < 0) return;
-        materials.RemoveAt(index);
-        try { state.Save(); }
-        catch { materials.Insert(index, choice.Material); throw; }
+        state.CommitMutation(() => materials.RemoveAt(index));
     }
 }

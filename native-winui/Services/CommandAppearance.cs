@@ -24,7 +24,7 @@ internal static class CommandAppearance
         if (symbol is null) return;
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         content.Children.Add(new SymbolIcon(symbol.Value) { Width = 20, Height = 20 });
-        content.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+        content.Children.Add(new TextBlock { Text = label, Style = (Style)Application.Current.Resources["CommandLabelStyle"], VerticalAlignment = VerticalAlignment.Center });
         button.Content = content;
         AutomationProperties.SetName(button, label);
     }

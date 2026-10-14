@@ -44,23 +44,40 @@ public sealed class AppUpdateService
     private static readonly HttpClient Client = CreateClient();
     private readonly string _applicationDirectory;
     private readonly Version _currentVersion;
+    private readonly bool _enabled;
+    private readonly string? _rollbackRoot;
+    private readonly string? _temporaryRoot;
 
     public AppUpdateInfo? LastCheck { get; private set; }
-    public bool CanRollback => File.Exists(Path.Combine(GetRollbackDirectory(_applicationDirectory), "VitanCut.WinUI.exe"));
+    public bool CanRollback => File.Exists(Path.Combine(GetConfiguredRollbackDirectory(_applicationDirectory), "VitanCut.WinUI.exe"));
 
     public AppUpdateService()
-        : this(AppContext.BaseDirectory, GetApplicationVersion())
+        : this(AppPaths.ForCurrentProcess(AppContext.BaseDirectory))
     {
     }
 
-    internal AppUpdateService(string applicationDirectory, Version currentVersion)
+    public AppUpdateService(AppPaths paths)
+        : this(paths.ApplicationDirectory, GetApplicationVersion(), enabled: !paths.IsDevelopment,
+            rollbackRoot: paths.IsDevelopment ? paths.RollbackDirectory : null,
+            temporaryRoot: paths.IsDevelopment ? paths.TemporaryDirectory : null)
+    {
+    }
+
+    internal AppUpdateService(string applicationDirectory, Version currentVersion, bool enabled = true,
+        string? rollbackRoot = null, string? temporaryRoot = null)
     {
         _applicationDirectory = Path.GetFullPath(applicationDirectory);
         _currentVersion = currentVersion;
+        _enabled = enabled;
+        _rollbackRoot = rollbackRoot;
+        _temporaryRoot = temporaryRoot;
     }
 
     public async Task<AppUpdateInfo> CheckAsync(CancellationToken cancellationToken = default)
     {
+        if (!_enabled)
+            return Remember(new AppUpdateInfo(UpdateAvailability.Unavailable, _currentVersion, null,
+                "Проверка обновлений отключена в изолированном режиме разработки."));
         try
         {
             using var response = await Client.GetAsync(
@@ -181,10 +198,11 @@ public sealed class AppUpdateService
     public async Task<bool> InstallAsync(AppUpdateInfo update, IProgress<UpdateDownloadProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        if (!_enabled) return false;
         if (!update.CanInstall || string.IsNullOrWhiteSpace(update.DownloadUrl)) return false;
         if (!CanWriteTo(_applicationDirectory)) return false;
 
-        var workDirectory = Path.Combine(Path.GetTempPath(), "VitanCut-update-" + Guid.NewGuid().ToString("N"));
+        var workDirectory = CreateWorkDirectory("VitanCut-update-");
         var archivePath = Path.Combine(workDirectory, "release.zip");
         var extractDirectory = Path.Combine(workDirectory, "files");
         Directory.CreateDirectory(extractDirectory);
@@ -215,7 +233,7 @@ public sealed class AppUpdateService
 
             var sourceDirectory = Path.GetDirectoryName(executable)!;
             var launchedExe = Path.Combine(_applicationDirectory, Path.GetFileName(executable));
-            var backupDirectory = GetRollbackDirectory(_applicationDirectory);
+            var backupDirectory = GetConfiguredRollbackDirectory(_applicationDirectory);
             var script = BuildUpdateScript(sourceDirectory, _applicationDirectory, launchedExe, workDirectory, Environment.ProcessId, backupDirectory);
             var scriptPath = Path.Combine(workDirectory, "apply-update.ps1");
             File.WriteAllText(scriptPath, script, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
@@ -241,11 +259,12 @@ public sealed class AppUpdateService
 
     public Task<bool> RollbackAsync()
     {
-        var backupDirectory = GetRollbackDirectory(_applicationDirectory);
+        if (!_enabled) return Task.FromResult(false);
+        var backupDirectory = GetConfiguredRollbackDirectory(_applicationDirectory);
         var backupExecutable = Path.Combine(backupDirectory, "VitanCut.WinUI.exe");
         if (!File.Exists(backupExecutable) || !CanWriteTo(_applicationDirectory)) return Task.FromResult(false);
 
-        var workDirectory = Path.Combine(Path.GetTempPath(), "VitanCut-rollback-" + Guid.NewGuid().ToString("N"));
+        var workDirectory = CreateWorkDirectory("VitanCut-rollback-");
         try
         {
             Directory.CreateDirectory(workDirectory);
@@ -348,18 +367,29 @@ public sealed class AppUpdateService
         "    Write-UpdateLog 'Saving current version for rollback.'",
         "    if (Test-Path -LiteralPath $backupDirectory) { Remove-Item -LiteralPath $backupDirectory -Recurse -Force }",
         "    New-Item -ItemType Directory -Force -Path $backupDirectory | Out-Null",
-        "    & robocopy $target $backupDirectory /E /NFL /NDL /NJH /NJS /NC /NS | Out-Null",
+        "    & robocopy $target $backupDirectory /E /XD (Join-Path $target 'data') /NFL /NDL /NJH /NJS /NC /NS | Out-Null",
         "    if ($LASTEXITCODE -gt 7) { throw \"Could not save rollback copy (robocopy $LASTEXITCODE).\" }",
         "  }",
         "  Write-UpdateLog 'Copying update files.'",
-        "  if ($mirror) { & robocopy $source $target /MIR /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null } else { & robocopy $source $target /E /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null }",
+        "  if ($mirror) { & robocopy $source $target /MIR /XD 'data' /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null } else { & robocopy $source $target /E /XD (Join-Path $source 'data') (Join-Path $target 'data') /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null }",
         "  if ($LASTEXITCODE -gt 7) { throw \"robocopy failed with code $LASTEXITCODE\" }",
         "  if (-not (Test-Path -LiteralPath $executable)) { throw 'Updated executable was not found.' }",
         "  Write-UpdateLog 'Starting updated application.'",
         "  Start-Process -FilePath $executable -WorkingDirectory $target",
         "  Remove-Item -LiteralPath $workDirectory -Recurse -Force -ErrorAction SilentlyContinue",
         "  Write-UpdateLog 'Update completed.'",
-        "} catch { Write-UpdateLog (\"Update failed: \" + $_.Exception.Message) }");
+        "} catch {",
+        "  Write-UpdateLog (\"Update failed: \" + $_.Exception.Message)",
+        "  if ($backupDirectory -and (Test-Path -LiteralPath $backupDirectory)) {",
+        "    try {",
+        "      Write-UpdateLog 'Restoring previous application files.'",
+        "      & robocopy $backupDirectory $target /MIR /XD 'data' /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null",
+        "      if ($LASTEXITCODE -gt 7) { throw \"rollback robocopy failed with code $LASTEXITCODE\" }",
+        "      if (Test-Path -LiteralPath $executable) { Start-Process -FilePath $executable -WorkingDirectory $target }",
+        "      Write-UpdateLog 'Previous application files restored.'",
+        "    } catch { Write-UpdateLog (\"Rollback failed: \" + $_.Exception.Message) }",
+        "  }",
+        "}");
 
     private static string EscapePowerShell(string value) => value.Replace("'", "''", StringComparison.Ordinal);
 
@@ -368,6 +398,19 @@ public sealed class AppUpdateService
         var normalized = Path.GetFullPath(applicationDirectory).TrimEnd(Path.DirectorySeparatorChar).ToUpperInvariant();
         var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..16];
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VitanCut", "rollback", key);
+    }
+
+    private string GetConfiguredRollbackDirectory(string applicationDirectory) =>
+        _rollbackRoot is not null
+            ? Path.Combine(_rollbackRoot, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(applicationDirectory).TrimEnd(Path.DirectorySeparatorChar).ToUpperInvariant())))[..16])
+            : GetRollbackDirectory(applicationDirectory);
+
+    private string CreateWorkDirectory(string prefix)
+    {
+        var root = _temporaryRoot ?? Path.GetTempPath();
+        var directory = Path.Combine(root, prefix + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        return directory;
     }
 
     private static void TryDelete(string directory)

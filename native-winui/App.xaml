@@ -7,6 +7,17 @@
         <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
       </ResourceDictionary.MergedDictionaries>
       <FontFamily x:Key="ContentControlThemeFontFamily">Segoe UI</FontFamily>
+      <x:Double x:Key="UiBodySize">14</x:Double>
+      <x:Double x:Key="UiCaptionSize">12</x:Double>
+      <x:Double x:Key="UiSectionSize">16</x:Double>
+      <x:Double x:Key="UiPageSize">24</x:Double>
+      <Thickness x:Key="UiControlPadding">12,8</Thickness>
+      <Thickness x:Key="UiSectionPadding">16</Thickness>
+      <CornerRadius x:Key="UiControlRadius">6</CornerRadius>
+      <Style TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource UiBodySize}" />
+        <Setter Property="Foreground" Value="{StaticResource AppTextBrush}" />
+      </Style>
       <Thickness x:Key="WindowPagePadding">24</Thickness>
       <ThemeShadow x:Key="SurfaceShadow" />
       <LinearGradientBrush x:Key="PaneGlassBrush" StartPoint="0,0" EndPoint="0.8,1">
@@ -30,6 +41,9 @@
       <SolidColorBrush x:Key="AppOnAccentBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="AppSelectionBrush" Color="#22006CE0" />
       <SolidColorBrush x:Key="AppWarningBrush" Color="#FFF4CE" />
+      <SolidColorBrush x:Key="UiDangerBrush" Color="#B42318" />
+      <SolidColorBrush x:Key="UiSuccessBrush" Color="#087443" />
+      <SolidColorBrush x:Key="UiWarningTextBrush" Color="#97600F" />
       <SolidColorBrush x:Key="MetricAreaBrush" Color="#087E74" />
       <SolidColorBrush x:Key="MetricMaterialBrush" Color="#63737D" />
       <SolidColorBrush x:Key="MetricPayrollBrush" Color="#97600F" />
@@ -85,22 +99,22 @@
       <Setter Property="TextWrapping" Value="NoWrap" />
     </Style>
     <Style x:Key="SectionTitleTextBlockStyle" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="24" />
+      <Setter Property="FontSize" Value="{StaticResource UiPageSize}" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
     <Style x:Key="CardTitleTextBlockStyle" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontSize" Value="{StaticResource UiSectionSize}" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
     <Style x:Key="MutedTextBlockStyle" TargetType="TextBlock">
-      <Setter Property="Opacity" Value="0.82" />
+      <Setter Property="Opacity" Value="0.9" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
     <Style x:Key="PaneSurfaceStyle" TargetType="Border">
       <Setter Property="Background" Value="{StaticResource PaneGlassBrush}" />
-      <Setter Property="BorderBrush" Value="{StaticResource GlassEdgeBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource PanelStrokeBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="8" />
     </Style>
@@ -113,8 +127,18 @@
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="8" />
     </Style>
+    <Style x:Key="MaterialSplitterStyle" TargetType="Button">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+      <Setter Property="UseSystemFocusVisuals" Value="True" />
+    </Style>
     <Style x:Key="MetricSurfaceStyle" TargetType="Border" BasedOn="{StaticResource PaneSurfaceStyle}">
-      <Setter Property="Background" Value="{StaticResource MetricSurfaceBrush}" />
+      <Setter Property="Background" Value="{StaticResource SectionSurfaceBrush}" />
       <Setter Property="CornerRadius" Value="6" />
     </Style>
     <Style x:Key="ListSurfaceStyle" TargetType="Border">
@@ -123,25 +147,38 @@
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
     </Style>
-    <Style TargetType="Button">
+    <DataTemplate x:Key="FormulaReferenceTemplate">
+      <Grid ColumnSpacing="12" RowSpacing="2" Padding="0,4" ToolTipService.ToolTip="{Binding Label}">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" />
+        <TextBlock Grid.Column="1" Text="{Binding Value}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Section}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+      </Grid>
+    </DataTemplate>
+    <DataTemplate x:Key="MaterialPickerTemplate">
+      <StackPanel Spacing="2" Padding="0,4">
+        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+        <TextBlock Text="{Binding Caption}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+      </StackPanel>
+    </DataTemplate>
+    <Style x:Key="UiButtonStyle" TargetType="Button">
+      <Setter Property="FontSize" Value="{StaticResource UiBodySize}" />
       <Setter Property="MinHeight" Value="40" />
-      <Setter Property="Padding" Value="16,8" />
-      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="{StaticResource UiControlPadding}" />
+      <Setter Property="CornerRadius" Value="{StaticResource UiControlRadius}" />
     </Style>
-    <Style x:Key="AccentButtonStyle" TargetType="Button">
+    <Style x:Key="CommandLabelStyle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="{StaticResource UiBodySize}" />
+    </Style>
+    <Style TargetType="Button" BasedOn="{StaticResource UiButtonStyle}" />
+    <Style x:Key="AccentButtonStyle" TargetType="Button" BasedOn="{StaticResource UiButtonStyle}">
       <Setter Property="Background" Value="{StaticResource AppAccentBrush}" />
       <Setter Property="Foreground" Value="{StaticResource AppOnAccentBrush}" />
       <Setter Property="BorderBrush" Value="{StaticResource AccentEdgeBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="6" />
-      <Setter Property="MinHeight" Value="40" />
-      <Setter Property="Padding" Value="16,8" />
     </Style>
-    <Style x:Key="IconTextButtonStyle" TargetType="Button">
-      <Setter Property="MinHeight" Value="40" />
-      <Setter Property="Padding" Value="16,8" />
-      <Setter Property="CornerRadius" Value="6" />
-    </Style>
+    <Style x:Key="IconTextButtonStyle" TargetType="Button" BasedOn="{StaticResource UiButtonStyle}" />
     <Style x:Key="TopNavButtonStyle" TargetType="Button" BasedOn="{StaticResource IconTextButtonStyle}">
       <Setter Property="Width" Value="86" />
       <Setter Property="Height" Value="76" />

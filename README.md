@@ -2,6 +2,18 @@
 
 Нативное Windows-приложение для расчёта мебели: проекты, изделия, деталировка, материалы, раскрой листовых материалов и расчёт стоимости.
 
+## Локальные релизы
+
+Текущая версия после переноса UI-рефакторинга: **1.2.5**. Запуск: `release/1.2.5/VitanCut.WinUI.exe`.
+Предыдущие сборки сохранены в `release/1.1.1/` и `release/1.2.0/`. Новая сборка включает .NET runtime.
+Исходники версии 1.2.5 находятся в этом репозитории; история Git сохранена.
+
+Повторная сборка: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build-Release.ps1`.
+Core checks требуют отдельный `VITANCUT_TEST_ROOT`, например `.test-runtime/checks`.
+Для изолированной проверки задайте `VITANCUT_ENVIRONMENT=Development` и `VITANCUT_DATA_ROOT` вне папки executable.
+Текущие изменения перечислены в `release-notes/v1.2.5.md`.
+Миграция `supabase/migrations/2026101201_secure_and_seed_delta_workspaces.sql` сохранена в исходниках; автоматически на сервер не применялась.
+
 ## Возможности
 
 - проекты с изделиями, контрагентами, адресами и зарплатой;
@@ -19,7 +31,7 @@
 
 Скачайте архив из [Releases](https://github.com/gmmbcrimea/VitanCut/releases), распакуйте его в любую доступную для записи папку и запустите `VitanCut.WinUI.exe`.
 
-Данные приложения хранятся локально рядом со сборкой. Перед заменой версии сохраняйте незавершённую работу. Приложение также умеет импортировать и экспортировать базу в JSON из раздела настроек.
+Portable-версия хранит данные в своей папке `data`; при установке в Program Files используется `%LOCALAPPDATA%\VitanCut\data`. Перед заменой версии сохраняйте незавершённую работу и резервную копию базы. Приложение также умеет импортировать и экспортировать базу в JSON из раздела настроек.
 
 ## Сборка из исходников
 
@@ -30,16 +42,17 @@
 - Visual Studio с workload `Windows application development` или установленный Windows App SDK.
 
 ```powershell
-dotnet build native-winui/VitanCut.WinUI.csproj -c Release -p:Platform=x64
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build-Release.ps1
+$env:VITANCUT_TEST_ROOT = Join-Path (Get-Location) '.test-runtime/checks'
 dotnet run --project native-winui-tests/VitanCut.CoreChecks.csproj -c Release
 ```
 
-Готовая release-сборка находится в `native-winui/bin/x64/Release/net8.0-windows10.0.26100.0/win-x64/`.
+Готовая release-сборка находится в `release/1.2.5/`.
 
 Для локальной portable-упаковки:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File native-winui/package-portable.ps1 -Version 1.0.6
+powershell -ExecutionPolicy Bypass -File native-winui/package-portable.ps1 -Version 1.2.5
 ```
 
 ## Публикация обновления

@@ -30,7 +30,7 @@ public sealed partial class CreateProjectWindow : Window
         Root.Loaded += (_, _) =>
         {
             ResizeToContent();
-            CreateButton.Focus(FocusState.Programmatic);
+            ProjectNameBox.Focus(FocusState.Programmatic);
         };
     }
 
