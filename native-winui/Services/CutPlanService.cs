@@ -49,7 +49,7 @@ public static class CutPlanService
             {
                 if (!originals.TryGetValue(p.InstanceId, out var original) || p.SheetNumber < 1 || p.SheetNumber > count ||
                     !Same(p.BaseLength, original.BaseLength) || !Same(p.BaseWidth, original.BaseWidth) ||
-                    p.Rotated && (!original.AllowRotation || group.TextureDirection) ||
+                    p.Rotated && !original.AllowRotation ||
                     !Same(p.Length, p.Rotated ? original.BaseWidth : original.BaseLength) ||
                     !Same(p.Width, p.Rotated ? original.BaseLength : original.BaseWidth)) return null;
                 sheets[p.SheetNumber - 1].Placements.Add(original with { X = p.X, Y = p.Y, Length = p.Length, Width = p.Width, Rotated = p.Rotated });

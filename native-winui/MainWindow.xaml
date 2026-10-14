@@ -295,7 +295,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                   </Grid.RowDefinitions>
-                  <TextBlock Text="ЗП" Style="{StaticResource SectionTitleTextBlockStyle}" />
+                  <TextBlock Text="ЗП" Style="{StaticResource CardTitleTextBlockStyle}" />
                   <Grid Grid.Row="1" MinHeight="360">
                     <Border Style="{StaticResource ListSurfaceStyle}">
                       <ListView x:Name="PayrollsList"

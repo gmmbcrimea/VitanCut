@@ -427,8 +427,21 @@ Check(rotationAlternatives[0].Report.Groups.SelectMany(g => g.Sheets).SelectMany
     "Automatic optimization preserves the required rotated orientation when rotation is allowed");
 Check(!CuttingService.BuildDetailingReport(rotationState, rotationProject).Products[0].Rows[0].RotationLocked, "Detailing updates when rotation is enabled");
 rotationMaterial.TextureDirection = true;
-Check(CuttingService.BuildCutReport(rotationState, rotationProject).Unplaced.Count == 1 && CuttingService.BuildDetailingReport(rotationState, rotationProject).Products[0].Rows[0].RotationLocked,
-    "Texture direction blocks rotation in packing and detailing");
+var texturedCut = CuttingService.BuildCutReport(rotationState, rotationProject);
+Check(texturedCut.Unplaced.Count == 0 && texturedCut.Groups[0].TextureDirection &&
+    texturedCut.Groups.SelectMany(g => g.Sheets).SelectMany(s => s.Placements).All(p => p.Rotated && p.AllowRotation) &&
+    !CuttingService.BuildDetailingReport(rotationState, rotationProject).Products[0].Rows[0].RotationLocked,
+    "Texture direction preserves material metadata without blocking explicitly allowed rotation");
+Check(CutOptimization.Calculate(texturedCut).All(v => v.Report.Unplaced.Count == 0 &&
+    v.Report.Groups.SelectMany(g => g.Sheets).SelectMany(s => s.Placements).All(p => p.Rotated && p.AllowRotation)),
+    "Optimization allows required rotation for textured materials");
+var texturedPlan = CutPlanService.Capture(texturedCut, CutPlanService.Signature(texturedCut), "Textured rotation", "test");
+Check(CutPlanService.Restore(texturedCut, texturedPlan) is not null,
+    "Saved textured layouts restore explicitly allowed rotations");
+rotationDetail.AllowRotation = false;
+Check(CuttingService.BuildCutReport(rotationState, rotationProject).Unplaced.Count == 1 && DetailRotation.IsLocked(rotationDetail, rotationMaterial),
+    "Textured material still respects the individual detail rotation lock");
+rotationDetail.AllowRotation = true;
 rotationMaterial.TextureDirection = false;
 rotationMaterial.SheetLength = 800;
 rotationMaterial.SheetWidth = 800;

@@ -191,7 +191,7 @@ internal static class CutWorkflowChecks
                 g.Sheets.All(s => CutEditing.Valid(s.Placements, 620, 420, 10, 4)) &&
                 g.Sheets.SelectMany(s => s.Placements).Select(p => p.InstanceId).Order().SequenceEqual(
                     input.Groups.First(x => x.MaterialId == g.MaterialId).Sheets.SelectMany(s => s.Placements).Select(p => p.InstanceId).Order()) &&
-                g.Sheets.SelectMany(s => s.Placements).All(p => !p.Rotated || p.AllowRotation && !g.TextureDirection)));
+                g.Sheets.SelectMany(s => s.Placements).All(p => !p.Rotated || p.AllowRotation)));
             check(complete, $"Random multi-material packing preserves parts, kerf and texture: {sample}");
         }
         var twice = Report(original.Groups[0].Sheets[0], Sheet(2,

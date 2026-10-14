@@ -116,7 +116,7 @@ public static class CutOptimization
             {
                 var fresh = index == bins.Count;
                 var bin = fresh ? new Bin(width, height, mode) : bins[index];
-                foreach (var rotated in part.AllowRotation && !group.TextureDirection
+                foreach (var rotated in part.AllowRotation
                     ? new[] { preferRotation, !preferRotation } : new[] { false })
                 {
                     var length = rotated ? part.BaseWidth : part.BaseLength;
@@ -156,7 +156,7 @@ public static class CutOptimization
         foreach (var family in parts.GroupBy(p => (p.ProductId, p.DetailId, p.BaseLength, p.BaseWidth, p.AllowRotation)))
         {
             var first = family.First();
-            var rotated = rotate && first.AllowRotation && !group.TextureDirection;
+            var rotated = rotate && first.AllowRotation;
             var length = rotated ? first.BaseWidth : first.BaseLength;
             var width = rotated ? first.BaseLength : first.BaseWidth;
             var maxColumns = (int)Math.Floor((group.SheetLength - 2 * trim + gap) / (length + gap));

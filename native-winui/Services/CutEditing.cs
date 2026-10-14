@@ -170,7 +170,6 @@ public static class CutEditing
         {
             var moving = sheet.Placements.Where(p => ids.Contains(p.InstanceId)).ToList();
             if (moving.Count == 0) continue;
-            if (group.TextureDirection) return new(source, Error: "Направление текстуры запрещает поворот.");
             var remaining = sheet.Placements.Where(p => !ids.Contains(p.InstanceId)).ToList();
             sheet.Placements.Clear();
             var rotated = moving.Select(p => p with { Length = p.Width, Width = p.Length, Rotated = !p.Rotated }).ToList();
@@ -230,7 +229,6 @@ public static class CutEditing
         var (sourceGroup, sourceSheet, sourceIndex) = found[0];
         var selected = sourceSheet.Placements.Where(part => ids.Contains(part.InstanceId)).ToList();
         if (selected.Any(part => !part.AllowRotation)) return new(source, Error: "В выделении есть детали с запрещённым поворотом.");
-        if (sourceGroup.TextureDirection) return new(source, Error: "Направление текстуры запрещает поворот.");
         var rotated = selected.Select(part => part with { Length = part.Width, Width = part.Length, Rotated = !part.Rotated }).ToList();
         if (rotated.Any(part => part.Length > sourceGroup.SheetLength - 2 * source.Trim + Epsilon || part.Width > sourceGroup.SheetWidth - 2 * source.Trim + Epsilon))
             return new(source, Error: "Деталь не помещается даже на пустой лист в повёрнутом виде.");

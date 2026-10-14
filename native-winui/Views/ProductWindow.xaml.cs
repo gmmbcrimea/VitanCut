@@ -602,7 +602,7 @@ public sealed partial class ProductWindow : Window
         var rotationBox = new ToggleSwitch
         {
             IsOn = DetailRotation.CanRotate(row.Detail, row.SelectedMaterial?.Material),
-            IsEnabled = row.SelectedMaterial?.Material.TextureDirection != true,
+            IsEnabled = isSheetMaterial,
             OnContent = "",
             OffContent = "",
             MinWidth = 40,
@@ -950,7 +950,7 @@ public sealed partial class ProductWindow : Window
             try
             {
                 var toggle = rotation.Children.OfType<ToggleSwitch>().First();
-                toggle.IsEnabled = material?.TextureDirection != true;
+                toggle.IsEnabled = sheet;
                 toggle.IsOn = DetailRotation.CanRotate(row.Detail, material);
                 toggle.Visibility = sheet ? Visibility.Visible : Visibility.Collapsed;
                 rotation.Children.OfType<FontIcon>().First().Visibility = DetailRotation.IsLocked(row.Detail, material)
