@@ -1,0 +1,28 @@
+name: Publish installer
+on:
+  push:
+    tags:
+      - 'installer-v*'
+permissions:
+  contents: write
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and check production installer
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.Substring(11)
+          ./installer/build-installer.ps1 -Version $version
+          ./installer/contract-checks.ps1
+      - name: Publish installer
+        uses: softprops/action-gh-release@v2
+        with:
+          name: VitanCut Installer 1.1.1
+          make_latest: false
+          generate_release_notes: false
+          body_path: release-notes/installer-v1.1.1.md
+          files: |
+            dist/installer/VitanCut.Setup.exe
+            dist/installer/VitanCut.Setup.exe.sha256
