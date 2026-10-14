@@ -307,6 +307,45 @@ if (OperatingSystem.IsWindows())
     Check(File.ReadAllText(Path.Combine(target, "VitanCut.WinUI.exe")) == "old executable" &&
           File.ReadAllText(Path.Combine(target, "data", "database.json")) == "user database",
         "Synthetic rollback restores prior app files without replacing user data");
+    var shellFixture = Path.Combine(output, "Обновление с пробелами");
+    var shellSource = Path.Combine(shellFixture, "new files");
+    var shellTarget = Path.Combine(shellFixture, "installed app");
+    var shellBackup = Path.Combine(shellFixture, "rollback");
+    var shellWork = Path.Combine(shellFixture, "helper");
+    foreach (var directory in new[] { shellSource, shellTarget, shellWork, Path.Combine(shellTarget, "data") }) Directory.CreateDirectory(directory);
+    File.Copy(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "where.exe"), Path.Combine(shellSource, "VitanCut.WinUI.exe"));
+    File.WriteAllText(Path.Combine(shellSource, "version.txt"), "new version");
+    File.WriteAllText(Path.Combine(shellTarget, "version.txt"), "old version");
+    File.WriteAllText(Path.Combine(shellTarget, "data", "database.json"), "preserved database");
+    var shellScript = Path.Combine(shellWork, "apply-update.ps1");
+    File.WriteAllText(shellScript, AppUpdateService.BuildUpdateScript(shellSource + "\\", shellTarget + "\\",
+        Path.Combine(shellTarget, "VitanCut.WinUI.exe"), shellWork, int.MaxValue, shellBackup), new System.Text.UTF8Encoding(true));
+    var helperStart = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true };
+    foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", shellScript }) helperStart.ArgumentList.Add(argument);
+    helperStart.Environment["LOCALAPPDATA"] = Path.Combine(shellFixture, "isolated-profile");
+    using var shellHelper = Process.Start(helperStart)!;
+    if (!shellHelper.WaitForExit(30000)) { shellHelper.Kill(); throw new Exception("Update helper timed out."); }
+    Check(shellHelper.ExitCode == 0 && File.ReadAllText(Path.Combine(shellTarget, "version.txt")) == "new version",
+        "Actual Windows PowerShell updater replaces files with Unicode, spaces and trailing separators");
+    Check(File.ReadAllText(Path.Combine(shellBackup, "version.txt")) == "old version" &&
+        !Directory.Exists(Path.Combine(shellBackup, "data")) && File.ReadAllText(Path.Combine(shellTarget, "data", "database.json")) == "preserved database",
+        "Actual updater creates rollback backup without copying or modifying user data");
+    Check(File.ReadAllText(Path.Combine(shellFixture, "isolated-profile", "VitanCut", "logs", "updater.log")).Contains("Update completed."),
+        "Actual updater reaches automatic relaunch and completion");
+    Directory.CreateDirectory(shellWork);
+    var blockedParent = Path.Combine(shellFixture, "blocked-backup-parent");
+    File.WriteAllText(blockedParent, "not a directory");
+    File.WriteAllText(Path.Combine(shellSource, "version.txt"), "must not be applied");
+    File.WriteAllText(shellScript, AppUpdateService.BuildUpdateScript(shellSource + "\\", shellTarget + "\\",
+        Path.Combine(shellTarget, "VitanCut.WinUI.exe"), shellWork, int.MaxValue, Path.Combine(blockedParent, "backup")), new System.Text.UTF8Encoding(true));
+    using var failingHelper = Process.Start(helperStart)!;
+    if (!failingHelper.WaitForExit(30000)) { failingHelper.Kill(); throw new Exception("Failure helper timed out."); }
+    Check(File.ReadAllText(Path.Combine(shellTarget, "version.txt")) == "new version" &&
+        File.ReadAllText(Path.Combine(shellTarget, "data", "database.json")) == "preserved database",
+        "Backup failure leaves installed files and user database intact");
+    var failureLog = File.ReadAllText(Path.Combine(shellFixture, "isolated-profile", "VitanCut", "logs", "updater.log"));
+    Check(failureLog.Contains("Update failed:") && !failureLog.Contains("Restoring previous application files."),
+        "Backup failure never mirrors an incomplete backup over the installed application");
 }
 Check(CloudSyncService.DescribeFailure(HttpStatusCode.BadRequest, "{\"code\":400,\"error_code\":\"invalid_credentials\",\"msg\":\"Invalid login credentials\"}") == "Неверный email или пароль.",
     "Cloud authentication errors use a human message");

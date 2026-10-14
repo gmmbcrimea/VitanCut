@@ -237,32 +237,23 @@ public sealed class AppUpdateService
             var script = BuildUpdateScript(sourceDirectory, _applicationDirectory, launchedExe, workDirectory, Environment.ProcessId, backupDirectory);
             var scriptPath = Path.Combine(workDirectory, "apply-update.ps1");
             File.WriteAllText(scriptPath, script, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-            var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-            var updater = Process.Start(new ProcessStartInfo
-            {
-                // cmd /c start detaches the updater from the WinUI process before it exits.
-                FileName = "cmd.exe",
-                Arguments = $"/d /c start \"VitanCut updater\" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encodedScript}",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden
-            });
-            if (updater is null) throw new IOException("Не удалось запустить установщик обновления.");
+            if (!await StartHelperAsync(scriptPath, workDirectory, cancellationToken))
+                throw new IOException("Не удалось запустить установщик обновления.");
             return true;
         }
-        catch (Exception error) when (error is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException)
+        catch (Exception error) when (error is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
             TryDelete(workDirectory);
             return false;
         }
     }
 
-    public Task<bool> RollbackAsync()
+    public async Task<bool> RollbackAsync()
     {
-        if (!_enabled) return Task.FromResult(false);
+        if (!_enabled) return false;
         var backupDirectory = GetConfiguredRollbackDirectory(_applicationDirectory);
         var backupExecutable = Path.Combine(backupDirectory, "VitanCut.WinUI.exe");
-        if (!File.Exists(backupExecutable) || !CanWriteTo(_applicationDirectory)) return Task.FromResult(false);
+        if (!File.Exists(backupExecutable) || !CanWriteTo(_applicationDirectory)) return false;
 
         var workDirectory = CreateWorkDirectory("VitanCut-rollback-");
         try
@@ -272,23 +263,39 @@ public sealed class AppUpdateService
                 Path.Combine(_applicationDirectory, "VitanCut.WinUI.exe"), workDirectory, Environment.ProcessId, mirror: true);
             var scriptPath = Path.Combine(workDirectory, "rollback.ps1");
             File.WriteAllText(scriptPath, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-            var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-            var updater = Process.Start(new ProcessStartInfo
-            {
-                FileName = "cmd.exe",
-                Arguments = $"/d /c start \"VitanCut recovery\" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encodedScript}",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden
-            });
-            if (updater is null) return Task.FromResult(false);
-            return Task.FromResult(true);
+            return await StartHelperAsync(scriptPath, workDirectory, CancellationToken.None);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             TryDelete(workDirectory);
-            return Task.FromResult(false);
+            return false;
         }
+    }
+
+    private static async Task<bool> StartHelperAsync(string scriptPath, string workDirectory, CancellationToken cancellationToken)
+    {
+        var start = new ProcessStartInfo("powershell.exe")
+        {
+            UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden
+        };
+        foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath })
+            start.ArgumentList.Add(argument);
+        using var helper = Process.Start(start);
+        if (helper is null) return false;
+        var ready = Path.Combine(workDirectory, "helper-ready");
+        try
+        {
+            for (var attempt = 0; attempt < 100; attempt++)
+            {
+                if (File.Exists(ready)) return true;
+                if (helper.HasExited) return false;
+                await Task.Delay(100, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) { if (!helper.HasExited) helper.Kill(); throw; }
+        // A late helper must not replace files after reporting a launch failure.
+        if (!helper.HasExited) helper.Kill();
+        return false;
     }
 
     internal static bool TryParseVersion(string? tag, out Version version)
@@ -355,40 +362,52 @@ public sealed class AppUpdateService
         $"$workDirectory = '{EscapePowerShell(workDirectory)}'",
         $"$backupDirectory = '{EscapePowerShell(backupDirectory ?? "")}'",
         $"$mirror = ${mirror.ToString().ToLowerInvariant()}",
+        "$source = [IO.Path]::GetFullPath($source).TrimEnd('\\')",
+        "$target = [IO.Path]::GetFullPath($target).TrimEnd('\\')",
+        "if ($backupDirectory) { $backupDirectory = [IO.Path]::GetFullPath($backupDirectory).TrimEnd('\\') }",
+        "$backupReady = $false; $copyStarted = $false",
+        "foreach ($directory in @($workDirectory, $backupDirectory) | Where-Object { $_ }) {",
+        "  $full = [IO.Path]::GetFullPath($directory).TrimEnd('\\')",
+        "  if ($full -eq [IO.Path]::GetPathRoot($full).TrimEnd('\\') -or $full -eq $target -or $target.StartsWith($full + '\\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe updater working directory.' }",
+        "}",
         "$logDirectory = Join-Path $env:LOCALAPPDATA 'VitanCut\\logs'",
         "$log = Join-Path $logDirectory 'updater.log'",
         "New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null",
-        "function Write-UpdateLog([string]$message) { Add-Content -LiteralPath $log -Value (\"$(Get-Date -Format o) $message\") }",
+        "function Write-UpdateLog([string]$message) { Add-Content -LiteralPath $log -Encoding UTF8 -Value (\"$(Get-Date -Format o) $message\") }",
         "",
         "try {",
+        "  [IO.File]::WriteAllText((Join-Path $workDirectory 'helper-ready'), 'ready')",
         $"  Write-UpdateLog 'Waiting for application process {processId} to exit.'",
         $"  while (Get-Process -Id {processId} -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 300 }}",
         "  if ($backupDirectory) {",
         "    Write-UpdateLog 'Saving current version for rollback.'",
         "    if (Test-Path -LiteralPath $backupDirectory) { Remove-Item -LiteralPath $backupDirectory -Recurse -Force }",
         "    New-Item -ItemType Directory -Force -Path $backupDirectory | Out-Null",
-        "    & robocopy $target $backupDirectory /E /XD (Join-Path $target 'data') /NFL /NDL /NJH /NJS /NC /NS | Out-Null",
+        "    & robocopy $target $backupDirectory /E /XD (Join-Path $target 'data') /R:3 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-File -LiteralPath $log -Encoding UTF8 -Append",
         "    if ($LASTEXITCODE -gt 7) { throw \"Could not save rollback copy (robocopy $LASTEXITCODE).\" }",
+        "    $backupReady = $true",
         "  }",
         "  Write-UpdateLog 'Copying update files.'",
-        "  if ($mirror) { & robocopy $source $target /MIR /XD 'data' /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null } else { & robocopy $source $target /E /XD (Join-Path $source 'data') (Join-Path $target 'data') /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null }",
+        "  $copyStarted = $true",
+        "  if ($mirror) { & robocopy $source $target /MIR /XD 'data' /IS /IT /R:3 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-File -LiteralPath $log -Encoding UTF8 -Append } else { & robocopy $source $target /E /XD (Join-Path $source 'data') (Join-Path $target 'data') /IS /IT /R:3 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-File -LiteralPath $log -Encoding UTF8 -Append }",
         "  if ($LASTEXITCODE -gt 7) { throw \"robocopy failed with code $LASTEXITCODE\" }",
         "  if (-not (Test-Path -LiteralPath $executable)) { throw 'Updated executable was not found.' }",
         "  Write-UpdateLog 'Starting updated application.'",
-        "  Start-Process -FilePath $executable -WorkingDirectory $target",
+        "  Start-Process -FilePath $executable -WorkingDirectory $target -WindowStyle Normal",
         "  Remove-Item -LiteralPath $workDirectory -Recurse -Force -ErrorAction SilentlyContinue",
         "  Write-UpdateLog 'Update completed.'",
         "} catch {",
         "  Write-UpdateLog (\"Update failed: \" + $_.Exception.Message)",
-        "  if ($backupDirectory -and (Test-Path -LiteralPath $backupDirectory)) {",
+        "  if ($backupReady -and $copyStarted) {",
         "    try {",
         "      Write-UpdateLog 'Restoring previous application files.'",
-        "      & robocopy $backupDirectory $target /MIR /XD 'data' /IS /IT /NFL /NDL /NJH /NJS /NC /NS | Out-Null",
+        "      & robocopy $backupDirectory $target /MIR /XD 'data' /IS /IT /R:3 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-File -LiteralPath $log -Encoding UTF8 -Append",
         "      if ($LASTEXITCODE -gt 7) { throw \"rollback robocopy failed with code $LASTEXITCODE\" }",
-        "      if (Test-Path -LiteralPath $executable) { Start-Process -FilePath $executable -WorkingDirectory $target }",
+        "      if (Test-Path -LiteralPath $executable) { Start-Process -FilePath $executable -WorkingDirectory $target -WindowStyle Normal }",
         "      Write-UpdateLog 'Previous application files restored.'",
         "    } catch { Write-UpdateLog (\"Rollback failed: \" + $_.Exception.Message) }",
         "  }",
+        "  elseif (-not $copyStarted -and (Test-Path -LiteralPath $executable)) { Start-Process -FilePath $executable -WorkingDirectory $target -WindowStyle Normal }",
         "}");
 
     private static string EscapePowerShell(string value) => value.Replace("'", "''", StringComparison.Ordinal);
