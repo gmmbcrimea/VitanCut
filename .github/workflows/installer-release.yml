@@ -16,13 +16,15 @@ jobs:
           $version = '${{ github.ref_name }}'.Substring(11)
           ./installer/build-installer.ps1 -Version $version
           ./installer/contract-checks.ps1
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./installer/contract-checks.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 checks failed.' }
       - name: Publish installer
         uses: softprops/action-gh-release@v2
         with:
-          name: VitanCut Installer 1.1.1
+          name: VitanCut Installer 1.1.2
           make_latest: false
           generate_release_notes: false
-          body_path: release-notes/installer-v1.1.1.md
+          body_path: release-notes/installer-v1.1.2.md
           files: |
             dist/installer/VitanCut.Setup.exe
             dist/installer/VitanCut.Setup.exe.sha256

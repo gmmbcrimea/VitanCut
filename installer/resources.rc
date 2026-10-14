@@ -12,8 +12,8 @@ IDI_INSTALLER ICON "installer-icon.ico"
 202 RCDATA "uninstall-files.ps1"
 
 1 VERSIONINFO
-FILEVERSION 1,1,1,0
-PRODUCTVERSION 1,1,1,0
+FILEVERSION 1,1,2,0
+PRODUCTVERSION 1,1,2,0
 FILEFLAGSMASK 0x3fL
 FILEFLAGS 0x0L
 FILEOS 0x40004L
@@ -26,11 +26,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "GMMB\0"
             VALUE "FileDescription", "Установщик VitanCut\0"
-            VALUE "FileVersion", "1.1.1\0"
+            VALUE "FileVersion", "1.1.2\0"
             VALUE "InternalName", "VitanCut.Setup\0"
             VALUE "OriginalFilename", "VitanCut.Setup.exe\0"
             VALUE "ProductName", "VitanCut\0"
-            VALUE "ProductVersion", "1.1.1\0"
+            VALUE "ProductVersion", "1.1.2\0"
         END
     END
     BLOCK "VarFileInfo"

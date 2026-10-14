@@ -1,6 +1,7 @@
 param([Parameter(Mandatory)][string]$Metadata, [Parameter(Mandatory)][string]$Output)
 $ErrorActionPreference = 'Stop'
-$releases = @(Get-Content -LiteralPath $Metadata -Raw -Encoding UTF8 | ConvertFrom-Json)
+# Direct assignment preserves the top-level array in both Windows PowerShell 5.1 and PowerShell 7.
+$releases = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $Metadata -Raw -Encoding UTF8)
 foreach ($release in $releases) {
     if ($release.draft -or $release.prerelease -or $release.tag_name -notmatch '^v(\d+\.\d+\.\d+)$') { continue }
     $version = $Matches[1]
