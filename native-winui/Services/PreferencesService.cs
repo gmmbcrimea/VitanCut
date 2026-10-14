@@ -29,6 +29,11 @@ public sealed class PreferencesService(AppState state)
         Commit(() => Current.AnimationsEnabled = value);
     }
 
+    public void SetAcrylicBackgroundEnabled(bool value)
+    {
+        Commit(() => Current.AcrylicBackgroundEnabled = value);
+    }
+
     public void SetCursorRevealEnabled(bool value)
     {
         Commit(() => Current.CursorRevealEnabled = value);

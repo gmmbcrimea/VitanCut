@@ -587,6 +587,7 @@
 <ComboBox x:Name="ThemeBox" Header="Тема приложения" HorizontalAlignment="Stretch" SelectionChanged="ThemeChanged" SelectedIndex="-1"><ComboBoxItem Content="Системная" Tag="auto"/><ComboBoxItem Content="Светлая" Tag="light"/><ComboBoxItem Content="Тёмная" Tag="dark"/></ComboBox>
 <ComboBox x:Name="AccentBox" Grid.Column="1" Header="Акцентный цвет" HorizontalAlignment="Stretch" SelectionChanged="AccentChanged"/></Grid>
 <ToggleSwitch x:Name="CompactModeSwitch" Header="Компактный режим" Toggled="CompactModeToggled"/>
+<ToggleSwitch x:Name="AcrylicBackgroundSwitch" Header="Фон окна Acrylic" AutomationProperties.Name="Фон окна Acrylic" Toggled="AcrylicBackgroundToggled"/>
 <ToggleSwitch x:Name="AnimationsSwitch" Header="Анимации интерфейса" Toggled="AnimationsToggled"/>
 <ToggleSwitch x:Name="CursorRevealSwitch" Header="Подсветка под курсором" Toggled="CursorRevealToggled"/>
 </StackPanel></Border></StackPanel>

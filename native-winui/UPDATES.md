@@ -1,6 +1,6 @@
 # Release validation
 
-The primary repository contains the 1.2.5 sources, including the accepted UI changes. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
+The primary repository contains the 1.2.6 sources, including the accepted Acrylic background toggle. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
 
 ## Validate version metadata
 

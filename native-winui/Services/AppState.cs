@@ -106,6 +106,7 @@ public sealed class AppState
         imported.Preferences.Theme = local.Theme;
         imported.Preferences.AccentColor = local.AccentColor;
         imported.Preferences.CompactMode = local.CompactMode;
+        imported.Preferences.AcrylicBackgroundEnabled = local.AcrylicBackgroundEnabled;
         imported.Preferences.AnimationsEnabled = local.AnimationsEnabled;
         imported.Preferences.CursorRevealEnabled = local.CursorRevealEnabled;
         imported.Preferences.DetailingExportFormat = local.DetailingExportFormat;

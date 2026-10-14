@@ -1370,6 +1370,7 @@ public sealed partial class MainWindow : Window
         _settingsPage.Load(App.Preferences.Current);
         RefreshCloudSettings();
         CursorRevealSwitch.IsOn = App.Preferences.Current.CursorRevealEnabled;
+        AcrylicBackgroundSwitch.IsOn = App.Preferences.Current.AcrylicBackgroundEnabled;
           DetailingImagesSwitch.IsOn = App.Preferences.Current.DetailingIncludeImages;
         _loadingSettings = false;
         ApplyCompactMode();
@@ -1404,6 +1405,12 @@ public sealed partial class MainWindow : Window
         if (_loadingSettings) return;
         App.Preferences.SetAnimationsEnabled(AnimationsSwitch.IsOn);
         ApplyAnimations();
+    }
+
+    private void AcrylicBackgroundToggled(object sender, RoutedEventArgs e)
+    {
+        if (_loadingSettings) return;
+        App.Preferences.SetAcrylicBackgroundEnabled(AcrylicBackgroundSwitch.IsOn);
     }
 
     private void CursorRevealToggled(object sender, RoutedEventArgs e)

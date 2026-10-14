@@ -37,6 +37,16 @@ public static class ThemeService
             _ => ElementTheme.Default
         };
         ApplyCaption(window, root.ActualTheme == ElementTheme.Dark);
+        var acrylic = BackdropPolicy.UseAcrylic(preferences.AcrylicBackgroundEnabled,
+            new UISettings().AdvancedEffectsEnabled, new AccessibilitySettings().HighContrast);
+        if (acrylic)
+        {
+            if (window.SystemBackdrop is not DesktopAcrylicBackdrop) window.SystemBackdrop = new DesktopAcrylicBackdrop();
+        }
+        else if (window.SystemBackdrop is not null) window.SystemBackdrop = null;
+        if (window is MainWindow && root is Grid grid)
+            grid.Background = acrylic ? new SolidColorBrush(Microsoft.UI.Colors.Transparent)
+                : new SolidColorBrush(((AcrylicBrush)Application.Current.Resources["GlassChromeBrush"]).FallbackColor);
         if (registration.NeedsLayout(preferences)) ApplyLayout(root, preferences);
         registration.ApplyReveal(window, preferences);
     }
@@ -214,11 +224,12 @@ public static class ThemeService
         var system = new UISettings();
         var contrast = new AccessibilitySettings().HighContrast;
         var effects = system.AdvancedEffectsEnabled && !contrast;
+        var transparent = BackdropPolicy.UseAcrylic(preferences.AcrylicBackgroundEnabled, effects, contrast);
         var dark = preferences.Theme == "dark" || (preferences.Theme == "auto" && system.GetColorValue(UIColorType.Background).R < 80);
         var background = system.GetColorValue(UIColorType.Background);
         var foreground = system.GetColorValue(UIColorType.Foreground);
         SetBrush("PageSurfaceBrush", dark ? (effects ? "#E0111418" : "#111418") : (effects ? "#D8CCD5DE" : "#CCD5DE"));
-        SetBrush("PanelSurfaceBrush", dark ? (effects ? "#F22D3237" : "#2D3237") : (effects ? "#F8FFFFFF" : "#FFFFFF"));
+        SetBrush("PanelSurfaceBrush", dark ? (transparent ? "#602D3237" : "#2D3237") : (transparent ? "#70FFFFFF" : "#FFFFFF"));
         SetBrush("SidebarSurfaceBrush", dark ? (effects ? "#E820262C" : "#20262C") : (effects ? "#E8E3EAF0" : "#E3EAF0"));
         SetBrush("SectionSurfaceBrush", dark ? "#20262C" : "#EDF1F5");
         SetBrush("SoftPanelBrush", dark ? "#1C2227" : "#E5EBF0");
@@ -240,13 +251,14 @@ public static class ThemeService
         foreach (var key in new[] { "ButtonBorderBrushPointerOver", "TextControlBorderBrushPointerOver" }) SetBrush(key, dark ? "#80D1E0E8" : "#80808B96");
         SetGradient("GlassEdgeBrush", dark ? ["#A0DAEBF5", "#708EA0AF", "#508EA0AF", "#808EA0AF"] : ["#FFFFFFFF", "#80808B96", "#60808B96", "#C0FFFFFF"]);
         SetGradient("MetricSurfaceBrush", dark ? ["#F84A545D", "#F0374048"] : ["#FFF5F8FA", "#FFE0E8EF"]);
-        SetGradient("PaneGlassBrush", dark ? ["#F2383F46", "#F0292E34"] : ["#FEFFFFFF", "#F0F4F7FA"]);
+        SetGradient("PaneGlassBrush", dark ? (transparent ? ["#50383F46", "#40292E34"] : ["#F2383F46", "#F0292E34"])
+            : (transparent ? ["#60FFFFFF", "#50F4F7FA"] : ["#FEFFFFFF", "#F0F4F7FA"]));
         var acrylic = (AcrylicBrush)Application.Current.Resources["GlassChromeBrush"];
         acrylic.TintColor = ParseColor(dark ? "#24292D" : "#F4F7F9");
         acrylic.FallbackColor = contrast ? background : acrylic.TintColor;
         acrylic.TintOpacity = dark ? .62 : .7;
         acrylic.TintLuminosityOpacity = dark ? .72 : .85;
-        acrylic.AlwaysUseFallback = !effects;
+        acrylic.AlwaysUseFallback = !transparent;
         if (contrast)
         {
             foreach (var key in new[] { "PageSurfaceBrush", "PanelSurfaceBrush", "SidebarSurfaceBrush", "SectionSurfaceBrush", "SoftPanelBrush", "ButtonBackground", "ButtonBackgroundPointerOver", "ButtonBackgroundPressed", "TextControlBackground", "TextControlBackgroundPointerOver", "TextControlBackgroundFocused" }) SetColor(key, background);

@@ -80,6 +80,7 @@ public sealed class AppPreferences
     public string Theme { get; set; } = "auto";
     public string AccentColor { get; set; } = "system";
     public bool CompactMode { get; set; }
+    public bool AcrylicBackgroundEnabled { get; set; }
     public bool AnimationsEnabled { get; set; } = true;
     public bool CursorRevealEnabled { get; set; } = true;
     public string CutPalette { get; set; } = "blue";
