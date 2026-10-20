@@ -84,6 +84,12 @@ public sealed partial class ProductWindow : Window
         _catalogEditor = catalogEditor;
 
         InitializeComponent();
+        Root.GotFocus += (_, _) => CloseInactiveFormulaSuggestions();
+        Activated += (_, args) =>
+        {
+            if (args.WindowActivationState == WindowActivationState.Deactivated)
+                foreach (var target in _formulaFlyouts.Keys.ToList()) HideFormulaSuggestions(target);
+        };
         Title = _isNew ? "Vitan-Cut - Добавить изделие" : $"Vitan-Cut - {_sourceProduct.Name}";
         TitleText.Text = _isNew ? "Добавить изделие" : _sourceProduct.Name;
         SubtitleText.Text = $"{_project.Name} · {_project.Counterparty}";
@@ -735,6 +741,16 @@ public sealed partial class ProductWindow : Window
         flyout.Content = list;
         _formulaSuggestionLists[target] = list;
         _formulaFlyouts[target] = flyout;
+        target.PreviewKeyDown += (_, args) =>
+        {
+            if (args.Key == Windows.System.VirtualKey.Tab) HideFormulaSuggestions(target);
+        };
+        list.PreviewKeyDown += (_, args) =>
+        {
+            if (args.Key == Windows.System.VirtualKey.Tab) ReturnToFormula(target);
+        };
+        target.LostFocus += (_, _) => target.DispatcherQueue.TryEnqueue(CloseInactiveFormulaSuggestions);
+        list.LostFocus += (_, _) => target.DispatcherQueue.TryEnqueue(CloseInactiveFormulaSuggestions);
         list.ItemClick += (_, args) => InsertFormulaSuggestion(target, (FormulaReference)args.ClickedItem);
         list.KeyDown += (_, args) =>
         {
@@ -743,7 +759,11 @@ public sealed partial class ProductWindow : Window
             else if (args.Key == Windows.System.VirtualKey.Escape)
             { ReturnToFormula(target); args.Handled = true; }
         };
-        flyout.Closed += (_, _) => RefreshFormulaLabels();
+        flyout.Closed += (_, _) =>
+        {
+            if (!flyout.IsOpen) _formulaQueries.Remove(target);
+            RefreshFormulaLabels();
+        };
         target.Tag = row;
         target.SelectionChanged += (_, _) => { if (target.FocusState != FocusState.Unfocused) UpdateFormulaSuggestions(target); };
         target.KeyDown += (_, args) =>
@@ -763,7 +783,7 @@ public sealed partial class ProductWindow : Window
         _insertingReference = true;
         try
         {
-            flyout.Hide();
+            HideFormulaSuggestions(target);
             target.Focus(FocusState.Programmatic);
             target.SelectionStart = Math.Clamp(caret, 0, target.Text.Length);
             target.SelectionLength = 0;
@@ -773,14 +793,15 @@ public sealed partial class ProductWindow : Window
 
     private void InsertFormulaSuggestion(TextBox target, FormulaReference reference)
     {
-        if (!_formulaQueries.TryGetValue(target, out var query) || target.Text != query.Text ||
+        if (!_formulaFlyouts.TryGetValue(target, out var suggestions) || !suggestions.IsOpen || !FormulaSuggestionsOwnFocus(target) ||
+            !_formulaQueries.TryGetValue(target, out var query) || target.Text != query.Text ||
             !_formulaFields.TryGetValue(target, out var field)) return;
         _insertingReference = true;
         try
         {
             var edit = FormulaSuggestionInsertion.Apply(query.Text, query.Start, query.Caret, field.Presentation.Display(reference.Expression));
             target.Text = edit.Text;
-            _formulaFlyouts[target].Hide();
+            HideFormulaSuggestions(target);
             target.Focus(FocusState.Programmatic);
             target.SelectionStart = edit.Caret;
             target.SelectionLength = 0;
@@ -791,13 +812,18 @@ public sealed partial class ProductWindow : Window
     private void UpdateFormulaSuggestions(TextBox target)
     {
         if (_loading || _refreshingFormulaText || _insertingReference || !_formulaFlyouts.TryGetValue(target, out var flyout)) return;
+        if (!FormulaSuggestionsOwnFocus(target))
+        {
+            HideFormulaSuggestions(target);
+            return;
+        }
 
         var text = target.Text;
         var caret = Math.Clamp(target.SelectionStart, 0, text.Length);
         var queryStart = FormulaEditing.QueryStart(text, caret);
         if (queryStart < 0)
         {
-            if (flyout.IsOpen) flyout.Hide();
+            HideFormulaSuggestions(target);
             return;
         }
 
@@ -809,7 +835,7 @@ public sealed partial class ProductWindow : Window
             .ToList();
         if (references.Count == 0)
         {
-            if (flyout.IsOpen) flyout.Hide();
+            HideFormulaSuggestions(target);
             return;
         }
 
@@ -819,7 +845,35 @@ public sealed partial class ProductWindow : Window
             list.ItemsSource = references;
         list.SelectedItem = references.FirstOrDefault(reference => reference.Expression == selected) ?? references[0];
         _formulaQueries[target] = new FormulaQuery(text, queryStart, caret);
+        foreach (var other in _formulaFlyouts.Keys.Where(other => other != target).ToList()) HideFormulaSuggestions(other);
         if (!flyout.IsOpen) flyout.ShowAt(target);
+    }
+
+    private void HideFormulaSuggestions(TextBox target)
+    {
+        _formulaQueries.Remove(target);
+        if (_formulaFlyouts.TryGetValue(target, out var flyout) && flyout.IsOpen) flyout.Hide();
+    }
+
+    private bool FormulaSuggestionsOwnFocus(TextBox target)
+    {
+        if (target.XamlRoot is null) return false;
+        var focused = FocusManager.GetFocusedElement(target.XamlRoot) as DependencyObject;
+        _formulaSuggestionLists.TryGetValue(target, out var list);
+        while (focused is not null)
+        {
+            if (focused == target || focused == list) return true;
+            focused = VisualTreeHelper.GetParent(focused);
+        }
+        return false;
+    }
+
+    private void CloseInactiveFormulaSuggestions()
+    {
+        if (_insertingReference) return;
+        foreach (var (target, flyout) in _formulaFlyouts)
+            if (flyout.IsOpen && !FormulaSuggestionsOwnFocus(target)) HideFormulaSuggestions(target);
+        RefreshFormulaLabels();
     }
 
     private void RefreshOpenFormulaSuggestions()
