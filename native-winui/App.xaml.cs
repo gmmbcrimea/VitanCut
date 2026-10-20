@@ -38,27 +38,43 @@ public partial class App : Application
         InitializeComponent();
     }
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        StartupWindow? startup = null;
+        var startupClosed = false;
         try
         {
+            startup = new StartupWindow();
+            startup.Closed += (_, _) => startupClosed = true;
+            _mainWindow = startup;
+            var startupDelay = startup.ShowAsync();
+            // Let the splash render before reading local state on the UI thread.
+            await Task.Delay(50);
+            if (startupClosed || _mainWindow != startup) return;
             State.Load();
             Cloud.Load();
-            _mainWindow = new MainWindow();
+            await startupDelay;
+            if (startupClosed || _mainWindow != startup) return;
+            var main = new MainWindow();
+            _mainWindow = main;
+            main.Activate();
+            startup.Close();
         }
         catch (Exception error)
         {
             LogError(error);
             ShowRecovery(error);
+            if (!startupClosed) startup?.Close();
         }
-        _mainWindow!.Activate();
     }
 
     private void ShowRecovery(Exception error)
     {
+        var startup = _mainWindow as StartupWindow;
         var recovery = new RecoveryWindow(error, RetryLaunchAsync, RollbackAsync, Updates.CanRollback);
         _mainWindow = recovery;
         recovery.Activate();
+        startup?.Close();
     }
 
     private async Task RetryLaunchAsync(RecoveryWindow recovery)

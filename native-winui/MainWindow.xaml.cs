@@ -1476,10 +1476,20 @@ public sealed partial class MainWindow : Window
             await ImagePreviewService.SetVisibleAsync(image, image.Tag as string ?? "");
     }
 
-    private void CreateDetailingClick(object sender, RoutedEventArgs e)
+    private async void CreateDetailingClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedProject is { } project) _reports.OpenDetailingReport(project);
+        if (SelectedProject is not { } project || _buildingDetailing) return;
+        _buildingDetailing = true;
+        if (sender is Button button) button.IsEnabled = false;
+        try { await _reports.OpenDetailingReportAsync(project); }
+        catch (Exception error) { await _dialogs.ShowMessageAsync("Не удалось создать деталировку", error.Message); }
+        finally
+        {
+            _buildingDetailing = false;
+            if (sender is Button control) control.IsEnabled = true;
+        }
     }
+    private bool _buildingDetailing;
 
     private async void ExportDatabaseClick(object sender, RoutedEventArgs e)
     {

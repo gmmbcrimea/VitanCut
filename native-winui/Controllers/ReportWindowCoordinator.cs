@@ -10,6 +10,12 @@ public sealed class ReportWindowCoordinator(OwnedWindowActivator windows, AppSta
 {
     public async Task OpenCutReportAsync(Models.Project project, CutReportScope scope = CutReportScope.MainDsp)
     {
+        await ShowPreparationAsync(() => BuildCutReportWindowAsync(project, scope),
+            ["Подготовка раскроя…", "Расчёт вариантов размещения…", "Подготовка карты кроя…"]);
+    }
+
+    private async Task<Views.ReportWindow> BuildCutReportWindowAsync(Models.Project project, CutReportScope scope)
+    {
         List<Models.SavedCutPlan> PlansFor(Models.Project value) =>
             scope == CutReportScope.Additional ? value.AdditionalCutPlans : value.CutPlans;
         string ActiveFor(Models.Project value) =>
@@ -44,11 +50,40 @@ public sealed class ReportWindowCoordinator(OwnedWindowActivator windows, AppSta
         SavePlans(plans, activeId);
         var hasAdditional = scope == CutReportScope.MainDsp && await Task.Run(() =>
             CuttingService.BuildCutReport(snapshot, copy, applySavedLayout: false, scope: CutReportScope.Additional).Groups.Count > 0);
-        windows.Activate(new Views.ReportWindow(baseline, plans, activeId, SavePlans,
+        return new Views.ReportWindow(baseline, plans, activeId, SavePlans,
             hasAdditional ? () => OpenCutReportAsync(project, CutReportScope.Additional) : null,
-            isAdditional: scope == CutReportScope.Additional));
+            isAdditional: scope == CutReportScope.Additional);
     }
 
-    public void OpenDetailingReport(Models.Project project) =>
-        windows.Activate(new Views.ReportWindow(CuttingService.BuildDetailingReport(state, project)));
+    public Task OpenDetailingReportAsync(Models.Project project) =>
+        ShowPreparationAsync(() => Task.FromResult(new Views.ReportWindow(CuttingService.BuildDetailingReport(state, project))),
+            ["Подготовка деталировки…", "Расчёт размеров и материалов…", "Подготовка отчёта…"]);
+
+    private async Task ShowPreparationAsync(Func<Task<Views.ReportWindow>> build, string[] statuses)
+    {
+        var preparation = new Views.StartupWindow(TimeSpan.FromSeconds(3), 72, statuses);
+        try
+        {
+            windows.Activate(preparation);
+            var delay = preparation.ShowAsync();
+            await Task.Delay(50);
+            if (preparation.IsClosed) return;
+            var report = await build();
+            try
+            {
+                await delay;
+                if (!preparation.IsClosed) windows.Activate(report);
+                else report.Close();
+            }
+            catch
+            {
+                report.Close();
+                throw;
+            }
+        }
+        finally
+        {
+            if (!preparation.IsClosed) preparation.Close();
+        }
+    }
 }
