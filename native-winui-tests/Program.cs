@@ -10,6 +10,7 @@ if (string.IsNullOrWhiteSpace(testRoot))
 var output = Path.Combine(Path.GetFullPath(testRoot), "VitanCut-checks-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(output);
 var checks = 0;
+EdgeBandingChecks.Run(Check, output);
 Check(UiLayout.ReportPreparationDuration(1) == TimeSpan.FromSeconds(.5), "One product shows report preparation for half a second");
 Check(UiLayout.ReportPreparationDuration(6) == TimeSpan.FromSeconds(3), "Six products show report preparation for three seconds");
 Check(UiLayout.ReportPreparationDuration(0) == TimeSpan.FromSeconds(.5), "Empty projects retain a bounded preparation interval");
@@ -1083,6 +1084,13 @@ foreach (var unit in new[] { "m2", "lm", "pc" })
     Check(reloadedTextures.Database.Materials[textureChoice.Type].Single().Texture == texturedMaterial.Texture,
         "Material texture survives save, category move and restart for " + unit);
 }
+var freshMaterial = new Material { Name = textureLibrary.CreateUniqueName("Новый материал") };
+textureLibrary.Add("Fresh material", freshMaterial);
+var freshMaterialState = new AppState();
+freshMaterialState.Load(textureDatabasePath);
+Check(freshMaterialState.Database.Materials["Fresh material"].Single().Texture == string.Empty &&
+    freshMaterialState.Database.Materials["Moved pc"].Single().Texture.Length > 0,
+    "New material starts without a texture and leaves existing material textures intact");
 Check(library.ExistsName("  ручка  "), "Duplicate name ignores case and outer spaces");
 Reject(() => library.Add("Фурнитура", new Material { Name = "ручка" }), "Duplicate material cannot be added");
 Reject(() => library.Add("Фурнитура", new Material { Name = "Плохая цена", Cost = double.NaN }), "Nonfinite material price rejected");

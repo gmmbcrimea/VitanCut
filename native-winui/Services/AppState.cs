@@ -232,6 +232,7 @@ public sealed class AppState
                 {
                     detail.Id = Empty(detail.Id, Ids.NewId());
                     detail.Qty = detail.Qty <= 0 ? 1 : detail.Qty;
+                    detail.EdgeBands ??= [];
                 }
             }
         }
@@ -241,7 +242,11 @@ public sealed class AppState
             product.Id = Empty(product.Id, Ids.NewId());
             product.FixedSizes ??= [];
             product.Details ??= [];
-            foreach (var detail in product.Details) detail.Id = Empty(detail.Id, Ids.NewId());
+            foreach (var detail in product.Details)
+            {
+                detail.Id = Empty(detail.Id, Ids.NewId());
+                detail.EdgeBands ??= [];
+            }
         }
 
         // Missing JSON properties already use Detail.AllowRotation's default; preserve explicit false.

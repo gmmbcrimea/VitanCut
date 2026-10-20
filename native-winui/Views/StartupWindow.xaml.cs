@@ -35,6 +35,12 @@ public sealed partial class StartupWindow : Window
             presenter.IsMinimizable = false;
             presenter.SetBorderAndTitleBar(false, false);
         }
+        RemoveNativeFrame();
+        AppWindow.Changed += (_, args) =>
+        {
+            if (!IsClosed && args.DidSizeChange) UpdateRoundedRegion();
+        };
+        Activated += (_, _) => { if (!IsClosed) RemoveNativeFrame(); };
         var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
         AppWindow.Move(new PointInt32(area.X + (area.Width - AppWindow.Size.Width) / 2,
             area.Y + (area.Height - AppWindow.Size.Height) / 2));

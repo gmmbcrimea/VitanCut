@@ -126,8 +126,17 @@ public sealed class Detail
     public string LengthExpr { get; set; } = "длина изделия";
     public string WidthExpr { get; set; } = "глубина изделия";
     public bool AllowRotation { get; set; } = true;
+    public List<DetailEdgeBand> EdgeBands { get; set; } = [];
+    public bool IsGeneratedEdgeBand { get; set; }
 
     public override string ToString() => $"{Name} · {LengthExpr} x {WidthExpr} · {Qty:0} шт.";
+}
+
+public sealed class DetailEdgeBand
+{
+    public string Side { get; set; } = "";
+    public string MaterialId { get; set; } = "";
+    public string Type { get; set; } = "Кромка";
 }
 
 public sealed class Material
@@ -142,6 +151,7 @@ public sealed class Material
     public double SheetWidth { get; set; }
     public bool TextureDirection { get; set; }
     public string Texture { get; set; } = "";
+    public bool EdgeBandingEnabled { get; set; }
 }
 
 public sealed class FixedSize

@@ -9,7 +9,8 @@ public static class Calculator
     {
         var material = state.FindMaterial(detail.Type, detail.MaterialId);
         var unit = material?.Unit ?? "pc";
-        var lengthResult = unit is "m2" or "lm" ? FormulaEvaluator.Evaluate(product, detail) : new FormulaResult(0);
+        var lengthResult = detail.IsGeneratedEdgeBand ? EdgeBandingService.Length(state, product, detail.MaterialId) :
+            unit is "m2" or "lm" ? FormulaEvaluator.Evaluate(product, detail) : new FormulaResult(0);
         var widthResult = unit == "m2" ? FormulaEvaluator.Evaluate(product, detail, width: true) : new FormulaResult(0);
         var length = lengthResult.Value;
         var width = widthResult.Value;

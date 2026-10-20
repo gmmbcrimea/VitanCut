@@ -543,6 +543,7 @@
               <NumberBox x:Name="MaterialSheetWidthBox" Grid.Column="1" Header="Ширина листа" />
             </Grid>
             <CheckBox x:Name="MaterialTextureBox" Content="Есть направление текстуры" />
+            <CheckBox x:Name="MaterialEdgeBandingBox" Content="Разрешить кромление деталей" />
             <TextBlock Text="Текстура материала" FontWeight="SemiBold" Margin="0,8,0,0" />
             <Grid ColumnSpacing="12">
               <Grid.ColumnDefinitions><ColumnDefinition Width="100" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>

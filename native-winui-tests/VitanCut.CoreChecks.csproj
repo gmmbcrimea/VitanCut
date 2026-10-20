@@ -27,6 +27,7 @@
     <Compile Include="../native-winui/Services/CloudSyncService.cs" Link="Services/CloudSyncService.cs" />
     <Compile Include="../native-winui/Services/CloudEntityMerge.cs" Link="Services/CloudEntityMerge.cs" />
     <Compile Include="../native-winui/Services/Calculator.cs" Link="Services/Calculator.cs" />
+    <Compile Include="../native-winui/Services/EdgeBandingService.cs" Link="Services/EdgeBandingService.cs" />
     <Compile Include="../native-winui/Services/FormulaEvaluator.cs" Link="Services/FormulaEvaluator.cs" />
     <Compile Include="../native-winui/Services/FormulaText.cs" Link="Services/FormulaText.cs" />
     <Compile Include="../native-winui/Services/CuttingService.cs" Link="Services/CuttingService.cs" />

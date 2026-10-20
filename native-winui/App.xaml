@@ -156,9 +156,6 @@
         <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Section}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
       </Grid>
     </DataTemplate>
-    <DataTemplate x:Key="MaterialPickerCategoryTemplate">
-      <TextBlock Text="{Binding Name}" Style="{StaticResource CardTitleTextBlockStyle}" Margin="0,12,0,4" />
-    </DataTemplate>
     <DataTemplate x:Key="MaterialPickerTemplate">
       <StackPanel Spacing="2" Padding="0,4">
         <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />

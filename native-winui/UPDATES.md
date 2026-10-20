@@ -1,6 +1,6 @@
 # Release validation
 
-The primary repository contains the 1.2.11 sources, including themed Acrylic startup and report preparation windows, compact report splash height and product-count-based timing. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
+The primary repository contains the 1.2.12 sources, including per-side edge banding, collapsed material picker categories, texture preview reset and rounded borderless splash windows. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
 
 ## Validate version metadata
 

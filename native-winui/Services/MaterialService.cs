@@ -9,7 +9,8 @@ public sealed class MaterialService(AppState state)
 {
     public bool IsUsed(MaterialChoice choice) => state.Database.Projects.SelectMany(project => project.Products)
         .Concat(state.Database.Catalog.Values.SelectMany(products => products))
-        .SelectMany(product => product.Details).Any(detail => detail.Type == choice.Type && detail.MaterialId == choice.Material.Id);
+        .SelectMany(product => product.Details).Any(detail => detail.Type == choice.Type && detail.MaterialId == choice.Material.Id ||
+            detail.EdgeBands.Any(edge => edge.Type == choice.Type && edge.MaterialId == choice.Material.Id));
 
     public void Validate(Material material, Material? except = null)
     {
@@ -81,6 +82,13 @@ public sealed class MaterialService(AppState state)
                 if (!state.Database.MaterialGroups.Contains(group)) state.Database.MaterialGroups.Add(group);
                 state.Database.Materials[group].Add(material);
                 foreach (var detail in details) detail.Type = group;
+            }
+            foreach (var product in state.Database.Projects.SelectMany(project => project.Products)
+                .Concat(state.Database.Catalog.Values.SelectMany(products => products)))
+            {
+                foreach (var edge in product.Details.SelectMany(detail => detail.EdgeBands)
+                    .Where(edge => edge.Type == choice.Type && edge.MaterialId == material.Id)) edge.Type = group;
+                EdgeBandingService.Refresh(state, product);
             }
         });
         return new MaterialChoice(group, material);

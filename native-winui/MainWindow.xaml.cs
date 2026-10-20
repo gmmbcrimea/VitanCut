@@ -107,7 +107,7 @@ public sealed partial class MainWindow : Window
         _materialPage = new MaterialPageController(
             App.MaterialLibrary, MaterialCategoriesList, MaterialsList, GroupedMaterialsList, MaterialListEmptyPanel,
             MaterialParametersEmptyPanel, MaterialParametersPanel, MaterialTypeBox, MaterialNameBox,
-            MaterialUnitBox, MaterialCostBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialTextureBox,
+            MaterialUnitBox, MaterialCostBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialTextureBox, MaterialEdgeBandingBox,
             MaterialSortBox);
         _catalogPage = new CatalogPageController(
             App.Catalog, CustomersList, CustomerProjectsList, CustomerProjectsTitle, CustomerProjectsSubtitle);
@@ -944,6 +944,7 @@ public sealed partial class MainWindow : Window
         _materialPage.Refresh(select);
         _materialSelectionModel.Reset(_materialPage.ChoicesInViewOrder.Select(choice => choice.Material.Id));
         _loadingMaterials = false;
+        _ = UpdateMaterialTexturePreviewAsync();
     }
 
     private void FillMaterial() => _materialPage.RenderSelected();
@@ -1006,6 +1007,7 @@ public sealed partial class MainWindow : Window
         _materialPage.RefreshCurrentCategory();
         ResetMaterialSelection();
         _loadingMaterials = false;
+        _ = UpdateMaterialTexturePreviewAsync();
     }
     private void MaterialCategoriesSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -1014,6 +1016,7 @@ public sealed partial class MainWindow : Window
         _materialPage.OnCategoryChanged();
         ResetMaterialSelection();
         _loadingMaterials = false;
+        _ = UpdateMaterialTexturePreviewAsync();
     }
 
     private void MaterialsSelectionChanged(object sender, SelectionChangedEventArgs e)

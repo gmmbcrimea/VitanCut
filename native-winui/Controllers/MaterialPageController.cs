@@ -21,12 +21,13 @@ public sealed class MaterialPageController
     private readonly NumberBox _sheetLength;
     private readonly NumberBox _sheetWidth;
     private readonly CheckBox _texture;
+    private readonly CheckBox _edgeBanding;
     private readonly ComboBox _sort;
     private MaterialChoice? _selectedMaterial;
 
     public MaterialPageController(MaterialService materials, ListView categories, ListView items, ListView groupedItems,
         UIElement listEmpty, UIElement parametersEmpty, UIElement parameters, TextBox type, TextBox name,
-        ComboBox unit, NumberBox cost, NumberBox sheetLength, NumberBox sheetWidth, CheckBox texture, ComboBox sort)
+        ComboBox unit, NumberBox cost, NumberBox sheetLength, NumberBox sheetWidth, CheckBox texture, CheckBox edgeBanding, ComboBox sort)
     {
         _materials = materials;
         _categories = categories;
@@ -42,6 +43,7 @@ public sealed class MaterialPageController
         _sheetLength = sheetLength;
         _sheetWidth = sheetWidth;
         _texture = texture;
+        _edgeBanding = edgeBanding;
         _sort = sort;
     }
 
@@ -86,6 +88,7 @@ public sealed class MaterialPageController
         _sheetLength.Value = choice?.Material.SheetLength ?? 0;
         _sheetWidth.Value = choice?.Material.SheetWidth ?? 0;
         _texture.IsChecked = choice?.Material.TextureDirection ?? false;
+        _edgeBanding.IsChecked = choice?.Material.EdgeBandingEnabled ?? false;
         var unit = choice?.Material.Unit ?? "pc";
         _unit.SelectedIndex = unit == "m2" ? 0 : unit == "lm" ? 1 : 2;
         _parametersEmpty.Visibility = choice is null ? Visibility.Visible : Visibility.Collapsed;
@@ -103,6 +106,7 @@ public sealed class MaterialPageController
         material.SheetWidth = material.Unit == "m2" ? EditorValue(_sheetWidth) : 0;
         material.TextureDirection = material.Unit == "m2" && _texture.IsChecked == true;
         material.Texture = SelectedMaterial?.Material.Texture ?? string.Empty;
+        material.EdgeBandingEnabled = _edgeBanding.IsChecked == true;
     }
 
     public void UpdateSheetFields()
