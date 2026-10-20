@@ -12,6 +12,26 @@ Directory.CreateDirectory(output);
 var checks = 0;
 EdgeBandingChecks.Run(Check, output);
 MaterialPricingChecks.Run(Check, output);
+var orderedDetails = new Product
+{
+    Details = [new() { Type = "Стекло", Name = "Glass" }, new() { Type = "Кромка", Name = "Edge", IsGeneratedEdgeBand = true },
+        new() { Type = "Фурнитура", Name = "Hardware" }, new() { Type = "Пиломатериалы", Name = "First wood" },
+        new() { Type = "Алюминий", Name = "Aluminum" }, new() { Type = "Пиломатериалы", Name = "Second wood" }]
+};
+var beforeOrdering = orderedDetails.Details.ToArray();
+orderedDetails.Details[0].LengthExpr = $"[[detail:{orderedDetails.Details[3].Id}:length]]";
+DetailOrdering.SortForSave(orderedDetails);
+Check(orderedDetails.Details.Select(detail => detail.Name).SequenceEqual(["First wood", "Second wood", "Hardware", "Edge", "Aluminum", "Glass"]),
+    "Saving orders wood, hardware, edge banding and remaining categories alphabetically with stable order within a category");
+Check(beforeOrdering.All(detail => orderedDetails.Details.Contains(detail)) &&
+    orderedDetails.Details.Last().LengthExpr == $"[[detail:{beforeOrdering[3].Id}:length]]" && orderedDetails.Details[3].IsGeneratedEdgeBand,
+    "Detail sorting preserves identities, references and generated edge banding");
+DetailOrdering.SortForSave(orderedDetails);
+Check(orderedDetails.Details[0] == beforeOrdering[3] && orderedDetails.Details[1] == beforeOrdering[5], "Repeated detail sorting remains stable");
+var legacyWoodOrder = new Product { Details = [new() { Type = "Кромка" }, new() { Type = "ЛДСП" }, new() { Type = "фурнитура" }] };
+DetailOrdering.SortForSave(legacyWoodOrder);
+Check(legacyWoodOrder.Details.Select(detail => detail.Type).SequenceEqual(["ЛДСП", "фурнитура", "Кромка"]),
+    "Legacy sheet categories and case variants retain the requested priority");
 Check(UiLayout.ReportPreparationDuration(1) == TimeSpan.FromSeconds(.5), "One product shows report preparation for half a second");
 Check(UiLayout.ReportPreparationDuration(6) == TimeSpan.FromSeconds(3), "Six products show report preparation for three seconds");
 Check(UiLayout.ReportPreparationDuration(0) == TimeSpan.FromSeconds(.5), "Empty projects retain a bounded preparation interval");

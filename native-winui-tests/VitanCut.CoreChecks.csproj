@@ -54,5 +54,6 @@
     <Compile Include="../native-winui/Services/CutColors.cs" Link="Services/CutColors.cs" />
     <Compile Include="../native-winui/Services/DetailTableLayout.cs" Link="Services/DetailTableLayout.cs" />
     <Compile Include="../native-winui/Services/DetailRotation.cs" Link="Services/DetailRotation.cs" />
+    <Compile Include="../native-winui/Services/DetailOrdering.cs" Link="Services/DetailOrdering.cs" />
   </ItemGroup>
 </Project>

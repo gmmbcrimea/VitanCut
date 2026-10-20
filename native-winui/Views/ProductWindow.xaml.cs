@@ -435,6 +435,8 @@ public sealed partial class ProductWindow : Window
         try
         {
 
+        var savedProduct = CloneProduct(_sourceProduct);
+        DetailOrdering.SortForSave(savedProduct);
         if (_isNew && !_catalogEditor && _catalog is not null)
         {
             var exists = _catalog.GetProducts(_project.Counterparty)
@@ -455,11 +457,11 @@ public sealed partial class ProductWindow : Window
                 var result = await decision.ShowAsync();
                 if (result == ContentDialogResult.None) return;
                 if (result == ContentDialogResult.Primary)
-                    _catalog.SaveProduct(_project.Counterparty, null, CloneProduct(_sourceProduct));
+                    _catalog.SaveProduct(_project.Counterparty, null, CloneProduct(savedProduct));
             }
         }
 
-        ProductSaved?.Invoke(CloneProduct(_sourceProduct), _isNew);
+        ProductSaved?.Invoke(savedProduct, _isNew);
         Close();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
