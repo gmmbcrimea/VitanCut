@@ -378,15 +378,17 @@
                         RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
                 <ListView.ItemTemplate>
                   <DataTemplate x:DataType="models:CustomerProductItem">
-                    <Grid Padding="12" RowSpacing="4">
-                      <Grid.RowDefinitions>
-                          <RowDefinition Height="Auto" />
-                          <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                      </Grid.RowDefinitions>
-                      <TextBlock Text="{x:Bind ProductName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Grid.Row="1" Text="{x:Bind ProjectName}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Grid.Row="2" Text="{x:Bind SizeText}" Opacity="0.56" TextTrimming="CharacterEllipsis" />
+                    <Grid Padding="12" ColumnSpacing="10">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                      </Grid.ColumnDefinitions>
+                      <Image Width="56" Height="56" Stretch="Uniform" Tag="{x:Bind Product.Image}" Loaded="ProductThumbnailLoaded" />
+                      <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="{x:Bind ProductName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{x:Bind ProjectName}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{x:Bind SizeText}" Opacity="0.56" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
                     </Grid>
                   </DataTemplate>
                 </ListView.ItemTemplate>

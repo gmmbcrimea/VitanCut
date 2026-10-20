@@ -4,14 +4,14 @@
 
 ## Локальные релизы
 
-Текущая версия: **1.2.8**. Запуск: `release/1.2.8/VitanCut.WinUI.exe`.
+Текущая версия: **1.2.9**. Запуск: `release/1.2.9/VitanCut.WinUI.exe`.
 Предыдущие сборки сохранены в `release/1.1.1/` и `release/1.2.0/`. Новая сборка включает .NET runtime.
-Исходники версии 1.2.8 находятся в этом репозитории; история Git сохранена.
+Исходники версии 1.2.9 находятся в этом репозитории; история Git сохранена.
 
 Повторная сборка: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build-Release.ps1`.
 Core checks требуют отдельный `VITANCUT_TEST_ROOT`, например `.test-runtime/checks`.
 Для изолированной проверки задайте `VITANCUT_ENVIRONMENT=Development` и `VITANCUT_DATA_ROOT` вне папки executable.
-Текущие изменения перечислены в `release-notes/v1.2.8.md`.
+Текущие изменения перечислены в `release-notes/v1.2.9.md`.
 Миграция `supabase/migrations/2026101201_secure_and_seed_delta_workspaces.sql` сохранена в исходниках; автоматически на сервер не применялась.
 
 ## Возможности
@@ -47,12 +47,12 @@ $env:VITANCUT_TEST_ROOT = Join-Path (Get-Location) '.test-runtime/checks'
 dotnet run --project native-winui-tests/VitanCut.CoreChecks.csproj -c Release
 ```
 
-Готовая release-сборка находится в `release/1.2.8/`.
+Готовая release-сборка находится в `release/1.2.9/`.
 
 Для локальной portable-упаковки:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File native-winui/package-portable.ps1 -Version 1.2.8
+powershell -ExecutionPolicy Bypass -File native-winui/package-portable.ps1 -Version 1.2.9
 ```
 
 ## Публикация обновления

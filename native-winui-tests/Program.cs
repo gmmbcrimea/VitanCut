@@ -1065,6 +1065,21 @@ Check(dspDetailing.Products.SelectMany(product => product.Rows).All(row => row.M
     "Detail report can be limited to DSP materials with recalculated totals");
 
 var library = new MaterialService(state);
+var textureState = new AppState();
+var textureDatabasePath = Path.Combine(output, "material-textures.json");
+textureState.Load(textureDatabasePath);
+var textureLibrary = new MaterialService(textureState);
+foreach (var unit in new[] { "m2", "lm", "pc" })
+{
+    var texturedMaterial = new Material { Name = "Texture " + unit, Unit = unit,
+        Texture = "data:image/png;base64,iVBORw0KGgo=" };
+    textureLibrary.Add("Test " + unit, texturedMaterial);
+    var textureChoice = textureLibrary.Save(new MaterialChoice("Test " + unit, texturedMaterial), "Moved " + unit);
+    var reloadedTextures = new AppState();
+    reloadedTextures.Load(textureDatabasePath);
+    Check(reloadedTextures.Database.Materials[textureChoice.Type].Single().Texture == texturedMaterial.Texture,
+        "Material texture survives save, category move and restart for " + unit);
+}
 Check(library.ExistsName("  ручка  "), "Duplicate name ignores case and outer spaces");
 Reject(() => library.Add("Фурнитура", new Material { Name = "ручка" }), "Duplicate material cannot be added");
 Reject(() => library.Add("Фурнитура", new Material { Name = "Плохая цена", Cost = double.NaN }), "Nonfinite material price rejected");

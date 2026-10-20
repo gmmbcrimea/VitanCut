@@ -869,6 +869,8 @@ public sealed partial class ProductWindow : Window
         public override string ToString() => $"{Name}, {Caption}";
     }
 
+    public sealed record MaterialPickerCategory(string Name, List<MaterialPickerOption> Items);
+
     private Flyout CreateMaterialFlyout(DetailRow row, Button button)
     {
         var flyout = new Flyout();
@@ -879,6 +881,16 @@ public sealed partial class ProductWindow : Window
             MaxHeight = 300, IsItemClickEnabled = true, SelectionMode = ListViewSelectionMode.Single,
             ItemTemplate = (DataTemplate)Application.Current.Resources["MaterialPickerTemplate"]
         };
+        list.GroupStyle.Add(new GroupStyle
+        {
+            HeaderTemplate = (DataTemplate)Application.Current.Resources["MaterialPickerCategoryTemplate"],
+            HidesIfEmpty = true
+        });
+        var groupedMaterials = new Microsoft.UI.Xaml.Data.CollectionViewSource
+        {
+            IsSourceGrouped = true,
+            ItemsPath = new PropertyPath(nameof(MaterialPickerCategory.Items))
+        };
         var empty = new TextBlock { Text = "Материалы не найдены", Visibility = Visibility.Collapsed };
         var choices = row.MaterialChoices.OrderBy(choice => choice.Type).ThenBy(choice => choice.Material.Name)
             .Select(choice => new MaterialPickerOption(choice, choice.Material.Name, $"{choice.Type} / {UnitLabel(choice.Material.Unit)}")).ToArray();
@@ -887,7 +899,9 @@ public sealed partial class ProductWindow : Window
         void Filter()
         {
             var matches = choices.Where(option => UiTextSearch.Matches(search.Text, option.Name, option.Choice.Type)).ToArray();
-            list.ItemsSource = matches;
+            groupedMaterials.Source = matches.GroupBy(option => option.Choice.Type)
+                .Select(category => new MaterialPickerCategory(category.Key, category.ToList())).ToList();
+            list.ItemsSource = groupedMaterials.View;
             list.SelectedItem = matches.FirstOrDefault(option => option.Choice == row.SelectedMaterial) ?? matches.FirstOrDefault();
             empty.Visibility = matches.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         }

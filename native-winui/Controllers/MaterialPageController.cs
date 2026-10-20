@@ -102,6 +102,7 @@ public sealed class MaterialPageController
         material.SheetLength = material.Unit == "m2" ? EditorValue(_sheetLength) : 0;
         material.SheetWidth = material.Unit == "m2" ? EditorValue(_sheetWidth) : 0;
         material.TextureDirection = material.Unit == "m2" && _texture.IsChecked == true;
+        material.Texture = SelectedMaterial?.Material.Texture ?? string.Empty;
     }
 
     public void UpdateSheetFields()
