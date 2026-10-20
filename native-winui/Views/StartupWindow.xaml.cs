@@ -17,15 +17,17 @@ public sealed partial class StartupWindow : Window
     {
     }
 
-    public StartupWindow(TimeSpan duration, double logoSize, string[] statuses)
+    public StartupWindow(TimeSpan duration, double logoSize, string[] statuses, int height = 320)
     {
         _duration = duration;
         _statuses = statuses.Length > 0 ? statuses : ["Подготовка…"];
         InitializeComponent();
         Logo.Width = Logo.Height = logoSize;
+        if (height < 320) Logo.Margin = new Thickness(0, 0, 0, 44);
         StatusText.Text = _statuses[0];
         _statusTimer.Interval = TimeSpan.FromMilliseconds(duration.TotalMilliseconds / _statuses.Length);
-        AppWindow.Resize(new SizeInt32(440, 320));
+        App.Preferences.Apply(this);
+        AppWindow.Resize(new SizeInt32(440, height));
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.IsResizable = false;
@@ -50,4 +52,6 @@ public sealed partial class StartupWindow : Window
         _statusTimer.Start();
         return Task.Delay(_duration);
     }
+
+    public void RefreshAppearance() => App.Preferences.Apply(this);
 }

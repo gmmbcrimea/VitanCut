@@ -10,7 +10,7 @@ public sealed class ReportWindowCoordinator(OwnedWindowActivator windows, AppSta
 {
     public async Task OpenCutReportAsync(Models.Project project, CutReportScope scope = CutReportScope.MainDsp)
     {
-        await ShowPreparationAsync(() => BuildCutReportWindowAsync(project, scope),
+        await ShowPreparationAsync(() => BuildCutReportWindowAsync(project, scope), project.Products.Count,
             ["Подготовка раскроя…", "Расчёт вариантов размещения…", "Подготовка карты кроя…"]);
     }
 
@@ -56,12 +56,12 @@ public sealed class ReportWindowCoordinator(OwnedWindowActivator windows, AppSta
     }
 
     public Task OpenDetailingReportAsync(Models.Project project) =>
-        ShowPreparationAsync(() => Task.FromResult(new Views.ReportWindow(CuttingService.BuildDetailingReport(state, project))),
+        ShowPreparationAsync(() => Task.FromResult(new Views.ReportWindow(CuttingService.BuildDetailingReport(state, project))), project.Products.Count,
             ["Подготовка деталировки…", "Расчёт размеров и материалов…", "Подготовка отчёта…"]);
 
-    private async Task ShowPreparationAsync(Func<Task<Views.ReportWindow>> build, string[] statuses)
+    private async Task ShowPreparationAsync(Func<Task<Views.ReportWindow>> build, int productCount, string[] statuses)
     {
-        var preparation = new Views.StartupWindow(TimeSpan.FromSeconds(3), 72, statuses);
+        var preparation = new Views.StartupWindow(UiLayout.ReportPreparationDuration(productCount), 72, statuses, height: 220);
         try
         {
             windows.Activate(preparation);

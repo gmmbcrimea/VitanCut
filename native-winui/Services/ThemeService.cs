@@ -37,14 +37,14 @@ public static class ThemeService
             _ => ElementTheme.Default
         };
         ApplyCaption(window, root.ActualTheme == ElementTheme.Dark);
-        var acrylic = BackdropPolicy.UseAcrylic(preferences.AcrylicBackgroundEnabled,
+        var acrylic = BackdropPolicy.UseAcrylic(preferences.AcrylicBackgroundEnabled || window is Views.StartupWindow,
             new UISettings().AdvancedEffectsEnabled, new AccessibilitySettings().HighContrast);
         if (acrylic)
         {
             if (window.SystemBackdrop is not DesktopAcrylicBackdrop) window.SystemBackdrop = new DesktopAcrylicBackdrop();
         }
         else if (window.SystemBackdrop is not null) window.SystemBackdrop = null;
-        if (window is MainWindow && root is Grid grid)
+        if ((window is MainWindow || window is Views.StartupWindow) && root is Grid grid)
             grid.Background = acrylic ? new SolidColorBrush(Microsoft.UI.Colors.Transparent)
                 : new SolidColorBrush(((AcrylicBrush)Application.Current.Resources["GlassChromeBrush"]).FallbackColor);
         if (registration.NeedsLayout(preferences)) ApplyLayout(root, preferences);

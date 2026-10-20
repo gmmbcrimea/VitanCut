@@ -11,6 +11,9 @@ internal static class UiLayout
 
     public static bool ReportIsNarrow(double width) => width < 800;
 
+    public static TimeSpan ReportPreparationDuration(int productCount) =>
+        TimeSpan.FromMilliseconds(Math.Max(1, productCount) * 500d);
+
     public static bool ReportImageBesideTable(double width) => width >= 1000;
 
     public static double WorkListHeight(double availableHeight, double headerHeight) =>

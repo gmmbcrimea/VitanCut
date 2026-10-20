@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="VitanCut">
-  <Grid Background="{StaticResource PageSurfaceBrush}" Padding="28">
+  <Grid Background="Transparent" Padding="28">
     <Image x:Name="Logo" Source="ms-appx:///Assets/logo.png" Width="120" Height="120"
            Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
            AutomationProperties.Name="VitanCut" />

@@ -52,6 +52,7 @@ public partial class App : Application
             await Task.Delay(50);
             if (startupClosed || _mainWindow != startup) return;
             State.Load();
+            startup.RefreshAppearance();
             Cloud.Load();
             await startupDelay;
             if (startupClosed || _mainWindow != startup) return;

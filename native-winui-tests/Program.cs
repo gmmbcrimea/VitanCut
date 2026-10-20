@@ -10,6 +10,9 @@ if (string.IsNullOrWhiteSpace(testRoot))
 var output = Path.Combine(Path.GetFullPath(testRoot), "VitanCut-checks-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(output);
 var checks = 0;
+Check(UiLayout.ReportPreparationDuration(1) == TimeSpan.FromSeconds(.5), "One product shows report preparation for half a second");
+Check(UiLayout.ReportPreparationDuration(6) == TimeSpan.FromSeconds(3), "Six products show report preparation for three seconds");
+Check(UiLayout.ReportPreparationDuration(0) == TimeSpan.FromSeconds(.5), "Empty projects retain a bounded preparation interval");
 void Check(bool condition, string name)
 {
     if (!condition) throw new Exception("FAIL: " + name);
