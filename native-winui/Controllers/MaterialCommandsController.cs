@@ -25,7 +25,12 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
             return null;
         }
         var type = editor.EditorGroup;
-        var draft = new Material { Id = choice.Material.Id };
+        var draft = new Material
+        {
+            Id = choice.Material.Id,
+            Group = choice.Material.Group,
+            CreatedAt = choice.Material.CreatedAt
+        };
         editor.ApplyEditor(draft);
         try { materials.Validate(draft, choice.Material); }
         catch (InvalidOperationException error)
@@ -34,7 +39,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
             return null;
         }
         var material = choice.Material;
-        var previous = new Material { Name = material.Name, Group = material.Group, CreatedAt = material.CreatedAt, Unit = material.Unit, Cost = material.Cost, SheetLength = material.SheetLength, SheetWidth = material.SheetWidth, TextureDirection = material.TextureDirection, Texture = material.Texture, EdgeBandingEnabled = material.EdgeBandingEnabled };
+        var previous = new Material { Name = material.Name, Group = material.Group, CreatedAt = material.CreatedAt, Unit = material.Unit, Cost = material.Cost, PriceMode = material.PriceMode, RollLength = material.RollLength, SheetLength = material.SheetLength, SheetWidth = material.SheetWidth, TextureDirection = material.TextureDirection, Texture = material.Texture, EdgeBandingEnabled = material.EdgeBandingEnabled };
         try
         {
             Copy(draft, material);
@@ -55,6 +60,8 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
         target.SheetLength = source.SheetLength; target.SheetWidth = source.SheetWidth;
         target.TextureDirection = source.TextureDirection;
         target.EdgeBandingEnabled = source.EdgeBandingEnabled;
+        target.PriceMode = source.PriceMode;
+        target.RollLength = source.RollLength;
     }
 
     public async Task<bool> DeleteAsync(MaterialChoice choice)

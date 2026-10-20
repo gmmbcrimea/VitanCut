@@ -18,6 +18,7 @@ public sealed class MaterialService(AppState state)
         if (ExistsName(material.Name, except)) throw new InvalidOperationException("Материал с таким названием уже существует.");
         if (!double.IsFinite(material.Cost) || material.Cost < 0) throw new InvalidOperationException("Себестоимость должна быть неотрицательным числом.");
         if (material.Unit is not ("m2" or "lm" or "pc")) throw new InvalidOperationException("Выберите единицу измерения.");
+        if (MaterialPricing.Error(material) is { Length: > 0 } pricingError) throw new InvalidOperationException(pricingError);
         if (material.Unit == "m2" && (!double.IsFinite(material.SheetLength) || !double.IsFinite(material.SheetWidth) || material.SheetLength < 0 || material.SheetWidth < 0))
             throw new InvalidOperationException("Размеры листа должны быть неотрицательными числами.");
     }

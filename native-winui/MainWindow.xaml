@@ -533,7 +533,9 @@
               <ComboBoxItem Content="пог. м" Tag="lm" />
               <ComboBoxItem Content="шт." Tag="pc" />
             </ComboBox>
+            <ComboBox x:Name="MaterialPriceModeBox" Header="Цена указана" HorizontalAlignment="Stretch" SelectionChanged="MaterialPriceModeChanged" />
             <NumberBox x:Name="MaterialCostBox" Header="Цена за единицу" />
+            <NumberBox x:Name="MaterialRollLengthBox" Header="Длина бухты, м" Minimum="0" Visibility="Collapsed" />
             <Grid ColumnSpacing="12">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />

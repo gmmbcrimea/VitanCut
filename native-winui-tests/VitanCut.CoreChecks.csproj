@@ -33,6 +33,7 @@
     <Compile Include="../native-winui/Services/CuttingService.cs" Link="Services/CuttingService.cs" />
     <Compile Include="../native-winui/Services/CatalogService.cs" Link="Services/CatalogService.cs" />
     <Compile Include="../native-winui/Services/MaterialService.cs" Link="Services/MaterialService.cs" />
+    <Compile Include="../native-winui/Services/MaterialPricing.cs" Link="Services/MaterialPricing.cs" />
     <Compile Include="../native-winui/Services/ProjectService.cs" Link="Services/ProjectService.cs" />
     <Compile Include="../native-winui/Services/ReportDocumentService.cs" Link="Services/ReportDocumentService.cs" />
     <PackageReference Include="ClosedXML" Version="0.105.1" />

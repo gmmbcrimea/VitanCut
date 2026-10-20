@@ -18,6 +18,9 @@ public sealed class MaterialPageController
     private readonly TextBox _name;
     private readonly ComboBox _unit;
     private readonly NumberBox _cost;
+    private readonly ComboBox _priceMode;
+    private readonly NumberBox _rollLength;
+    private string _pricingUnit = "";
     private readonly NumberBox _sheetLength;
     private readonly NumberBox _sheetWidth;
     private readonly CheckBox _texture;
@@ -27,7 +30,7 @@ public sealed class MaterialPageController
 
     public MaterialPageController(MaterialService materials, ListView categories, ListView items, ListView groupedItems,
         UIElement listEmpty, UIElement parametersEmpty, UIElement parameters, TextBox type, TextBox name,
-        ComboBox unit, NumberBox cost, NumberBox sheetLength, NumberBox sheetWidth, CheckBox texture, CheckBox edgeBanding, ComboBox sort)
+        ComboBox unit, NumberBox cost, ComboBox priceMode, NumberBox rollLength, NumberBox sheetLength, NumberBox sheetWidth, CheckBox texture, CheckBox edgeBanding, ComboBox sort)
     {
         _materials = materials;
         _categories = categories;
@@ -40,6 +43,8 @@ public sealed class MaterialPageController
         _name = name;
         _unit = unit;
         _cost = cost;
+        _priceMode = priceMode;
+        _rollLength = rollLength;
         _sheetLength = sheetLength;
         _sheetWidth = sheetWidth;
         _texture = texture;
@@ -95,6 +100,11 @@ public sealed class MaterialPageController
         _parameters.Visibility = choice is null ? Visibility.Collapsed : Visibility.Visible;
         if (choice is null && SelectedCategory is { } category) _type.Text = category;
         UpdateSheetFields();
+        _rollLength.Value = choice?.Material.RollLength ?? 0;
+        _priceMode.SelectedItem = _priceMode.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(item => item.Tag?.ToString() == (choice?.Material.PriceMode ?? "unit"));
+        if (_priceMode.SelectedItem is null && _priceMode.Items.Count > 0) _priceMode.SelectedIndex = 0;
+        UpdatePriceModeFields();
     }
 
     public void ApplyEditor(Material material)
@@ -102,6 +112,8 @@ public sealed class MaterialPageController
         material.Name = string.IsNullOrWhiteSpace(_name.Text) ? "Новый материал" : _name.Text.Trim();
         material.Cost = EditorValue(_cost);
         material.Unit = _unit.SelectedItem is ComboBoxItem item ? item.Tag?.ToString() ?? "pc" : "pc";
+        material.PriceMode = material.Unit == "pc" ? "unit" : (_priceMode.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "unit";
+        material.RollLength = material.Unit == "lm" ? EditorValue(_rollLength) : 0;
         material.SheetLength = material.Unit == "m2" ? EditorValue(_sheetLength) : 0;
         material.SheetWidth = material.Unit == "m2" ? EditorValue(_sheetWidth) : 0;
         material.TextureDirection = material.Unit == "m2" && _texture.IsChecked == true;
@@ -116,6 +128,31 @@ public sealed class MaterialPageController
         _sheetLength.Visibility = visibility;
         _sheetWidth.Visibility = visibility;
         _texture.Visibility = visibility;
+        UpdatePricingFields();
+    }
+
+    private void UpdatePricingFields()
+    {
+        var unit = (_unit.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pc";
+        if (_pricingUnit != unit)
+        {
+            _pricingUnit = unit;
+            _priceMode.Items.Clear();
+            _priceMode.Items.Add(new ComboBoxItem { Content = unit == "m2" ? "За квадратный метр" : unit == "lm" ? "За погонный метр" : "За штуку", Tag = "unit" });
+            if (unit == "m2") _priceMode.Items.Add(new ComboBoxItem { Content = "За лист", Tag = "sheet" });
+            if (unit == "lm") _priceMode.Items.Add(new ComboBoxItem { Content = "За бухту", Tag = "roll" });
+            _priceMode.SelectedIndex = 0;
+        }
+        _priceMode.Visibility = unit == "pc" ? Visibility.Collapsed : Visibility.Visible;
+        UpdatePriceModeFields();
+    }
+
+    public void UpdatePriceModeFields()
+    {
+        var mode = (_priceMode.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "unit";
+        _rollLength.Visibility = _pricingUnit == "lm" && mode == "roll" ? Visibility.Visible : Visibility.Collapsed;
+        _cost.Header = mode == "sheet" ? "Цена за лист" : mode == "roll" ? "Цена за бухту" :
+            _pricingUnit == "m2" ? "Цена за м²" : _pricingUnit == "lm" ? "Цена за погонный метр" : "Цена за единицу";
     }
 
     private void BindItems()

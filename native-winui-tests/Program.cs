@@ -11,6 +11,7 @@ var output = Path.Combine(Path.GetFullPath(testRoot), "VitanCut-checks-" + Guid.
 Directory.CreateDirectory(output);
 var checks = 0;
 EdgeBandingChecks.Run(Check, output);
+MaterialPricingChecks.Run(Check, output);
 Check(UiLayout.ReportPreparationDuration(1) == TimeSpan.FromSeconds(.5), "One product shows report preparation for half a second");
 Check(UiLayout.ReportPreparationDuration(6) == TimeSpan.FromSeconds(3), "Six products show report preparation for three seconds");
 Check(UiLayout.ReportPreparationDuration(0) == TimeSpan.FromSeconds(.5), "Empty projects retain a bounded preparation interval");

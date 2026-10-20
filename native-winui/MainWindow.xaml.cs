@@ -107,7 +107,7 @@ public sealed partial class MainWindow : Window
         _materialPage = new MaterialPageController(
             App.MaterialLibrary, MaterialCategoriesList, MaterialsList, GroupedMaterialsList, MaterialListEmptyPanel,
             MaterialParametersEmptyPanel, MaterialParametersPanel, MaterialTypeBox, MaterialNameBox,
-            MaterialUnitBox, MaterialCostBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialTextureBox, MaterialEdgeBandingBox,
+            MaterialUnitBox, MaterialCostBox, MaterialPriceModeBox, MaterialRollLengthBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialTextureBox, MaterialEdgeBandingBox,
             MaterialSortBox);
         _catalogPage = new CatalogPageController(
             App.Catalog, CustomersList, CustomerProjectsList, CustomerProjectsTitle, CustomerProjectsSubtitle);
@@ -1364,6 +1364,12 @@ public sealed partial class MainWindow : Window
     {
         if (_loadingMaterials) return;
         _materialPage.UpdateSheetFields();
+    }
+
+    private void MaterialPriceModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingMaterials || _materialPage is null) return;
+        _materialPage.UpdatePriceModeFields();
     }
 
     private void LoadSettings()

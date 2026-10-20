@@ -147,6 +147,8 @@ public sealed class Material
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
     public double Cost { get; set; }
     public string Unit { get; set; } = "pc";
+    public string PriceMode { get; set; } = "unit";
+    public double RollLength { get; set; }
     public double SheetLength { get; set; }
     public double SheetWidth { get; set; }
     public bool TextureDirection { get; set; }

@@ -24,9 +24,10 @@ public static class Calculator
             "lm" => length * qty / 1000d,
             _ => qty
         };
-        var cost = usage * (material?.Cost ?? 0);
+        var pricingError = material is null ? "" : MaterialPricing.Error(material);
+        var cost = usage * (material is null ? 0 : MaterialPricing.UnitCost(material));
         return new DetailCalc(length, width, qty, area, rawArea, usage, cost, material,
-            string.Join("; ", new[] { lengthResult.Error, widthResult.Error }.Where(error => error.Length > 0).Distinct()));
+            string.Join("; ", new[] { lengthResult.Error, widthResult.Error, pricingError }.Where(error => error.Length > 0).Distinct()));
     }
 
     public static Totals Product(AppState state, Product product)
