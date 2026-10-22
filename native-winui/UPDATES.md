@@ -1,6 +1,6 @@
 # Release validation
 
-The primary repository contains the 1.2.15 sources, including focus-aware formula suggestions and dismissal on Tab and field changes. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
+The primary repository contains the 1.2.16 sources, including four additional interface languages, a local language preference, and a selected-language restart confirmation. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
 
 ## Validate version metadata
 

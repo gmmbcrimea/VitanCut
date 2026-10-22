@@ -77,6 +77,7 @@ public sealed class CutLayoutOverride
 }
 public sealed class AppPreferences
 {
+    public string Language { get; set; } = "ru";
     public string Theme { get; set; } = "auto";
     public string AccentColor { get; set; } = "system";
     public bool CompactMode { get; set; }

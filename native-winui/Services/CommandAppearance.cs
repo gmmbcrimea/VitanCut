@@ -9,7 +9,7 @@ internal static class CommandAppearance
     public static void Decorate(Button button)
     {
         if (button.Content is not string label) return;
-        Symbol? symbol = label switch
+        Symbol? symbol = UiText.Original(label) switch
         {
             "Сохранить" or "Сохранить раскрой" or "Сохранить деталировку" => Symbol.Save,
             "Печать" => Symbol.Print,
@@ -24,8 +24,8 @@ internal static class CommandAppearance
         if (symbol is null) return;
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         content.Children.Add(new SymbolIcon(symbol.Value) { Width = 20, Height = 20 });
-        content.Children.Add(new TextBlock { Text = label, Style = (Style)Application.Current.Resources["CommandLabelStyle"], VerticalAlignment = VerticalAlignment.Center });
+        content.Children.Add(new TextBlock { Text = UiText.Get(label), Style = (Style)Application.Current.Resources["CommandLabelStyle"], VerticalAlignment = VerticalAlignment.Center });
         button.Content = content;
-        AutomationProperties.SetName(button, label);
+        AutomationProperties.SetName(button,UiText.Get(label));
     }
 }

@@ -9,6 +9,8 @@ public sealed class PreferencesService(AppState state)
 
     public event EventHandler? Changed;
 
+    public void SetLanguage(string language) => Commit(() => Current.Language = UiText.NormalizeLanguage(language));
+
     public void SetTheme(string theme)
     {
         Commit(() => Current.Theme = theme is "light" or "dark" ? theme : "auto");

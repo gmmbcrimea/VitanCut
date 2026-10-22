@@ -61,9 +61,9 @@ public sealed class CatalogPageController
 
         _products.ItemsSource = null;
         _products.ItemsSource = products;
-        _title.Text = string.IsNullOrWhiteSpace(counterparty) ? "Изделия заказчика" : counterparty;
+        _title.Text = string.IsNullOrWhiteSpace(counterparty) ? UiText.Get("Изделия заказчика") : counterparty;
         _subtitle.Text = products.Count == 0
-            ? "Изделий у этого заказчика пока нет."
-            : $"{products.Count} изделие(й)";
+            ? UiText.Get("Изделий у этого заказчика пока нет.")
+            : UiText.Format($"{products.Count} изделие(й)");
     }
 }

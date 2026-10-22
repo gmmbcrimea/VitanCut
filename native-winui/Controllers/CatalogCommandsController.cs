@@ -29,7 +29,7 @@ public sealed class CatalogCommandsController(CatalogService catalog, DialogServ
     public async Task<bool> DeleteCounterpartyAsync(string name)
     {
         var message = $"Проекты и каталог заказчика \"{name}\" будут перенесены в \"Без заказчика\".";
-        if (!await dialogs.ConfirmDeleteAsync("Удалить заказчика?", message)) return false;
+        if (!await dialogs.ConfirmDeleteAsync(UiText.Get("Удалить заказчика?"),message)) return false;
 
         catalog.DeleteCounterparty(name);
         return true;

@@ -48,6 +48,8 @@ public static class ThemeService
             grid.Background = acrylic ? new SolidColorBrush(Microsoft.UI.Colors.Transparent)
                 : new SolidColorBrush(((AcrylicBrush)Application.Current.Resources["GlassChromeBrush"]).FallbackColor);
         if (registration.NeedsLayout(preferences)) ApplyLayout(root, preferences);
+        UiLocalization.Apply(root);
+        window.Title = UiText.Get(window.Title);
         registration.ApplyReveal(window, preferences);
     }
 
@@ -166,6 +168,11 @@ public static class ThemeService
             text.MinHeight = compact ? 32 : 40;
             text.Padding = compact ? new Thickness(8, 3, 8, 3) : new Thickness(12, 8, 12, 8);
             return;
+        }
+        if (root is ToggleSwitch toggle)
+        {
+            if (toggle.ReadLocalValue(ToggleSwitch.OnContentProperty) == DependencyProperty.UnsetValue) toggle.OnContent = UiText.Get("Вкл.");
+            if (toggle.ReadLocalValue(ToggleSwitch.OffContentProperty) == DependencyProperty.UnsetValue) toggle.OffContent = UiText.Get("Откл.");
         }
         if (root is NumberBox or ComboBox or ToggleSwitch or CheckBox or RadioButton)
         {

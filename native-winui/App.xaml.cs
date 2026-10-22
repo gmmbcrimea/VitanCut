@@ -6,6 +6,29 @@ namespace VitanCut.WinUI;
 
 public partial class App : Application
 {
+    internal static bool RestartRequested { get; set; }
+    private static bool _restartStarted;
+
+    internal static void ExitOrRestart()
+    {
+        if (RestartRequested && !_restartStarted)
+        {
+            var start = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = Environment.ProcessPath ?? throw new InvalidOperationException("Application path is unavailable."),
+                UseShellExecute = false,
+                WorkingDirectory = AppContext.BaseDirectory
+            };
+            start.ArgumentList.Add("--wait-for-process");
+            start.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            // Inherit the isolated data root for development previews as well.
+            using var child = System.Diagnostics.Process.Start(start)
+                ?? throw new InvalidOperationException("Application restart failed.");
+            _restartStarted = true;
+        }
+        Current.Exit();
+    }
+
     private Window? _mainWindow;
 #if VITANCUT_UI_REVIEW
     public static AppPaths Paths { get; } = UiReviewPaths.Create(AppContext.BaseDirectory, Environment.GetEnvironmentVariable("VITANCUT_DATA_ROOT"));
@@ -44,6 +67,17 @@ public partial class App : Application
         var startupClosed = false;
         try
         {
+            var commandLine = Environment.GetCommandLineArgs();
+            if (commandLine.Length == 3 && commandLine[1] == "--wait-for-process"
+                && int.TryParse(commandLine[2], out var parentId) && parentId != Environment.ProcessId)
+            {
+                try
+                {
+                    using var parent = System.Diagnostics.Process.GetProcessById(parentId);
+                    await parent.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+                }
+                catch (ArgumentException) { /* The previous instance has already exited. */ }
+            }
             startup = new StartupWindow();
             startup.Closed += (_, _) => startupClosed = true;
             _mainWindow = startup;
@@ -52,6 +86,7 @@ public partial class App : Application
             await Task.Delay(50);
             if (startupClosed || _mainWindow != startup) return;
             State.Load();
+            UiText.Language = UiText.NormalizeLanguage(Preferences.Current.Language);
             startup.RefreshAppearance();
             Cloud.Load();
             await startupDelay;
@@ -83,6 +118,7 @@ public partial class App : Application
         try
         {
             State.Load();
+            UiText.Language = UiText.NormalizeLanguage(Preferences.Current.Language);
             Cloud.Load();
             var main = new MainWindow();
             _mainWindow = main;

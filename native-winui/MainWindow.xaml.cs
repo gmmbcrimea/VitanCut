@@ -138,7 +138,7 @@ public sealed partial class MainWindow : Window
         ConfigureUpdateSurface();
         ConfigureTitleBar();
         AppWindow.Closing += MainWindowClosing;
-        Closed += (_, _) => { App.UiPerformance.Flush(); Application.Current.Exit(); };
+        Closed += (_, _) => { App.UiPerformance.Flush(); App.ExitOrRestart(); };
         App.Preferences.Apply(this);
         ApplyTitleBarForeground();
         Root.SizeChanged += (_, _) => UpdateResponsiveLayout();
@@ -170,10 +170,11 @@ public sealed partial class MainWindow : Window
     {
         var content = new StackPanel { Orientation = Orientation.Vertical, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
         content.Children.Add(new SymbolIcon { Symbol = symbol });
-        content.Children.Add(new TextBlock { Text = label, Style = (Style)Application.Current.Resources["CommandLabelStyle"], FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
+        content.Children.Add(new TextBlock { Text = UiText.Get(label), Style = (Style)Application.Current.Resources["CommandLabelStyle"], FontSize = 12,
+            MaxWidth = 76, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
         button.Content = content;
-        ToolTipService.SetToolTip(button, label);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
+        ToolTipService.SetToolTip(button, UiText.Get(label));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, UiText.Get(label));
     }
 
     private void ConfigureCloudSurface()
@@ -197,18 +198,18 @@ public sealed partial class MainWindow : Window
     private void ConfigureUpdateSurface()
     {
         _updateIcon = new SymbolIcon { Symbol = Symbol.Sync, Foreground = new SolidColorBrush(Color.FromArgb(255, 138, 153, 168)) };
-        _updateTitle = new TextBlock { Text = "Обновления", Style = (Style)Application.Current.Resources["CardTitleTextBlockStyle"] };
-        _updateDescription = new TextBlock { Text = "Проверка обновлений выполняется каждые 30 минут.", Style = (Style)Application.Current.Resources["MutedTextBlockStyle"], TextWrapping = TextWrapping.Wrap };
+        _updateTitle = new TextBlock { Text = UiText.Get("Обновления"), Style = (Style)Application.Current.Resources["CardTitleTextBlockStyle"] };
+        _updateDescription = new TextBlock { Text = UiText.Get("Проверка обновлений выполняется каждые 30 минут."), Style = (Style)Application.Current.Resources["MutedTextBlockStyle"], TextWrapping = TextWrapping.Wrap };
         _updateNotes = new TextBlock { Style = (Style)Application.Current.Resources["MutedTextBlockStyle"], TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
         _installUpdateButton = new Button
         {
-            Content = "Обновить",
+            Content = UiText.Get("Обновить"),
             Visibility = Visibility.Collapsed,
             Background = new SolidColorBrush(Color.FromArgb(255, 196, 61, 61)),
             Foreground = new SolidColorBrush(Colors.White)
         };
         _installUpdateButton.Click += InstallUpdateClick;
-        _checkUpdatesButton = new Button { Content = "Проверить сейчас" };
+        _checkUpdatesButton = new Button { Content = UiText.Get("Проверить сейчас") };
         _checkUpdatesButton.Click += CheckUpdatesClick;
         _updateProgress = new ProgressBar
         {
@@ -219,7 +220,7 @@ public sealed partial class MainWindow : Window
             Foreground = (Brush)Application.Current.Resources["AppAccentBrush"],
             Visibility = Visibility.Collapsed
         };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_updateProgress, "Скачивание обновления");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_updateProgress,UiText.Get("Скачивание обновления"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(_updateDescription, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
 
         var header = new Grid { ColumnSpacing = 14 };
@@ -261,32 +262,32 @@ public sealed partial class MainWindow : Window
         if (_updateCard is null || _updateTitle is null || _updateDescription is null || _updateNotes is null || _updateIcon is null || _installUpdateButton is null || _checkUpdatesButton is null || _updateProgress is null) return;
         _checkUpdatesButton.IsEnabled = true;
         _installUpdateButton.IsEnabled = update.CanInstall && update.LatestVersion is not null;
-        _checkUpdatesButton.Content = "Проверить сейчас";
+        _checkUpdatesButton.Content = UiText.Get("Проверить сейчас");
         _updateProgress.Visibility = Visibility.Collapsed;
         _updateDescription.Text = update.Message;
-        _updateNotes.Text = string.IsNullOrWhiteSpace(update.ReleaseNotes) ? "Что нового: описание пока не добавлено." : "Что нового: " + update.ReleaseNotes;
+        _updateNotes.Text = string.IsNullOrWhiteSpace(update.ReleaseNotes) ? UiText.Get("Что нового: описание пока не добавлено.") : UiText.Get("Что нового: ") + update.ReleaseNotes;
         _updateNotes.Visibility = update.Availability == UpdateAvailability.Available ? Visibility.Visible : Visibility.Collapsed;
         switch (update.Availability)
         {
             case UpdateAvailability.UpToDate:
                 _updateIcon.Symbol = Symbol.Accept;
                 _updateIcon.Foreground = (Brush)Application.Current.Resources["UiSuccessBrush"];
-                _updateTitle.Text = "Приложение обновлено";
+                _updateTitle.Text = UiText.Get("Приложение обновлено");
                 _updateCard.BorderBrush = (Brush)Application.Current.Resources["UiSuccessBrush"];
                 _installUpdateButton.Visibility = Visibility.Collapsed;
                 break;
             case UpdateAvailability.Available:
                 _updateIcon.Symbol = Symbol.Important;
                 _updateIcon.Foreground = (Brush)Application.Current.Resources["UiDangerBrush"];
-                _updateTitle.Text = "Доступно обновление";
+                _updateTitle.Text = UiText.Get("Доступно обновление");
                 _updateCard.BorderBrush = (Brush)Application.Current.Resources["UiDangerBrush"];
-                _installUpdateButton.Content = update.LatestVersion is { } latest ? $"Обновить до {AppUpdateService.FormatVersion(latest)}" : "Обновить";
+                _installUpdateButton.Content = update.LatestVersion is { } latest ? UiText.Format($"Обновить до {AppUpdateService.FormatVersion(latest)}") : UiText.Get("Обновить");
                 _installUpdateButton.Visibility = Visibility.Visible;
                 break;
             default:
                 _updateIcon.Symbol = Symbol.Important;
                 _updateIcon.Foreground = (Brush)Application.Current.Resources["UiWarningTextBrush"];
-                _updateTitle.Text = "Не удалось проверить обновления";
+                _updateTitle.Text = UiText.Get("Не удалось проверить обновления");
                 _updateCard.BorderBrush = (Brush)Application.Current.Resources["UiWarningTextBrush"];
                 _installUpdateButton.Visibility = Visibility.Collapsed;
                 break;
@@ -300,14 +301,14 @@ public sealed partial class MainWindow : Window
         _installUpdateButton!.IsEnabled = false;
         if (preview.Checking)
         {
-            _updateTitle!.Text = "Проверка обновлений";
+            _updateTitle!.Text = UiText.Get("Проверка обновлений");
             _updateIcon!.Symbol = Symbol.Sync;
             _updateIcon.Foreground = (Brush)Application.Current.Resources["AppTextBrush"];
             _updateCard!.BorderBrush = (Brush)Application.Current.Resources["PanelStrokeBrush"];
-            _checkUpdatesButton.Content = "Проверяем...";
+            _checkUpdatesButton.Content = UiText.Get("Проверяем...");
             _updateProgress!.Visibility = Visibility.Visible;
             _updateProgress.IsIndeterminate = true;
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_updateProgress, "Проверка обновлений");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_updateProgress,UiText.Get("Проверка обновлений"));
         }
         if (preview.Downloading)
         {
@@ -317,7 +318,7 @@ public sealed partial class MainWindow : Window
                 _updateProgress.Visibility = Visibility.Visible;
                 _updateProgress.Loaded += UpdatePreviewProgressLoaded;
             }
-            _installUpdateButton.Content = "Скачивание обновления...";
+            _installUpdateButton.Content = UiText.Get("Скачивание обновления...");
             if (preview.Restarting) ShowUpdateRestartPreview();
         }
     }
@@ -332,8 +333,8 @@ public sealed partial class MainWindow : Window
 
     private void ShowUpdateRestartPreview()
     {
-        _updateDescription!.Text = "Файлы подготовлены. Перезапуск приложения...";
-        _installUpdateButton!.Content = "Перезапуск...";
+        _updateDescription!.Text = UiText.Get("Файлы подготовлены. Перезапуск приложения...");
+        _installUpdateButton!.Content = UiText.Get("Перезапуск...");
     }
 
     private void ShowUpdateDownloadProgress(double? percent)
@@ -344,9 +345,9 @@ public sealed partial class MainWindow : Window
         if (percent is { } value)
         {
             _updateProgress.Value = Math.Clamp(value, 0, 100);
-            _updateDescription.Text = $"Скачивание обновления: {_updateProgress.Value:0}%";
+            _updateDescription.Text = UiText.Format($"Скачивание обновления: {_updateProgress.Value:0}%");
         }
-        else _updateDescription.Text = "Скачивание обновления...";
+        else _updateDescription.Text = UiText.Get("Скачивание обновления...");
     }
 
     private async Task InitializeOnlineServicesAsync()
@@ -408,7 +409,7 @@ public sealed partial class MainWindow : Window
             catch (Exception error)
             {
                 if (_shutdownRequested || _shutdownInProgress) return;
-                NotificationCenter.Publish(failureTitle, error.Message);
+                NotificationCenter.Publish(failureTitle,error.Message);
             }
         });
     }
@@ -432,7 +433,7 @@ public sealed partial class MainWindow : Window
         _shutdownRequested = true;
         progressWindow.Close();
         _activeCloudPublishWindow = null;
-        Application.Current.Exit();
+        App.ExitOrRestart();
     }
 
     private async Task CheckForUpdatesAsync()
@@ -443,21 +444,21 @@ public sealed partial class MainWindow : Window
         RefreshUpdateSurface(update);
         if (update.Availability != UpdateAvailability.Available) return;
 
-        NotificationCenter.Publish("Доступно обновление", update.Message);
+        NotificationCenter.Publish(UiText.Get("Доступно обновление"),update.Message);
     }
 
     private async void CheckUpdatesClick(object sender, RoutedEventArgs e)
     {
         if (_checkUpdatesButton is null || _updatePreview is not null) return;
         _checkUpdatesButton.IsEnabled = false;
-        _checkUpdatesButton.Content = "Проверяем...";
+        _checkUpdatesButton.Content = UiText.Get("Проверяем...");
         try { await CheckForUpdatesAsync(); }
         finally
         {
             if (!_shutdownRequested && !_shutdownInProgress)
             {
                 _checkUpdatesButton.IsEnabled = true;
-                _checkUpdatesButton.Content = "Проверить сейчас";
+                _checkUpdatesButton.Content = UiText.Get("Проверить сейчас");
             }
         }
     }
@@ -487,14 +488,14 @@ public sealed partial class MainWindow : Window
             var result = await RunCloudOperationAsync(() => App.Cloud.PublishAsync());
             if (result.Succeeded)
             {
-                NotificationCenter.Publish("Облачная синхронизация", "Изменения успешно опубликованы в Supabase.");
+                NotificationCenter.Publish(UiText.Get("Облачная синхронизация"),UiText.Get("Изменения успешно опубликованы в Supabase."));
                 RefreshCloudSettings();
                 if (result.DatabaseChanged) RefreshAfterCloudDatabaseLoad();
                 return;
             }
             result = App.Cloud.RequireSignInAfterSyncFailure(result);
             RefreshCloudSettings();
-            NotificationCenter.Publish("Не удалось опубликовать изменения", result.Message);
+            NotificationCenter.Publish(UiText.Get("Не удалось опубликовать изменения"),result.Message);
         }
         finally
         {
@@ -510,7 +511,7 @@ public sealed partial class MainWindow : Window
         if (_installUpdateButton is not null)
         {
             _installUpdateButton.IsEnabled = false;
-            _installUpdateButton.Content = "Скачивание обновления...";
+            _installUpdateButton.Content = UiText.Get("Скачивание обновления...");
         }
 
         if (_updateProgress is not null)
@@ -529,8 +530,8 @@ public sealed partial class MainWindow : Window
                 _updateProgress.IsIndeterminate = false;
                 _updateProgress.Value = 100;
             }
-            if (_updateDescription is not null) _updateDescription.Text = "Файлы подготовлены. Перезапуск приложения...";
-            NotificationCenter.Publish("Обновление готово", "Приложение перезапустится после замены файлов.");
+            if (_updateDescription is not null) _updateDescription.Text = UiText.Get("Файлы подготовлены. Перезапуск приложения...");
+            NotificationCenter.Publish(UiText.Get("Обновление готово"),UiText.Get("Приложение перезапустится после замены файлов."));
             await Task.Delay(700);
             Application.Current.Exit();
             return;
@@ -539,10 +540,10 @@ public sealed partial class MainWindow : Window
         if (_installUpdateButton is not null)
         {
             _installUpdateButton.IsEnabled = true;
-            _installUpdateButton.Content = "Повторить обновление";
+            _installUpdateButton.Content = UiText.Get("Повторить обновление");
         }
         if (_updateProgress is not null) _updateProgress.Visibility = Visibility.Collapsed;
-        NotificationCenter.Publish("Не удалось установить обновление", "Проверьте подключение к сети и права на изменение папки приложения.");
+        NotificationCenter.Publish(UiText.Get("Не удалось установить обновление"),UiText.Get("Проверьте подключение к сети и права на изменение папки приложения."));
     }
 
     private void ConfigureTitleBar()
@@ -607,7 +608,7 @@ public sealed partial class MainWindow : Window
         var menuData = data ?? list.SelectedItem;
         void Add(string text, Action action)
         {
-            var item = new MenuFlyoutItem { Text = text };
+            var item = new MenuFlyoutItem { Text = UiText.Get(text) };
             item.Click += (_, _) => action();
             menu.Items.Add(item);
         }
@@ -621,9 +622,9 @@ public sealed partial class MainWindow : Window
                 Add("Копировать другому заказчику", async () => await CopyCatalogProductToCounterpartyAsync(item));
                 Add("Удалить", async () =>
                 {
-                    if (!await _dialogs.ConfirmDeleteAsync("Удалить из каталога?", item.Product.Name + ". Изделия в проектах сохранятся.")) return;
+                    if (!await _dialogs.ConfirmDeleteAsync(UiText.Get("Удалить из каталога?"),item.Product.Name + UiText.Get(". Изделия в проектах сохранятся."))) return;
                     try { App.Catalog.DeleteProduct(item.Counterparty, item.Product); _catalogPage.RenderProducts(); }
-                    catch (Exception error) { await _dialogs.ShowMessageAsync("Не удалось удалить", error.Message); }
+                    catch (Exception error) { await _dialogs.ShowMessageAsync(UiText.Get("Не удалось удалить"),error.Message); }
                 });
             }
             return menu;
@@ -727,7 +728,7 @@ public sealed partial class MainWindow : Window
         if (!await _catalogCommands.DeleteCounterpartyAsync(customer)) return;
         RefreshProjects(SelectedProject, allowAutoSelect: false);
         RefreshCustomers();
-        NotificationCenter.Publish("Заказчик удалён", $"Заказчик «{customer}» удалён из каталога.");
+        NotificationCenter.Publish(UiText.Get("Заказчик удалён"),UiText.Format($"Заказчик «{customer}» удалён из каталога."));
     }
 
     private void CustomersSelectionChanged(object sender, SelectionChangedEventArgs e) => _catalogPage.RenderProducts();
@@ -782,7 +783,7 @@ public sealed partial class MainWindow : Window
             RefreshCustomers();
             RefreshProjects(project);
             ShowTab("projects");
-            NotificationCenter.Publish("Проект создан", $"Проект «{project.Name}» создан.");
+            NotificationCenter.Publish(UiText.Get("Проект создан"),UiText.Format($"Проект «{project.Name}» создан."));
         });
     }
 
@@ -811,7 +812,7 @@ public sealed partial class MainWindow : Window
         if (!await _projectCommands.DeleteProjectAsync(project)) return;
         RefreshProjects(select: null, allowAutoSelect: false);
         RefreshCustomerProjects();
-        NotificationCenter.Publish("Проект удалён", $"Проект «{project.Name}» удалён.");
+        NotificationCenter.Publish(UiText.Get("Проект удалён"),UiText.Format($"Проект «{project.Name}» удалён."));
     }
 
     private Project? ProjectFromCommand(object sender) =>
@@ -829,9 +830,9 @@ public sealed partial class MainWindow : Window
         if (sender is not FrameworkElement element || element.DataContext is not Product product || SelectedProject is not { } project) return;
 
         var menu = new MenuFlyout();
-        var edit = new MenuFlyoutItem { Text = "Изменить" };
+        var edit = new MenuFlyoutItem { Text = UiText.Get("Изменить") };
         edit.Click += (_, _) => OpenProductWindow(project, product);
-        var remove = new MenuFlyoutItem { Text = "Удалить" };
+        var remove = new MenuFlyoutItem { Text = UiText.Get("Удалить") };
         remove.Click += async (_, _) => await DeleteProductAsync(project, product);
         menu.Items.Add(edit);
         menu.Items.Add(remove);
@@ -854,7 +855,7 @@ public sealed partial class MainWindow : Window
         if (await _projectCommands.DeleteProductAsync(project, product))
         {
             FillProjectCard();
-            NotificationCenter.Publish("Изделие удалено", $"Изделие «{product.Name}» удалено из проекта.");
+            NotificationCenter.Publish(UiText.Get("Изделие удалено"),UiText.Format($"Изделие «{product.Name}» удалено из проекта."));
         }
     }
 
@@ -863,7 +864,7 @@ public sealed partial class MainWindow : Window
         if (SelectedProject is not { } project) return;
         _projectCommands.AddPayroll(project);
         FillProjectCard();
-        NotificationCenter.Publish("Зарплата добавлена", "В проект добавлена новая строка ЗП.");
+        NotificationCenter.Publish(UiText.Get("Зарплата добавлена"),UiText.Get("В проект добавлена новая строка ЗП."));
     }
 
     private async void EditPayrollClick(object sender, RoutedEventArgs e) =>
@@ -882,7 +883,7 @@ public sealed partial class MainWindow : Window
         if (SelectedProject is { } project && index >= 0 && index < project.Payrolls.Count && await _projectCommands.DeletePayrollAsync(project, index))
         {
             FillProjectCard();
-            NotificationCenter.Publish("Строка ЗП удалена", "Строка зарплаты удалена из проекта.");
+            NotificationCenter.Publish(UiText.Get("Строка ЗП удалена"),UiText.Get("Строка зарплаты удалена из проекта."));
         }
     }
 
@@ -959,7 +960,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            await _dialogs.ShowMessageAsync("Не удалось создать материал", error.Message);
+            await _dialogs.ShowMessageAsync(UiText.Get("Не удалось создать материал"),error.Message);
         }
     }
 
@@ -971,7 +972,7 @@ public sealed partial class MainWindow : Window
             if (saved is not null)
             {
                 RefreshMaterials(saved);
-                ShowSuccess("Материал сохранён");
+                ShowSuccess(UiText.Get("Материал сохранён"));
             }
         }
     }
@@ -979,12 +980,12 @@ public sealed partial class MainWindow : Window
     private void SettingsSaveClick(object sender, RoutedEventArgs e)
     {
         _settingsPage.CommitCutLayout(App.Preferences);
-        ShowSuccess("Настройки сохранены");
+        ShowSuccess(UiText.Get("Настройки сохранены"));
     }
 
     private void ShowSuccess(string message)
     {
-        NotificationCenter.Publish("Готово", message);
+        NotificationCenter.Publish(UiText.Get("Готово"),message);
     }
 
     private async void DeleteMaterialClick(object sender, RoutedEventArgs e)
@@ -997,7 +998,7 @@ public sealed partial class MainWindow : Window
         if (await _materialCommands.DeleteAsync(choice))
         {
             RefreshCurrentMaterialCategory();
-            NotificationCenter.Publish("Материал удалён", $"Материал «{choice.Material.Name}» удалён.");
+            NotificationCenter.Publish(UiText.Get("Материал удалён"),UiText.Format($"Материал «{choice.Material.Name}» удалён."));
         }
     }
 
@@ -1220,7 +1221,7 @@ public sealed partial class MainWindow : Window
             {
                 if (_materialSelection.Count < 2)
                 {
-                    NotificationCenter.Publish("Нужно выбрать несколько материалов", "Для объединения выберите минимум два материала.");
+                    NotificationCenter.Publish(UiText.Get("Нужно выбрать несколько материалов"),UiText.Get("Для объединения выберите минимум два материала."));
                     return;
                 }
                 var groupName = await AskMaterialGroupNameAsync();
@@ -1233,7 +1234,7 @@ public sealed partial class MainWindow : Window
                         material.Group = groupName.Trim();
                 });
                 RefreshMaterials(_materialSelection[0]);
-                NotificationCenter.Publish("Материалы объединены", $"Выбранные материалы объединены в группу «{groupName.Trim()}».");
+                NotificationCenter.Publish(UiText.Get("Материалы объединены"),UiText.Format($"Выбранные материалы объединены в группу «{groupName.Trim()}»."));
             }
             else
             {
@@ -1245,24 +1246,24 @@ public sealed partial class MainWindow : Window
                         material.Group = string.Empty;
                 });
                 RefreshMaterials(_materialSelection.FirstOrDefault());
-                NotificationCenter.Publish("Материалы исключены из группы", "Выбранные материалы снова отображаются без группы.");
+                NotificationCenter.Publish(UiText.Get("Материалы исключены из группы"),UiText.Get("Выбранные материалы снова отображаются без группы."));
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            NotificationCenter.Publish("Не удалось изменить группу", error.Message);
+            NotificationCenter.Publish(UiText.Get("Не удалось изменить группу"),error.Message);
         }
     }
 
     private async Task<string?> AskMaterialGroupNameAsync()
     {
-        var input = new TextBox { PlaceholderText = "Например, Kronospan" };
+        var input = new TextBox { PlaceholderText = UiText.Get("Например, Kronospan") };
         var dialog = new ContentDialog
         {
-            Title = "Объединить материалы в группу",
+            Title = UiText.Get("Объединить материалы в группу"),
             Content = input,
-            PrimaryButtonText = "Объединить",
-            CloseButtonText = "Отмена",
+            PrimaryButtonText = UiText.Get("Объединить"),
+            CloseButtonText = UiText.Get("Отмена"),
             XamlRoot = Root.XamlRoot
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary ? input.Text : null;
@@ -1352,12 +1353,12 @@ public sealed partial class MainWindow : Window
         var texture = await ImageResizeService.FromFileAsync(file.Path, 100, 100, cropToBounds: true);
         if (texture is null)
         {
-            await _dialogs.ShowMessageAsync("Не удалось загрузить текстуру", "Выберите корректное изображение PNG или JPEG.");
+            await _dialogs.ShowMessageAsync(UiText.Get("Не удалось загрузить текстуру"),UiText.Get("Выберите корректное изображение PNG или JPEG."));
             return;
         }
         choice.Material.Texture = texture;
         await UpdateMaterialTexturePreviewAsync();
-        ShowSuccess("Текстура материала загружена");
+        ShowSuccess(UiText.Get("Текстура материала загружена"));
     }
 
     private void MaterialUnitChanged(object sender, SelectionChangedEventArgs e)
@@ -1377,6 +1378,8 @@ public sealed partial class MainWindow : Window
         if (ThemeBox is null || AccentBox is null) return;
         _loadingSettings = true;
         _settingsPage.Load(App.Preferences.Current);
+        LanguageBox.SelectedItem = LanguageBox.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(item => item.Tag?.ToString() == UiText.NormalizeLanguage(App.Preferences.Current.Language));
         RefreshCloudSettings();
         CursorRevealSwitch.IsOn = App.Preferences.Current.CursorRevealEnabled;
         AcrylicBackgroundSwitch.IsOn = App.Preferences.Current.AcrylicBackgroundEnabled;
@@ -1384,6 +1387,19 @@ public sealed partial class MainWindow : Window
         _loadingSettings = false;
         ApplyCompactMode();
         ApplyAnimations();
+    }
+
+    private async void LanguageChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingSettings || LanguageBox.SelectedItem is not ComboBoxItem item) return;
+        var language = UiText.NormalizeLanguage(item.Tag?.ToString());
+        if (language == App.Preferences.Current.Language) return;
+        App.Preferences.SetLanguage(language);
+        if (await _dialogs.ConfirmLanguageRestartAsync(language))
+        {
+            App.RestartRequested = true;
+            Close();
+        }
     }
 
     private void ThemeChanged(object sender, SelectionChangedEventArgs e)
@@ -1471,7 +1487,7 @@ public sealed partial class MainWindow : Window
         _buildingCut = true;
         if (sender is Button button) button.IsEnabled = false;
         try { await _reports.OpenCutReportAsync(project); }
-        catch (Exception error) { await _dialogs.ShowMessageAsync("Не удалось построить раскрой", error.Message); }
+        catch (Exception error) { await _dialogs.ShowMessageAsync(UiText.Get("Не удалось построить раскрой"),error.Message); }
         finally
         {
             _buildingCut = false;
@@ -1491,7 +1507,7 @@ public sealed partial class MainWindow : Window
         _buildingDetailing = true;
         if (sender is Button button) button.IsEnabled = false;
         try { await _reports.OpenDetailingReportAsync(project); }
-        catch (Exception error) { await _dialogs.ShowMessageAsync("Не удалось создать деталировку", error.Message); }
+        catch (Exception error) { await _dialogs.ShowMessageAsync(UiText.Get("Не удалось создать деталировку"),error.Message); }
         finally
         {
             _buildingDetailing = false;
@@ -1521,9 +1537,9 @@ public sealed partial class MainWindow : Window
             {
                 var cloudResult = await RunCloudOperationAsync(() => App.Cloud.PublishImportedDatabaseAsync());
                 if (cloudResult.Succeeded)
-                    result = result with { Title = "База импортирована и опубликована", Message = "Импортированная база сохранена локально и в Supabase." };
+                    result = result with { Title = UiText.Get("База импортирована и опубликована"), Message = "Импортированная база сохранена локально и в Supabase." };
                 else
-                    result = result with { Title = "База импортирована локально", Message = $"Не удалось опубликовать её в Supabase: {cloudResult.Message}" };
+                    result = result with { Title = UiText.Get("База импортирована локально"), Message = $"Не удалось опубликовать её в Supabase: {cloudResult.Message}" };
                 RefreshCloudSettings();
             }
         }
@@ -1533,7 +1549,7 @@ public sealed partial class MainWindow : Window
 
     private void ShowDatabaseMessage(DatabaseTransferResult result)
     {
-        NotificationCenter.Publish(result.Title, result.Message);
+        NotificationCenter.Publish(result.Title,result.Message);
     }
 
     private void RefreshAfterCloudDatabaseLoad()
@@ -1574,12 +1590,12 @@ public sealed partial class MainWindow : Window
             if (loginGrid is not null) loginGrid.Visibility = Visibility.Collapsed;
             if (description is not null)
             {
-                description.Text = "Облачные функции отключены в изолированном режиме разработки.";
+                description.Text = UiText.Get("Облачные функции отключены в изолированном режиме разработки.");
                 description.Visibility = Visibility.Visible;
             }
             if (actions is not null) actions.Visibility = Visibility.Collapsed;
             if (statusBadge is not null) statusBadge.Visibility = Visibility.Collapsed;
-            CloudSyncStatusText.Text = "Тестовые данные хранятся локально.";
+            CloudSyncStatusText.Text = UiText.Get("Тестовые данные хранятся локально.");
             CloudSyncStatusText.Foreground = new SolidColorBrush(Color.FromArgb(255, 175, 175, 175));
             CloudSyncStatusText.Visibility = Visibility.Visible;
             return;
@@ -1589,7 +1605,7 @@ public sealed partial class MainWindow : Window
         if (description is not null) description.Visibility = Visibility.Collapsed;
         if (actions is not null) actions.Visibility = Visibility.Collapsed;
         CloudSyncStatusText.Visibility = Visibility.Collapsed;
-        CloudSyncStatusText.Text = snapshot.Status;
+        CloudSyncStatusText.Text = UiText.Get(snapshot.Status);
         CloudSyncStatusText.Foreground = new SolidColorBrush(snapshot.Error
             ? Color.FromArgb(255, 255, 107, 107)
             : Color.FromArgb(255, 175, 175, 175));
@@ -1616,22 +1632,22 @@ public sealed partial class MainWindow : Window
             {
             var intervalBox = new ComboBox { Width = 150 };
             _cloudIntervalBox = intervalBox;
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(intervalBox, "Интервал автопубликации");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(intervalBox,UiText.Get("Интервал автопубликации"));
             foreach (var minutes in new[] { 5, 15, 30, 60 })
-                intervalBox.Items.Add(new ComboBoxItem { Content = $"Раз в {minutes} мин.", Tag = minutes });
+                intervalBox.Items.Add(new ComboBoxItem { Content = UiText.Format($"Раз в {minutes} мин."), Tag = minutes });
             intervalBox.SelectedIndex = new[] { 5, 15, 30, 60 }.ToList().IndexOf(App.Preferences.Current.CloudPublishIntervalMinutes);
             intervalBox.SelectionChanged += CloudPublishIntervalChanged;
 
             var schedule = new Grid { ColumnSpacing = 12 };
             schedule.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             schedule.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            schedule.Children.Add(new TextBlock { Text = "Автопубликация изменений", Foreground = new SolidColorBrush(Colors.White), VerticalAlignment = VerticalAlignment.Center });
+            schedule.Children.Add(new TextBlock { Text = UiText.Get("Автопубликация изменений"), Foreground = new SolidColorBrush(Colors.White), VerticalAlignment = VerticalAlignment.Center });
             Grid.SetColumn(intervalBox, 1);
             schedule.Children.Add(intervalBox);
-            var syncNow = new Button { Content = "Синхронизировать сейчас", HorizontalAlignment = HorizontalAlignment.Left };
+            var syncNow = new Button { Content = UiText.Get("Синхронизировать сейчас"), HorizontalAlignment = HorizontalAlignment.Left };
             _cloudSyncNowButton = syncNow;
             syncNow.Click += ManualCloudSyncClick;
-            _cloudBadgeTitle = new TextBlock { Text = "Облачная синхронизация работает", Foreground = new SolidColorBrush(Colors.White), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+            _cloudBadgeTitle = new TextBlock { Text = UiText.Get("Облачная синхронизация работает"), Foreground = new SolidColorBrush(Colors.White), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(_cloudBadgeTitle, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
 
             statusBadge.Child = new StackPanel
@@ -1647,7 +1663,7 @@ public sealed partial class MainWindow : Window
             };
             }
             if (_cloudBadgeTitle is not null)
-                _cloudBadgeTitle.Text = view.Title;
+                _cloudBadgeTitle.Text = UiText.Get(view.Title);
             if (_cloudSyncNowButton is not null) _cloudSyncNowButton.IsEnabled = controlsEnabled;
             _cloudIntervalBox!.IsEnabled = controlsEnabled;
             var desiredInterval = new[] { 5, 15, 30, 60 }.ToList().IndexOf(App.Preferences.Current.CloudPublishIntervalMinutes);
@@ -1668,7 +1684,7 @@ public sealed partial class MainWindow : Window
             : new SolidColorBrush(Color.FromArgb(255, 24, 24, 24));
         cloudCard.BorderBrush = snapshot.Error ? (Brush)Application.Current.Resources["UiDangerBrush"]
             : new SolidColorBrush(connected ? Color.FromArgb(175, 62, 207, 142) : Color.FromArgb(255, 48, 48, 48));
-        CloudSyncStatusText.Text = view.IsBusy ? view.Title : snapshot.Status;
+        CloudSyncStatusText.Text = UiText.Get(view.IsBusy ? view.Title : snapshot.Status);
         ConfigureCloudPublishTimer();
     }
 
@@ -1709,7 +1725,7 @@ public sealed partial class MainWindow : Window
             .ToList();
         if (targets.Count == 0)
         {
-            await _dialogs.ShowMessageAsync("Нет другого заказчика", "Сначала добавьте ещё одного заказчика в каталоге.");
+            await _dialogs.ShowMessageAsync(UiText.Get("Нет другого заказчика"),UiText.Get("Сначала добавьте ещё одного заказчика в каталоге."));
             return;
         }
 
@@ -1718,10 +1734,10 @@ public sealed partial class MainWindow : Window
         {
             XamlRoot = Root.XamlRoot,
             RequestedTheme = Root.ActualTheme,
-            Title = "Копировать изделие",
+            Title = UiText.Get("Копировать изделие"),
             Content = targetBox,
-            PrimaryButtonText = "Копировать",
-            CloseButtonText = "Отмена",
+            PrimaryButtonText = UiText.Get("Копировать"),
+            CloseButtonText = UiText.Get("Отмена"),
             DefaultButton = ContentDialogButton.Primary
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || targetBox.SelectedItem is not string target) return;
@@ -1750,7 +1766,7 @@ public sealed partial class MainWindow : Window
         catch (Exception error)
         {
             progressWindow.Complete(false, "Изменения сохранены на этом компьютере и будут отправлены позже.");
-            NotificationCenter.Publish("Синхронизация не выполнена", error.Message);
+            NotificationCenter.Publish(UiText.Get("Синхронизация не выполнена"),error.Message);
             await Task.Delay(2200);
         }
         finally
@@ -1774,7 +1790,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        NotificationCenter.Publish("Облачная синхронизация не выполнена", result.Message);
+        NotificationCenter.Publish(UiText.Get("Облачная синхронизация не выполнена"),result.Message);
     }
 
     private async void DownloadCloudDatabaseClick(object sender, RoutedEventArgs e)
@@ -1786,10 +1802,10 @@ public sealed partial class MainWindow : Window
             {
                 XamlRoot = Root.XamlRoot,
                 RequestedTheme = Root.ActualTheme,
-                Title = "Заменить локальные изменения?",
-                Content = "Несинхронизированные локальные изменения будут заменены облачной версией. Сначала опубликуйте их, если они нужны.",
-                PrimaryButtonText = "Загрузить облачную версию",
-                CloseButtonText = "Отмена",
+                Title = UiText.Get("Заменить локальные изменения?"),
+                Content = UiText.Get("Несинхронизированные локальные изменения будут заменены облачной версией. Сначала опубликуйте их, если они нужны."),
+                PrimaryButtonText = UiText.Get("Загрузить облачную версию"),
+                CloseButtonText = UiText.Get("Отмена"),
                 DefaultButton = ContentDialogButton.Close
             };
             if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
@@ -1825,7 +1841,7 @@ public sealed partial class MainWindow : Window
         {
             XamlRoot = Root.XamlRoot,
             RequestedTheme = Root.ActualTheme,
-            Title = "История облачных версий",
+            Title = UiText.Get("История облачных версий"),
             Content = new StackPanel
             {
                 Spacing = 12,
@@ -1833,14 +1849,14 @@ public sealed partial class MainWindow : Window
                 {
                     new TextBlock
                     {
-                        Text = "Восстановление заменит только локальную рабочую копию. Перед этим она будет сохранена в резерв.",
+                        Text = UiText.Get("Восстановление заменит только локальную рабочую копию. Перед этим она будет сохранена в резерв."),
                         TextWrapping = TextWrapping.Wrap
                     },
                     picker
                 }
             },
-            PrimaryButtonText = "Восстановить локально",
-            CloseButtonText = "Отмена",
+            PrimaryButtonText = UiText.Get("Восстановить локально"),
+            CloseButtonText = UiText.Get("Отмена"),
             DefaultButton = ContentDialogButton.Close
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || picker.SelectedItem is not ComboBoxItem { Tag: CloudSnapshotVersion selectedVersion }) return;
@@ -1853,7 +1869,7 @@ public sealed partial class MainWindow : Window
 
     private void ShowCloudResult(CloudSyncResult result)
     {
-        NotificationCenter.Publish(result.Succeeded ? "Облачная синхронизация" : "Синхронизация не выполнена", result.Message);
+        NotificationCenter.Publish(result.Succeeded ? UiText.Get("Облачная синхронизация") : UiText.Get("Синхронизация не выполнена"),result.Message);
     }
 
     private void UpdateResponsiveLayout()

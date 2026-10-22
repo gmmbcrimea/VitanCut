@@ -54,12 +54,12 @@ public sealed partial class ReportWindow : Window
         };
         ResetLayoutButton.Click += ResetLayoutClick;
         ResetLayoutButton.Visibility = Visibility.Visible;
-        Title = isAdditional ? "Расчёт мебели - Дополнительный раскрой" : "Расчёт мебели - Раскрой ДСП";
-        TitleText.Text = isAdditional ? "Дополнительный раскрой" : "Раскрой ДСП";
+        Title = isAdditional ? UiText.Get("Расчёт мебели - Дополнительный раскрой") : UiText.Get("Расчёт мебели - Раскрой ДСП");
+        TitleText.Text = isAdditional ? UiText.Get("Дополнительный раскрой") : UiText.Get("Раскрой ДСП");
         SubtitleText.Text = $"{report.ProjectName} · {report.Counterparty} · {report.Address}";
         CutTools.Visibility = Visibility.Visible;
         AdditionalCutButton.Visibility = _openAdditionalCut is null ? Visibility.Collapsed : Visibility.Visible;
-        ToolTipService.SetToolTip(SaveReportButton, "Сохранить раскрой");
+        ToolTipService.SetToolTip(SaveReportButton,UiText.Get("Сохранить раскрой"));
         App.Preferences.Apply(this);
         AppWindow.Resize(new SizeInt32(1180, 820));
         InitializeCutTools(activeId);
@@ -80,11 +80,11 @@ public sealed partial class ReportWindow : Window
         _detailingReport = report;
         SaveReportButton.Click += SaveReportClick;
         PrintReportButton.Click += PrintReportClick;
-        Title = "Расчёт мебели - Деталировка";
-        TitleText.Text = "Деталировка";
+        Title = UiText.Get("Расчёт мебели - Деталировка");
+        TitleText.Text = UiText.Get("Деталировка");
         SubtitleText.Text = $"{report.ProjectName} · {report.Counterparty} · {report.Address}";
         HintText.Text = "";
-        ToolTipService.SetToolTip(SaveReportButton, "Сохранить деталировку");
+        ToolTipService.SetToolTip(SaveReportButton,UiText.Get("Сохранить деталировку"));
         DetailingTools.Visibility = Visibility.Visible;
         App.Preferences.Apply(this);
         AppWindow.Resize(new SizeInt32(1180, 820));
@@ -152,7 +152,7 @@ public sealed partial class ReportWindow : Window
             }
             ContentPanel.Children.Add(new Expander
             {
-                Header = $"Не размещено: {report.Unplaced.Count}", HorizontalAlignment = HorizontalAlignment.Stretch,
+                Header = UiText.Format($"Не размещено: {report.Unplaced.Count}"), HorizontalAlignment = HorizontalAlignment.Stretch,
                 Content = new ScrollViewer { Content = warning, MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }
             });
         }
@@ -181,11 +181,11 @@ public sealed partial class ReportWindow : Window
             {
                 leftovers.Children.Add(new TextBlock
                 {
-                    Text = $"{remainder.MaterialName} · лист {remainder.SheetNumber}: {N(remainder.Length)} × {N(remainder.Width)} мм · {N(remainder.Area)} м²",
+                    Text = UiText.Format($"{remainder.MaterialName} · лист {remainder.SheetNumber}: {N(remainder.Length)} × {N(remainder.Width)} мм · {N(remainder.Area)} м²"),
                     TextWrapping = TextWrapping.Wrap
                 });
             }
-            ContentPanel.Children.Add(new Expander { Header = $"Полезные остатки: {metrics.Remainders.Count}", Content = leftovers });
+            ContentPanel.Children.Add(new Expander { Header = UiText.Format($"Полезные остатки: {metrics.Remainders.Count}"), Content = leftovers });
         }
     }
 
@@ -337,7 +337,7 @@ public sealed partial class ReportWindow : Window
             part.LockIcon.Foreground = Brush("#102233");
             part.LockIcon.IsHitTestVisible = false;
             sheet.Canvas.Children.Add(part.LockIcon);
-            ToolTipService.SetToolTip(hit, "Поворот детали запрещён");
+            ToolTipService.SetToolTip(hit,UiText.Get("Поворот детали запрещён"));
         }
         PositionPart(part);
     }
@@ -345,32 +345,32 @@ public sealed partial class ReportWindow : Window
     private MenuFlyout CreateCutPartMenu(CutPartView part)
     {
         var flyout = new MenuFlyout();
-        var rotateOne = new MenuFlyoutItem { Text = "Повернуть деталь", IsEnabled = part.AllowRotation };
+        var rotateOne = new MenuFlyoutItem { Text = UiText.Get("Повернуть деталь"), IsEnabled = part.AllowRotation };
         rotateOne.Click += async (_, _) => await RotatePartsAsync(new HashSet<string> { part.InstanceId });
         flyout.Items.Add(rotateOne);
 
-        var rotateSame = new MenuFlyoutItem { Text = "Повернуть такие на этом листе", IsEnabled = part.AllowRotation };
+        var rotateSame = new MenuFlyoutItem { Text = UiText.Get("Повернуть такие на этом листе"), IsEnabled = part.AllowRotation };
         rotateSame.Click += async (_, _) =>
         {
             if (_cutReport is not null) await RotatePartsAsync(CutEditing.IdenticalIds(_cutReport, part.InstanceId));
         };
         flyout.Items.Add(rotateSame);
-        var rotateAll = new MenuFlyoutItem { Text = "Повернуть такие на всех листах", IsEnabled = part.AllowRotation };
+        var rotateAll = new MenuFlyoutItem { Text = UiText.Get("Повернуть такие на всех листах"), IsEnabled = part.AllowRotation };
         rotateAll.Click += async (_, _) =>
         {
             if (_cutReport is not null) await RotatePartsAsync(CutEditing.IdenticalIds(_cutReport, part.InstanceId, allSheets: true));
         };
         flyout.Items.Add(rotateAll);
-        var rotateSelection = new MenuFlyoutItem { Text = "Повернуть выделенные" };
+        var rotateSelection = new MenuFlyoutItem { Text = UiText.Get("Повернуть выделенные") };
         rotateSelection.Click += async (_, _) => await RotatePartsAsync(_selected.ToHashSet());
         flyout.Items.Add(rotateSelection);
         if (!part.AllowRotation)
         {
             flyout.Items.Add(new MenuFlyoutSeparator());
-            flyout.Items.Add(new MenuFlyoutItem { Text = "Поворот заблокирован", IsEnabled = false });
+            flyout.Items.Add(new MenuFlyoutItem { Text = UiText.Get("Поворот заблокирован"), IsEnabled = false });
         }
         flyout.Items.Add(new MenuFlyoutSeparator());
-        var orderSheet = new MenuFlyoutItem { Text = "Упорядочить лист" };
+        var orderSheet = new MenuFlyoutItem { Text = UiText.Get("Упорядочить лист") };
         orderSheet.Click += async (_, _) => await OrderSheetAsync(part.Sheet);
         flyout.Items.Add(orderSheet);
         return flyout;
@@ -379,7 +379,7 @@ public sealed partial class ReportWindow : Window
     private MenuFlyout CreateCutSheetMenu(InteractiveSheet sheet)
     {
         var flyout = new MenuFlyout();
-        var order = new MenuFlyoutItem { Text = "Упорядочить лист" };
+        var order = new MenuFlyoutItem { Text = UiText.Get("Упорядочить лист") };
         order.Click += async (_, _) => await OrderSheetAsync(sheet);
         flyout.Items.Add(order);
         return flyout;
@@ -428,7 +428,7 @@ public sealed partial class ReportWindow : Window
         {
             var text = new TextBlock
             {
-                Text = $"{item.Number}. {item.First.ProductName} · {item.First.DetailName} · {N(item.First.BaseLength)} × {N(item.First.BaseWidth)} · {item.Count} шт.",
+                Text = UiText.Format($"{item.Number}. {item.First.ProductName} · {item.First.DetailName} · {N(item.First.BaseLength)} × {N(item.First.BaseWidth)} · {item.Count} шт."),
                 TextWrapping = TextWrapping.Wrap,
                 Opacity = 0.78,
                 FontSize = 13
@@ -483,11 +483,11 @@ public sealed partial class ReportWindow : Window
             {
                 await Task.Run(() => { if (format == "xlsx") ReportDocumentService.SaveXlsx(detailing, file.Path); else ReportDocumentService.SavePdf(detailing, file.Path); });
             }
-            HintText.Text = $"Сохранено: {file.Name}";
+            HintText.Text = UiText.Format($"Сохранено: {file.Name}");
         }
         catch (Exception ex)
         {
-            HintText.Text = $"Не удалось сохранить: {ex.Message}";
+            HintText.Text = UiText.Format($"Не удалось сохранить: {ex.Message}");
         }
         finally { SetExportBusy(false); }
     }
@@ -515,11 +515,11 @@ public sealed partial class ReportWindow : Window
 
             var file = await StorageFile.GetFileFromPathAsync(path);
             var opened = await Windows.System.Launcher.LaunchFileAsync(file);
-            HintText.Text = opened ? "PDF открыт для печати" : "Не удалось открыть PDF для печати";
+            HintText.Text = opened ? UiText.Get("PDF открыт для печати") : UiText.Get("Не удалось открыть PDF для печати");
         }
         catch (Exception ex)
         {
-            HintText.Text = $"Не удалось подготовить печать: {ex.Message}";
+            HintText.Text = UiText.Format($"Не удалось подготовить печать: {ex.Message}");
         }
         finally { SetExportBusy(false); }
     }
@@ -581,7 +581,7 @@ public sealed partial class ReportWindow : Window
             var legs = product.HasLegs ? $" · ножки {N(product.LegHeight)} мм" : "";
             body.Children.Add(SectionHeader(product.Name, $"{N(product.Length)} x {N(product.Depth)} x {N(product.Height)} мм · {N(product.Qty)} шт.{legs}", ""));
             if (product.FixedSizes.Any())
-                body.Children.Add(new TextBlock { Text = "Фиксированные размеры: " + string.Join(" · ", product.FixedSizes.Select(size => $"{size.Name}: {N(size.Value)} мм")), TextWrapping = TextWrapping.Wrap, Opacity = 0.72 });
+                body.Children.Add(new TextBlock { Text = UiText.Get("Фиксированные размеры: ") + string.Join(" · ", product.FixedSizes.Select(size => $"{size.Name}: {N(size.Value)} мм")), TextWrapping = TextWrapping.Wrap, Opacity = 0.72 });
             body.Children.Add(DetailingTable(product));
             grid.Children.Add(body);
             if (visual is FrameworkElement image)
@@ -692,7 +692,7 @@ public sealed partial class ReportWindow : Window
             VerticalScrollMode = ScrollMode.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             IsTabStop = true
         };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(viewport, $"Деталировка изделия {product.Name}");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(viewport,UiText.Format($"Деталировка изделия {product.Name}"));
         return viewport;
     }
 
@@ -729,7 +729,7 @@ public sealed partial class ReportWindow : Window
                 content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 var icon = RotationLockIcon();
-                ToolTipService.SetToolTip(icon, "Поворот детали запрещён");
+                ToolTipService.SetToolTip(icon,UiText.Get("Поворот детали запрещён"));
                 content.Children.Add(icon);
                 Grid.SetColumn(text, 1);
                 content.Children.Add(text);

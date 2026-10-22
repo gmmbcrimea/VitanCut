@@ -19,7 +19,7 @@ public static class NotificationCenter
 
     public static void Publish(string title, string message)
     {
-        var item = new AppNotification(title, message, DateTime.Now);
+        var item = new AppNotification(UiText.Get(title), UiText.Get(message), DateTime.Now);
         HistoryItems.Insert(0, item);
         if (HistoryItems.Count > 10) HistoryItems.RemoveAt(HistoryItems.Count - 1);
         Published?.Invoke(item);
@@ -82,8 +82,8 @@ public sealed class NotificationOverlay : Grid
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center
         };
-        ToolTipService.SetToolTip(_historyButton, "Центр уведомлений");
-        AutomationProperties.SetName(_historyButton, "Центр уведомлений");
+        ToolTipService.SetToolTip(_historyButton,UiText.Get("Центр уведомлений"));
+        AutomationProperties.SetName(_historyButton,UiText.Get("Центр уведомлений"));
         AutomationProperties.SetLiveSetting(_toast, AutomationLiveSetting.Polite);
 
         _historyList = new StackPanel { Spacing = 10 };
@@ -133,7 +133,7 @@ public sealed class NotificationOverlay : Grid
         {
             _title.Text = item.Title;
             _message.Text = item.Message;
-            AutomationProperties.SetName(_toast, item.Title + ". " + item.Message);
+            AutomationProperties.SetName(_toast,item.Title + ". " + item.Message);
             _toast.Visibility = Visibility.Visible;
             FrameworkElementAutomationPeer.FromElement(_toast)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
             _timer.Stop();
@@ -179,7 +179,7 @@ public sealed class NotificationOverlay : Grid
         var items = NotificationCenter.History;
         if (items.Count == 0)
         {
-            _historyList.Children.Add(new TextBlock { Text = "Уведомлений пока нет.", Opacity = 0.8 });
+            _historyList.Children.Add(new TextBlock { Text = UiText.Get("Уведомлений пока нет."), Opacity = 0.8 });
             return;
         }
 

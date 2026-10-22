@@ -1,5 +1,6 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using VitanCut.WinUI.Services;
 using Windows.Graphics;
 
 namespace VitanCut.WinUI.Views;
@@ -24,7 +25,7 @@ public sealed partial class StartupWindow : Window
         InitializeComponent();
         Logo.Width = Logo.Height = logoSize;
         if (height < 320) Logo.Margin = new Thickness(0, 0, 0, 44);
-        StatusText.Text = _statuses[0];
+        StatusText.Text = UiText.Get(_statuses[0]);
         _statusTimer.Interval = TimeSpan.FromMilliseconds(duration.TotalMilliseconds / _statuses.Length);
         App.Preferences.Apply(this);
         AppWindow.Resize(new SizeInt32(440, height));
@@ -46,7 +47,7 @@ public sealed partial class StartupWindow : Window
             area.Y + (area.Height - AppWindow.Size.Height) / 2));
         _statusTimer.Tick += (_, _) =>
         {
-            if (_statusIndex + 1 < _statuses.Length) StatusText.Text = _statuses[++_statusIndex];
+            if (_statusIndex + 1 < _statuses.Length) StatusText.Text = UiText.Get(_statuses[++_statusIndex]);
             else _statusTimer.Stop();
         };
         Closed += (_, _) => { IsClosed = true; _statusTimer.Stop(); };
@@ -59,5 +60,9 @@ public sealed partial class StartupWindow : Window
         return Task.Delay(_duration);
     }
 
-    public void RefreshAppearance() => App.Preferences.Apply(this);
+    public void RefreshAppearance()
+    {
+        App.Preferences.Apply(this);
+        StatusText.Text = UiText.Get(_statuses[_statusIndex]);
+    }
 }

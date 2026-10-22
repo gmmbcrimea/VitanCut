@@ -12,6 +12,7 @@ Directory.CreateDirectory(output);
 var checks = 0;
 EdgeBandingChecks.Run(Check, output);
 MaterialPricingChecks.Run(Check, output);
+LocalizationChecks.Run(Check, output);
 var orderedDetails = new Product
 {
     Details = [new() { Type = "Стекло", Name = "Glass" }, new() { Type = "Кромка", Name = "Edge", IsGeneratedEdgeBand = true },

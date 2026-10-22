@@ -21,7 +21,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
         var proposedName = editor.EditorName;
         if (materials.ExistsName(proposedName, choice.Material))
         {
-            await dialogs.ShowMessageAsync("Материал уже существует", $"Материал «{proposedName}» уже есть в базе. Выберите другое название.");
+            await dialogs.ShowMessageAsync(UiText.Get("Материал уже существует"),UiText.Format($"Материал «{proposedName}» уже есть в базе. Выберите другое название."));
             return null;
         }
         var type = editor.EditorGroup;
@@ -35,7 +35,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
         try { materials.Validate(draft, choice.Material); }
         catch (InvalidOperationException error)
         {
-            await dialogs.ShowMessageAsync("Проверьте материал", error.Message);
+            await dialogs.ShowMessageAsync(UiText.Get("Проверьте материал"),error.Message);
             return null;
         }
         var material = choice.Material;
@@ -48,7 +48,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             Copy(previous, material);
-            await dialogs.ShowMessageAsync("Не удалось сохранить", error.Message);
+            await dialogs.ShowMessageAsync(UiText.Get("Не удалось сохранить"),error.Message);
             return null;
         }
     }
@@ -68,10 +68,10 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
     {
         if (materials.IsUsed(choice))
         {
-            await dialogs.ShowMessageAsync("Материал используется", "Материал указан в деталях проекта или каталога. Сначала замените его в этих деталях.");
+            await dialogs.ShowMessageAsync(UiText.Get("Материал используется"),UiText.Get("Материал указан в деталях проекта или каталога. Сначала замените его в этих деталях."));
             return false;
         }
-        if (!await dialogs.ConfirmDeleteAsync("Удалить материал?", $"{choice.Type} / {choice.Material.Name}"))
+        if (!await dialogs.ConfirmDeleteAsync(UiText.Get("Удалить материал?"),$"{choice.Type} / {choice.Material.Name}"))
             return false;
 
         materials.Delete(choice);

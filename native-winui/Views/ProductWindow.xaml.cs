@@ -90,8 +90,8 @@ public sealed partial class ProductWindow : Window
             if (args.WindowActivationState == WindowActivationState.Deactivated)
                 foreach (var target in _formulaFlyouts.Keys.ToList()) HideFormulaSuggestions(target);
         };
-        Title = _isNew ? "Vitan-Cut - Добавить изделие" : $"Vitan-Cut - {_sourceProduct.Name}";
-        TitleText.Text = _isNew ? "Добавить изделие" : _sourceProduct.Name;
+        Title = _isNew ? UiText.Get("Vitan-Cut - Добавить изделие") : $"Vitan-Cut - {_sourceProduct.Name}";
+        TitleText.Text = _isNew ? UiText.Get("Добавить изделие") : _sourceProduct.Name;
         SubtitleText.Text = $"{_project.Name} · {_project.Counterparty}";
         App.Preferences.Apply(this);
         ConfigureMinimumWindowSize();
@@ -146,8 +146,8 @@ public sealed partial class ProductWindow : Window
             panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
 
-            var nameBox = new TextBox { Header = $"Размер {i + 1}", PlaceholderText = "Название" };
-            var valueBox = new NumberBox { Header = "Значение", Minimum = 0 };
+            var nameBox = new TextBox { Header = UiText.Format($"Размер {i + 1}"), PlaceholderText = UiText.Get("Название") };
+            var valueBox = new NumberBox { Header = UiText.Get("Значение"), Minimum = 0 };
             nameBox.TextChanged += ProductFieldChanged;
             valueBox.ValueChanged += ProductNumberChanged;
             Grid.SetColumn(valueBox, 1);
@@ -207,7 +207,7 @@ public sealed partial class ProductWindow : Window
         var resized = await ImageResizeService.FromFileAsync(file.Path, 300, 300);
         if (resized is null)
         {
-            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = "Не удалось загрузить изображение", Content = "Выберите корректное PNG или JPEG-изображение.", CloseButtonText = "Понятно" }.ShowAsync();
+            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Не удалось загрузить изображение"), Content = UiText.Get("Выберите корректное PNG или JPEG-изображение."), CloseButtonText = UiText.Get("Понятно") }.ShowAsync();
             return;
         }
         _sourceProduct.Image = resized;
@@ -231,7 +231,7 @@ public sealed partial class ProductWindow : Window
         await ImagePreviewService.SetVisibleAsync(ProductImagePreview, path, loaded =>
         {
             if (!_imagePreviewRequests.IsCurrent(request) || _sourceProduct.Image != path) return;
-            ProductImageStatusText.Text = loaded ? (path.StartsWith("data:") ? "Изображение изделия" : Path.GetFileName(path)) : "Изображение не выбрано или недоступно";
+            ProductImageStatusText.Text = loaded ? (path.StartsWith("data:") ? "Изображение изделия" : Path.GetFileName(path)) : UiText.Get("Изображение не выбрано или недоступно");
         }, () => _imagePreviewRequests.IsCurrent(request) && _sourceProduct.Image == path);
     }
     private void RefreshDetails(Detail? select = null)
@@ -332,12 +332,12 @@ public sealed partial class ProductWindow : Window
     private async void DeleteDetailClick(object sender, RoutedEventArgs e)
     {
         if (_selectedDetailRow is not { } row) return;
-        if (!await ConfirmDeleteAsync("Удалить деталь?", row.Detail.Name)) return;
+        if (!await ConfirmDeleteAsync(UiText.Get("Удалить деталь?"),row.Detail.Name)) return;
         if (row.Detail.IsGeneratedEdgeBand) EdgeBandingService.RemoveMaterial(_sourceProduct, row.Detail.MaterialId);
         _sourceProduct.Details.Remove(row.Detail);
         RefreshDetails();
         UpdateSummary();
-        NotificationCenter.Publish("Деталь удалена", $"Деталь «{row.Detail.Name}» удалена из изделия.");
+        NotificationCenter.Publish(UiText.Get("Деталь удалена"),UiText.Format($"Деталь «{row.Detail.Name}» удалена из изделия."));
     }
 
     private void DetailRowChanged(object sender, object e)
@@ -424,9 +424,9 @@ public sealed partial class ProductWindow : Window
         {
             XamlRoot = Root.XamlRoot,
             RequestedTheme = Root.ActualTheme,
-            Title = "Материал добавлен",
-            Content = "Материал «Ножка пластик» отсутствовал. Он создан автоматически: шт., 0 руб.",
-            CloseButtonText = "Понятно"
+            Title = UiText.Get("Материал добавлен"),
+            Content = UiText.Get("Материал «Ножка пластик» отсутствовал. Он создан автоматически: шт., 0 руб."),
+            CloseButtonText = UiText.Get("Понятно")
         };
         await dialog.ShowAsync();
     }
@@ -435,7 +435,7 @@ public sealed partial class ProductWindow : Window
         SaveProductFields();
         if (ProductValidation.Error(App.State, _sourceProduct) is { } error)
         {
-            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = "Проверьте изделие", Content = error, CloseButtonText = "Понятно" }.ShowAsync();
+            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Проверьте изделие"), Content = error, CloseButtonText = UiText.Get("Понятно") }.ShowAsync();
             return;
         }
         try
@@ -453,11 +453,11 @@ public sealed partial class ProductWindow : Window
                 {
                     XamlRoot = Root.XamlRoot,
                     RequestedTheme = Root.ActualTheme,
-                    Title = "Добавить в каталог?",
-                    Content = "Изделие с таким названием отсутствует в каталоге этого заказчика.",
-                    PrimaryButtonText = "В каталог и проект",
-                    SecondaryButtonText = "Только в проект",
-                    CloseButtonText = "Отмена",
+                    Title = UiText.Get("Добавить в каталог?"),
+                    Content = UiText.Get("Изделие с таким названием отсутствует в каталоге этого заказчика."),
+                    PrimaryButtonText = UiText.Get("В каталог и проект"),
+                    SecondaryButtonText = UiText.Get("Только в проект"),
+                    CloseButtonText = UiText.Get("Отмена"),
                     DefaultButton = ContentDialogButton.Primary
                 };
                 var result = await decision.ShowAsync();
@@ -472,7 +472,7 @@ public sealed partial class ProductWindow : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = "Не удалось сохранить", Content = ex.Message, CloseButtonText = "Закрыть" }.ShowAsync();
+            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Не удалось сохранить"), Content = ex.Message, CloseButtonText = UiText.Get("Закрыть") }.ShowAsync();
         }
     }
     private void CancelClick(object sender, RoutedEventArgs e)
@@ -516,7 +516,7 @@ public sealed partial class ProductWindow : Window
         SyncEdgeBandRows();
         foreach (var row in _detailRows) UpdateDetailRowCalculation(row);
         var totals = Calculator.Product(App.State, _sourceProduct);
-        SummaryAreaText.Text = $"{Calculator.Number(totals.Area)} м²";
+        SummaryAreaText.Text = UiText.Format($"{Calculator.Number(totals.Area)} м²");
         SummaryCostText.Text = Calculator.Money(totals.Cost);
         RefreshFormulaLabels();
     }
@@ -532,7 +532,7 @@ public sealed partial class ProductWindow : Window
         {
             row.CalculationText.Text = row.Calculation;
             row.CalculationText.Foreground = (Brush)Application.Current.Resources[string.IsNullOrEmpty(calc.Error) ? "AppTextBrush" : "UiDangerBrush"];
-            ToolTipService.SetToolTip(row.CalculationText, row.Calculation);
+            ToolTipService.SetToolTip(row.CalculationText,row.Calculation);
         }
     }
 
@@ -560,13 +560,13 @@ public sealed partial class ProductWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
 
         var nameBox = new TextBox { Text = row.Detail.Name, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(nameBox, "Название детали");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(nameBox,UiText.Get("Название детали"));
         nameBox.TextChanged += (_, _) => { row.Detail.Name = nameBox.Text; DetailRowChanged(nameBox, EventArgs.Empty); };
         var nameCell = new Grid { ColumnSpacing = 6 };
         nameCell.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         nameCell.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         nameCell.Children.Add(nameBox);
-        var edgeButton = new Button { Content = "Кромка", VerticalAlignment = VerticalAlignment.Center };
+        var edgeButton = new Button { Content = UiText.Get("Кромка"), VerticalAlignment = VerticalAlignment.Center };
         row.EdgeBandButton = edgeButton;
         edgeButton.AddHandler(UIElement.PointerPressedEvent,
             new PointerEventHandler((_, args) => row.EdgeBandPointer = args.GetCurrentPoint(Root).Position), true);
@@ -602,13 +602,13 @@ public sealed partial class ProductWindow : Window
             HorizontalContentAlignment = HorizontalAlignment.Left
         };
         row.MaterialButton = materialButton;
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(materialButton, "Материал детали " + row.Detail.Name);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(materialButton,UiText.Get("Материал детали ") + row.Detail.Name);
         materialButton.Flyout = CreateMaterialFlyout(row, materialButton);
-        ToolTipService.SetToolTip(materialButton, row.SelectedMaterial?.Material.Name ?? "Выберите материал");
+        ToolTipService.SetToolTip(materialButton,row.SelectedMaterial?.Material.Name ?? "Выберите материал");
         Grid.SetColumn(materialButton, 1);
         grid.Children.Add(materialButton);
         var qtyBox = new NumberBox { Value = row.Detail.Qty <= 0 ? 1 : row.Detail.Qty, Minimum = 1, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(qtyBox, "Количество деталей " + row.Detail.Name);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(qtyBox,UiText.Get("Количество деталей ") + row.Detail.Name);
         qtyBox.ValueChanged += (_, _) => { row.Detail.Qty = qtyBox.Value; DetailRowNumberChanged(qtyBox, null!); };
         Grid.SetColumn(qtyBox, 2);
         grid.Children.Add(qtyBox);
@@ -635,7 +635,7 @@ public sealed partial class ProductWindow : Window
             Visibility = isSheetMaterial ? Visibility.Visible : Visibility.Collapsed
         };
         var rotationCell = new Grid { Visibility = isSheetMaterial ? Visibility.Visible : Visibility.Collapsed, ColumnSpacing = 2 };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(rotationBox, "Разрешить поворот детали " + row.Detail.Name);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(rotationBox,UiText.Get("Разрешить поворот детали ") + row.Detail.Name);
         rotationCell.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
         rotationCell.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
         var rotationLock = new FontIcon { Glyph = "\uE72E", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
@@ -643,7 +643,7 @@ public sealed partial class ProductWindow : Window
         void UpdateRotationIndicator()
         {
             rotationLock.Visibility = DetailRotation.IsLocked(row.Detail, row.SelectedMaterial?.Material) ? Visibility.Visible : Visibility.Collapsed;
-            ToolTipService.SetToolTip(rotationCell, DetailRotation.Reason(row.Detail, row.SelectedMaterial?.Material));
+            ToolTipService.SetToolTip(rotationCell,DetailRotation.Reason(row.Detail, row.SelectedMaterial?.Material));
         }
         rotationBox.Toggled += (_, _) =>
         {
@@ -673,7 +673,7 @@ public sealed partial class ProductWindow : Window
         {
             nameBox.IsReadOnly = true;
             foreach (var control in grid.Children.OfType<Control>()) control.IsEnabled = false;
-            ToolTipService.SetToolTip(border, "Длина кромки рассчитывается по выбранным граням деталей.");
+            ToolTipService.SetToolTip(border,UiText.Get("Длина кромки рассчитывается по выбранным граням деталей."));
         }
         return border;
     }
@@ -689,15 +689,15 @@ public sealed partial class ProductWindow : Window
             Visibility = visible ? Visibility.Visible : Visibility.Collapsed
         };
         _formulaFields[target] = field;
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(target, (width ? "Ширина или формула: " : "Длина или формула: ") + row.Detail.Name);
-        ToolTipService.SetToolTip(target, target.Text);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(target,(width ? "Ширина или формула: " : "Длина или формула: ") + row.Detail.Name);
+        ToolTipService.SetToolTip(target,target.Text);
         target.TextChanged += (_, _) =>
         {
             if (_refreshingFormulaText) return;
             var expression = field.Presentation.Storage(target.Text);
             if (width) row.Detail.WidthExpr = expression;
             else row.Detail.LengthExpr = expression;
-            ToolTipService.SetToolTip(target, target.Text);
+            ToolTipService.SetToolTip(target,target.Text);
             DetailRowChanged(target, EventArgs.Empty);
             UpdateFormulaSuggestions(target);
         };
@@ -718,7 +718,7 @@ public sealed partial class ProductWindow : Window
                 if (_formulaFlyouts.TryGetValue(target, out var suggestions) && suggestions.IsOpen) continue;
                 var display = field.Presentation.Display(field.Expression);
                 if (target.Text != display) target.Text = display;
-                ToolTipService.SetToolTip(target, display);
+                ToolTipService.SetToolTip(target,display);
             }
         }
         finally { _refreshingFormulaText = false; }
@@ -737,7 +737,7 @@ public sealed partial class ProductWindow : Window
             SelectionMode = ListViewSelectionMode.Single,
             ItemTemplate = (DataTemplate)Application.Current.Resources["FormulaReferenceTemplate"]
         };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list, "Ссылки на размеры");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list,UiText.Get("Ссылки на размеры"));
         flyout.Content = list;
         _formulaSuggestionLists[target] = list;
         _formulaFlyouts[target] = flyout;
@@ -886,17 +886,17 @@ public sealed partial class ProductWindow : Window
 
     private IEnumerable<FormulaReference> FormulaReferences(DetailRow? currentRow)
     {
-        yield return new FormulaReference("Изделие", "Длина", "длина изделия", $"{Calculator.Number(ProductLengthBox.Value, 0)} мм");
-        yield return new FormulaReference("Изделие", "Глубина", "глубина изделия", $"{Calculator.Number(ProductDepthBox.Value, 0)} мм");
-        yield return new FormulaReference("Изделие", "Высота", "высота изделия", $"{Calculator.Number(ProductHeightBox.Value, 0)} мм");
+        yield return new FormulaReference(UiText.Get("Изделие"), UiText.Get("Длина"), "длина изделия", UiText.Format($"{Calculator.Number(ProductLengthBox.Value, 0)} мм"));
+        yield return new FormulaReference(UiText.Get("Изделие"), UiText.Get("Глубина"), "глубина изделия", UiText.Format($"{Calculator.Number(ProductDepthBox.Value, 0)} мм"));
+        yield return new FormulaReference(UiText.Get("Изделие"), UiText.Get("Высота"), "высота изделия", UiText.Format($"{Calculator.Number(ProductHeightBox.Value, 0)} мм"));
         if (HasLegsBox.IsChecked == true)
-            yield return new FormulaReference("Изделие", "Ножка", "высота ножки", $"{Calculator.Number(LegHeightBox.Value, 0)} мм");
+            yield return new FormulaReference(UiText.Get("Изделие"), UiText.Get("Ножка"), "высота ножки", UiText.Format($"{Calculator.Number(LegHeightBox.Value, 0)} мм"));
 
         for (var index = 0; index < _fixedNameBoxes.Count; index++)
         {
             var name = _fixedNameBoxes[index].Text.Trim();
             if (string.IsNullOrWhiteSpace(name)) continue;
-            yield return new FormulaReference("Фиксированные размеры", name, name, $"{Calculator.Number(_fixedValueBoxes[index].Value, 0)} мм");
+            yield return new FormulaReference(UiText.Get("Фиксированные размеры"), name, name, UiText.Format($"{Calculator.Number(_fixedValueBoxes[index].Value, 0)} мм"));
         }
 
         foreach (var reference in DetailFormulaReferences(currentRow))
@@ -912,23 +912,23 @@ public sealed partial class ProductWindow : Window
             if (row.SelectedMaterial?.Material.Unit is not ("m2" or "lm")) continue;
             var detailIndex = _detailRows.IndexOf(row) + 1;
             var detailName = string.IsNullOrWhiteSpace(row.Detail.Name)
-                ? $"Деталь {detailIndex}"
+                ? UiText.Format($"Деталь {detailIndex}")
                 : row.Detail.Name.Trim();
             var calc = Calculator.Detail(App.State, _sourceProduct, row.Detail);
 
             yield return new FormulaReference(
-                "Детали",
-                $"{detailName} · длина",
+                UiText.Get("Детали"),
+                UiText.Format($"{detailName} · длина"),
                 $"[[detail:{row.Detail.Id}:length]]",
-                $"{Calculator.Number(calc.Length, 0)} мм");
+                UiText.Format($"{Calculator.Number(calc.Length, 0)} мм"));
 
             if (row.SelectedMaterial?.Material.Unit == "m2")
             {
                 yield return new FormulaReference(
-                    "Детали",
-                    $"{detailName} · ширина",
+                    UiText.Get("Детали"),
+                    UiText.Format($"{detailName} · ширина"),
                     $"[[detail:{row.Detail.Id}:width]]",
-                    $"{Calculator.Number(calc.Width, 0)} мм");
+                    UiText.Format($"{Calculator.Number(calc.Width, 0)} мм"));
             }
         }
     }
@@ -951,7 +951,7 @@ public sealed partial class ProductWindow : Window
     {
         var flyout = new Flyout();
         var panel = new StackPanel { Spacing = 8, Width = 320 };
-        var search = new TextBox { PlaceholderText = "Поиск материала", MaxLength = 200 };
+        var search = new TextBox { PlaceholderText = UiText.Get("Поиск материала"), MaxLength = 200 };
         var categories = new StackPanel { Spacing = 4 };
         var scroll = new ScrollViewer
         {
@@ -959,11 +959,11 @@ public sealed partial class ProductWindow : Window
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
-        var empty = new TextBlock { Text = "Материалы не найдены", Visibility = Visibility.Collapsed };
+        var empty = new TextBlock { Text = UiText.Get("Материалы не найдены"), Visibility = Visibility.Collapsed };
         var choices = row.MaterialChoices.OrderBy(choice => choice.Type).ThenBy(choice => choice.Material.Name)
             .Select(choice => new MaterialPickerOption(choice, choice.Material.Name, $"{choice.Type} / {UnitLabel(choice.Material.Unit)}")).ToArray();
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search, "Поиск материала по названию и категории");
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(scroll, "Категории материалов");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search,UiText.Get("Поиск материала по названию и категории"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(scroll,UiText.Get("Категории материалов"));
         void Filter()
         {
             var matches = choices.Where(option => UiTextSearch.Matches(search.Text, option.Name, option.Choice.Type)).ToArray();
@@ -978,7 +978,7 @@ public sealed partial class ProductWindow : Window
                 };
                 ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Disabled);
                 ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Disabled);
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list, category.Key);
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list,category.Key);
                 list.ItemClick += (_, e) => Select((MaterialPickerOption)e.ClickedItem);
                 list.KeyDown += (_, e) =>
                 {
@@ -1068,11 +1068,11 @@ public sealed partial class ProductWindow : Window
                 toggle.Visibility = sheet ? Visibility.Visible : Visibility.Collapsed;
                 rotation.Children.OfType<FontIcon>().First().Visibility = DetailRotation.IsLocked(row.Detail, material)
                     ? Visibility.Visible : Visibility.Collapsed;
-                ToolTipService.SetToolTip(rotation, DetailRotation.Reason(row.Detail, material));
+                ToolTipService.SetToolTip(rotation,DetailRotation.Reason(row.Detail, material));
             }
             finally { _updatingMaterialView = false; }
         }
-        ToolTipService.SetToolTip(row.MaterialButton!, material?.Name ?? "Выберите материал");
+        ToolTipService.SetToolTip(row.MaterialButton!,material?.Name ?? "Выберите материал");
         UpdateDetailHeaders();
     }
 
@@ -1081,26 +1081,26 @@ public sealed partial class ProductWindow : Window
 
     private static string UnitLabel(string unit) => unit switch
     {
-        "m2" => "м²",
-        "lm" => "пог. м",
-        _ => "шт."
+        "m2" => UiText.Get("м²"),
+        "lm" => UiText.Get("пог. м"),
+        _ => UiText.Get("шт.")
     };
     private MenuFlyout CreateDetailContextMenu(DetailRow row)
     {
         var flyout = new MenuFlyout();
-        var add = new MenuFlyoutItem { Text = "Добавить" };
+        var add = new MenuFlyoutItem { Text = UiText.Get("Добавить") };
         add.Click += AddDetailClick;
-        var edit = new MenuFlyoutItem { Text = "Изменить" };
+        var edit = new MenuFlyoutItem { Text = UiText.Get("Изменить") };
         edit.Click += (_, _) =>
         {
             _selectedDetailRow = row;
             UpdateDetailSelectionVisuals();
         };
-        var delete = new MenuFlyoutItem { Text = "Удалить" };
+        var delete = new MenuFlyoutItem { Text = UiText.Get("Удалить") };
         delete.Click += async (_, _) =>
         {
             _selectedDetailRow = row;
-            if (!await ConfirmDeleteAsync("Удалить деталь?", row.Detail.Name)) return;
+            if (!await ConfirmDeleteAsync(UiText.Get("Удалить деталь?"),row.Detail.Name)) return;
             if (row.Detail.IsGeneratedEdgeBand) EdgeBandingService.RemoveMaterial(_sourceProduct, row.Detail.MaterialId);
             _sourceProduct.Details.Remove(row.Detail);
             RefreshDetails();
@@ -1182,8 +1182,8 @@ public sealed partial class ProductWindow : Window
             RequestedTheme = Root.ActualTheme,
             Title = title,
             Content = message,
-            PrimaryButtonText = "Удалить",
-            CloseButtonText = "Отмена",
+            PrimaryButtonText = UiText.Get("Удалить"),
+            CloseButtonText = UiText.Get("Отмена"),
             DefaultButton = ContentDialogButton.Close
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;

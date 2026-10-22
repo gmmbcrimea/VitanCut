@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../native-winui/Services/UiText.cs" Link="Services/UiText.cs" />
+    <EmbeddedResource Include="../native-winui/Localization/*.json" Exclude="../native-winui/Localization/source.json" LogicalName="VitanCut.Localization.%(Filename)%(Extension)" />
     <Compile Include="../native-winui/Services/BackdropPolicy.cs" Link="Services/BackdropPolicy.cs" />
     <Compile Include="../native-winui/Services/UiLayout.cs" Link="Services/UiLayout.cs" />
     <Compile Include="../native-winui/Services/UiTextSearch.cs" Link="Services/UiTextSearch.cs" />

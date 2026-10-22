@@ -1,3 +1,4 @@
+using VitanCut.WinUI.Services;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -23,7 +24,7 @@ public sealed partial class CloudPublishWindow : Window
         StatusIcon.Foreground = new SolidColorBrush(succeeded
             ? Color.FromArgb(255, 62, 207, 142)
             : Color.FromArgb(255, 242, 192, 108));
-        TitleText.Text = succeeded ? "Данные сохранены в облаке" : "Данные сохранены на ПК";
-        StatusText.Text = message;
+        TitleText.Text = succeeded ? UiText.Get("Данные сохранены в облаке") : UiText.Get("Данные сохранены на ПК");
+        StatusText.Text = UiText.Get(message);
     }
 }

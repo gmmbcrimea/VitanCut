@@ -26,9 +26,9 @@ internal static class AccentPicker
             };
             var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
             content.Children.Add(swatch);
-            content.Children.Add(new TextBlock { Text = option.Name, VerticalAlignment = VerticalAlignment.Center });
+            content.Children.Add(new TextBlock { Text = UiText.Get(option.Name), VerticalAlignment = VerticalAlignment.Center });
             var item = new ComboBoxItem { Tag = option.Id, Content = content };
-            AutomationProperties.SetName(item, option.Name);
+            AutomationProperties.SetName(item,UiText.Get(option.Name));
             picker.Items.Add(item);
         }
     }

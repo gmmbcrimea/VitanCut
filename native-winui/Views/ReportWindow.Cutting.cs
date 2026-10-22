@@ -96,7 +96,7 @@ public sealed partial class ReportWindow
             var report = _baseline is null ? null : CutPlanService.Restore(_baseline, plan);
             var label = report is null ? $"{plan.Name} · устарел" : $"{plan.Name} · {CutOptimization.SheetCount(report)} лист.";
             var item = new ComboBoxItem { Content = new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, MaxWidth = 320 }, Tag = plan, IsEnabled = report is not null };
-            ToolTipService.SetToolTip(item, label);
+            ToolTipService.SetToolTip(item,label);
             CutVariantBox.Items.Add(item);
             if (plan.Id == _activePlanId) CutVariantBox.SelectedItem = item;
         }
@@ -145,8 +145,8 @@ public sealed partial class ReportWindow
         var metrics = CuttingMetrics.Analyze(_cutReport, UsefulRemainderBox.Value);
         UsefulRemainderBox.Visibility = RemaindersButton.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         var sheetArea = _cutReport.Groups.SelectMany(g => g.Sheets).Sum(s => s.SheetLength * s.SheetWidth) / 1_000_000;
-        CutMetricsText.Text = $"Листов: {CutOptimization.SheetCount(_cutReport)}\nПлощадь листов: {N(sheetArea)} м²\nПолезных остатков: {metrics.Remainders.Count}\nРезов: {metrics.Cuts.Count}\nДлина резов: {N(metrics.Cuts.Length / 1000)} м";
-        HintText.Text = $"Листов: {CutOptimization.SheetCount(_cutReport)} · Не размещено: {_cutReport.Unplaced.Count}";
+        CutMetricsText.Text = UiText.Format($"Листов: {CutOptimization.SheetCount(_cutReport)}\nПлощадь листов: {N(sheetArea)} м²\nПолезных остатков: {metrics.Remainders.Count}\nРезов: {metrics.Cuts.Count}\nДлина резов: {N(metrics.Cuts.Length / 1000)} м");
+        HintText.Text = UiText.Format($"Листов: {CutOptimization.SheetCount(_cutReport)} · Не размещено: {_cutReport.Unplaced.Count}");
         DispatcherQueue.TryEnqueue(() => ReportScroll.ChangeView(null, scroll, null, true));
     }
 
@@ -174,7 +174,7 @@ public sealed partial class ReportWindow
             part.Rect.StrokeThickness = (_selected.Contains(part.InstanceId) ? 3 : 1.25) / scale;
             part.Label.FontSize = Math.Min(14 / scale, Math.Max(1, Math.Min(part.Rect.Width, part.Rect.Height) - 4));
         }
-        SelectionText.Text = $"Выделено: {_selected.Count}";
+        SelectionText.Text = UiText.Format($"Выделено: {_selected.Count}");
         SelectionActionsPanel.Visibility = _selected.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         _syncingAccessibleSelection = true;
         try
@@ -200,15 +200,15 @@ public sealed partial class ReportWindow
         {
             var existing = _plans.FirstOrDefault(p => p.Id == _activePlanId && !p.Automatic);
             var name = new TextBox { Text = existing?.Name ?? $"Пользовательский {DateTime.Now:dd.MM HH:mm}", MaxLength = 100 };
-            var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = "Сохранить вариант", Content = name,
-                PrimaryButtonText = "Сохранить", CloseButtonText = "Отмена", DefaultButton = ContentDialogButton.Primary };
+            var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Сохранить вариант"), Content = name,
+                PrimaryButtonText = UiText.Get("Сохранить"), CloseButtonText = UiText.Get("Отмена"), DefaultButton = ContentDialogButton.Primary };
             if (existing is null && (await dialog.ShowAsync() != ContentDialogResult.Primary || string.IsNullOrWhiteSpace(name.Text))) return;
             var plan = CutPlanService.Capture(_cutReport, _signature, name.Text.Trim(), "Пользовательский");
             if (existing is not null) plan.Id = existing.Id;
             var next = _plans.Where(p => p.Id != plan.Id).Append(plan).ToList();
             _savePlans?.Invoke(next, plan.Id);
             _plans = next; _activePlanId = plan.Id; _editOrigin = _cutReport;
-            RefreshVariants(); HintText.Text = "Вариант сохранён в проекте";
+            RefreshVariants(); HintText.Text = UiText.Get("Вариант сохранён в проекте");
         }
         catch (Exception error) { HintText.Text = error.Message; }
         finally { _cutBusy = false; PaintSelection(); }
@@ -221,11 +221,11 @@ public sealed partial class ReportWindow
         {
             if (remember) _undo.Push(_cutReport);
             _cutReport = nextReport;
-            RenderCut(); HintText.Text = "Есть несохранённые изменения";
-            NotificationCenter.Publish("Раскрой изменён", "В раскрой внесены несохранённые изменения.");
+            RenderCut(); HintText.Text = UiText.Get("Есть несохранённые изменения");
+            NotificationCenter.Publish(UiText.Get("Раскрой изменён"),UiText.Get("В раскрой внесены несохранённые изменения."));
             return true;
         }
-        catch (Exception error) { HintText.Text = $"Правка не сохранена: {error.Message}"; return false; }
+        catch (Exception error) { HintText.Text = UiText.Format($"Правка не сохранена: {error.Message}"); return false; }
     }
 
     private async Task<bool> ApplyEditAsync(CutEditProposal proposal)
@@ -246,16 +246,16 @@ public sealed partial class ReportWindow
                 var action = string.IsNullOrWhiteSpace(proposal.ConfirmationAction) ? "Создать и перенести" : proposal.ConfirmationAction;
                 var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = title,
                     Content = $"{content}\n\n{proposal.SheetSummary}", PrimaryButtonText = action,
-                    CloseButtonText = "Отмена", DefaultButton = ContentDialogButton.Close };
+                    CloseButtonText = UiText.Get("Отмена"), DefaultButton = ContentDialogButton.Close };
                 if (await dialog.ShowAsync() != ContentDialogResult.Primary) return false;
             }
             var emptied = NewlyEmptySheets(nextReport);
             if (emptied.Count > 0)
             {
                 var names = string.Join(", ", emptied.Select(sheet => $"лист {sheet.Number}"));
-                var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = "Лист освобождён",
-                    Content = $"{names} больше не содержит деталей. Удалить {(emptied.Count == 1 ? "его" : "их")} из карты раскроя?",
-                    PrimaryButtonText = "Удалить", CloseButtonText = "Оставить", DefaultButton = ContentDialogButton.Close };
+                var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Лист освобождён"),
+                    Content = UiText.Format($"{names} больше не содержит деталей. Удалить {(emptied.Count == 1 ? "его" : "их")} из карты раскроя?"),
+                    PrimaryButtonText = UiText.Get("Удалить"), CloseButtonText = UiText.Get("Оставить"), DefaultButton = ContentDialogButton.Close };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary) nextReport = CutEditing.RemoveEmptySheets(nextReport, emptied);
             }
             committed = CommitEdit(nextReport);
@@ -305,24 +305,24 @@ public sealed partial class ReportWindow
 
         var transferLabel = transfer.NewSheets > 0 ? "Перенести на новый лист" : "Перенести на следующий лист";
         var content = new StackPanel { Spacing = 8 };
-        content.Children.Add(new TextBlock { Text = "Поворот не помещается в текущую раскладку. Выберите действие:" , TextWrapping = TextWrapping.Wrap });
-        content.Children.Add(new TextBlock { Text = "При переносе исходный лист будет пересчитан. При повороте здесь не помещающиеся детали перейдут на новый лист.", TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+        content.Children.Add(new TextBlock { Text = UiText.Get("Поворот не помещается в текущую раскладку. Выберите действие:") , TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(new TextBlock { Text = UiText.Get("При переносе исходный лист будет пересчитан. При повороте здесь не помещающиеся детали перейдут на новый лист."), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
         var dialog = new ContentDialog
         {
             XamlRoot = Root.XamlRoot,
             RequestedTheme = Root.ActualTheme,
-            Title = "Деталь не помещается на листе",
+            Title = UiText.Get("Деталь не помещается на листе"),
             Content = content,
             PrimaryButtonText = transferLabel,
-            SecondaryButtonText = "Повернуть здесь",
-            CloseButtonText = "Отменить поворот",
+            SecondaryButtonText = UiText.Get("Повернуть здесь"),
+            CloseButtonText = UiText.Get("Отменить поворот"),
             DefaultButton = ContentDialogButton.Close
         };
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary)
         {
             var moved = await ApplyEditAsync(transfer with { NewSheets = 0 });
-            if (moved) NotificationCenter.Publish("Деталь перенесена", transfer.SheetSummary);
+            if (moved) NotificationCenter.Publish(UiText.Get("Деталь перенесена"),transfer.SheetSummary);
         }
         else if (result == ContentDialogResult.Secondary)
         {

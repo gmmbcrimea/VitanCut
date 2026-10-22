@@ -14,8 +14,8 @@ public sealed partial class ProductWindow
         if (row.EdgeBandButton is not { } button) return;
         button.Visibility = EdgeBandingService.IsEnabled(App.State, row.Detail) ? Visibility.Visible : Visibility.Collapsed;
         button.Style = (Style)Application.Current.Resources[row.Detail.EdgeBands.Count > 0 ? "AccentButtonStyle" : "UiButtonStyle"];
-        ToolTipService.SetToolTip(button, "Кромление детали «" + row.Detail.Name + "»");
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, "Кромка: " + row.Detail.Name);
+        ToolTipService.SetToolTip(button,UiText.Get("Кромление детали «") + row.Detail.Name + "»");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button,UiText.Get("Кромка: ") + row.Detail.Name);
     }
 
     private void SyncEdgeBandRows()
@@ -61,13 +61,13 @@ public sealed partial class ProductWindow
         panel.Children.Add(new TextBlock { Text = row.Detail.Name, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         var choices = App.State.MaterialChoices().Where(choice =>
             string.Equals(choice.Type, "Кромка", StringComparison.CurrentCultureIgnoreCase) && choice.Material.Unit == "lm").ToList();
-        var materials = new ComboBox { Header = "Материал кромки", ItemsSource = choices, DisplayMemberPath = "Material.Name",
-            HorizontalAlignment = HorizontalAlignment.Stretch, PlaceholderText = "Выберите кромку" };
+        var materials = new ComboBox { Header = UiText.Get("Материал кромки"), ItemsSource = choices, DisplayMemberPath = "Material.Name",
+            HorizontalAlignment = HorizontalAlignment.Stretch, PlaceholderText = UiText.Get("Выберите кромку") };
         var current = row.Detail.EdgeBands.FirstOrDefault();
         materials.SelectedItem = choices.FirstOrDefault(choice => choice.Material.Id == current?.MaterialId) ?? choices.FirstOrDefault();
         panel.Children.Add(materials);
         if (choices.Count == 0)
-            panel.Children.Add(new TextBlock { Text = "Добавьте материал в категорию «Кромка» с единицей «пог. м».", TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new TextBlock { Text = UiText.Get("Добавьте материал в категорию «Кромка» с единицей «пог. м»."), TextWrapping = TextWrapping.Wrap });
 
         var drawing = new Canvas { Width = 300, Height = 200 };
         var scale = valid ? Math.Min(240 / length.Value, 140 / width.Value) : 1;
@@ -90,8 +90,8 @@ public sealed partial class ProductWindow
                 IsEnabled = valid && choices.Count > 0 };
             Canvas.SetLeft(edgeButton, side == "left" ? x - 14 : side == "right" ? x + partWidth : x);
             Canvas.SetTop(edgeButton, side == "top" ? y - 14 : side == "bottom" ? y + partHeight : y);
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(edgeButton, label);
-            ToolTipService.SetToolTip(edgeButton, label + " · " + Calculator.Number(horizontal ? length.Value : width.Value) + " мм");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(edgeButton,label);
+            ToolTipService.SetToolTip(edgeButton,label + " · " + Calculator.Number(horizontal ? length.Value : width.Value) + UiText.Get(" мм"));
             edgeButton.Click += (_, _) =>
             {
                 if (materials.SelectedItem is not MaterialChoice selected) return;
@@ -115,8 +115,8 @@ public sealed partial class ProductWindow
         materials.SelectionChanged += (_, _) => PaintEdges();
         PaintEdges();
         panel.Children.Add(drawing);
-        panel.Children.Add(new TextBlock { Text = valid ? $"{Calculator.Number(length.Value)} × {Calculator.Number(width.Value)} мм" :
-            "Проверьте размеры и формулы детали.", TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(new TextBlock { Text = valid ? UiText.Format($"{Calculator.Number(length.Value)} × {Calculator.Number(width.Value)} мм") :
+            UiText.Get("Проверьте размеры и формулы детали."), TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap });
         flyout.Content = panel;
         if (row.EdgeBandPointer is { } pointer)
             flyout.ShowAt(Root, new FlyoutShowOptions { Position = pointer, Placement = FlyoutPlacementMode.Auto });

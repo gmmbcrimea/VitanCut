@@ -14,7 +14,7 @@ public sealed partial class CreateProjectWindow : Window
     public CreateProjectWindow(IEnumerable<string> customers)
     {
         InitializeComponent();
-        Title = "Расчёт мебели - Создать проект";
+        Title = UiText.Get("Расчёт мебели - Создать проект");
         App.Preferences.Apply(this);
 
         if (AppWindow.Presenter is OverlappedPresenter presenter)
@@ -25,7 +25,7 @@ public sealed partial class CreateProjectWindow : Window
 
         foreach (var customer in customers.Where(item => !string.IsNullOrWhiteSpace(item)).Distinct().OrderBy(item => item))
             CustomerBox.Items.Add(customer);
-        CustomerBox.Items.Add(new ComboBoxItem { Content = "Создать нового заказчика", Tag = "new-customer" });
+        CustomerBox.Items.Add(new ComboBoxItem { Content = UiText.Get("Создать нового заказчика"), Tag = "new-customer" });
         CustomerBox.SelectedIndex = CustomerBox.Items.Count > 1 ? 0 : -1;
         Root.Loaded += (_, _) =>
         {

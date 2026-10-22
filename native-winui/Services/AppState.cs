@@ -104,6 +104,7 @@ public sealed class AppState
         var local = Database.Preferences;
         imported.Preferences ??= new AppPreferences();
         imported.Preferences.Theme = local.Theme;
+        imported.Preferences.Language = local.Language;
         imported.Preferences.AccentColor = local.AccentColor;
         imported.Preferences.CompactMode = local.CompactMode;
         imported.Preferences.AcrylicBackgroundEnabled = local.AcrylicBackgroundEnabled;
@@ -142,6 +143,8 @@ public sealed class AppState
     public void ImportJson(string json)
     {
         var imported = ReadDatabase(json);
+        imported.Preferences ??= new AppPreferences();
+        imported.Preferences.Language = Database.Preferences.Language;
         var previous = Database;
         try
         {

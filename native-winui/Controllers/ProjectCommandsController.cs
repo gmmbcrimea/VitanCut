@@ -35,7 +35,7 @@ public sealed class ProjectCommandsController(
 
     public async Task<bool> DeleteProjectAsync(Project project)
     {
-        if (!await dialogs.ConfirmDeleteAsync("Удалить проект?", project.Name)) return false;
+        if (!await dialogs.ConfirmDeleteAsync(UiText.Get("Удалить проект?"),project.Name)) return false;
         projects.Delete(project);
         return true;
     }
@@ -45,7 +45,7 @@ public sealed class ProjectCommandsController(
 
     public async Task<bool> DeleteProductAsync(Project project, Product product)
     {
-        if (!await dialogs.ConfirmDeleteAsync("Удалить изделие?", product.Name)) return false;
+        if (!await dialogs.ConfirmDeleteAsync(UiText.Get("Удалить изделие?"),product.Name)) return false;
         projects.DeleteProduct(project, product);
         return true;
     }
@@ -68,7 +68,7 @@ public sealed class ProjectCommandsController(
     public async Task<bool> DeletePayrollAsync(Project project, int index)
     {
         if (index < 0 || index >= project.Payrolls.Count) return false;
-        if (!await dialogs.ConfirmDeleteAsync("Удалить строку ЗП?", project.Payrolls[index].Note)) return false;
+        if (!await dialogs.ConfirmDeleteAsync(UiText.Get("Удалить строку ЗП?"),project.Payrolls[index].Note)) return false;
 
         projects.DeletePayroll(project, index);
         return true;

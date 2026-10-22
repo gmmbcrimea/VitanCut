@@ -138,9 +138,9 @@ public sealed class MaterialPageController
         {
             _pricingUnit = unit;
             _priceMode.Items.Clear();
-            _priceMode.Items.Add(new ComboBoxItem { Content = unit == "m2" ? "За квадратный метр" : unit == "lm" ? "За погонный метр" : "За штуку", Tag = "unit" });
-            if (unit == "m2") _priceMode.Items.Add(new ComboBoxItem { Content = "За лист", Tag = "sheet" });
-            if (unit == "lm") _priceMode.Items.Add(new ComboBoxItem { Content = "За бухту", Tag = "roll" });
+            _priceMode.Items.Add(new ComboBoxItem { Content = unit == "m2" ? UiText.Get("За квадратный метр") : unit == "lm" ? UiText.Get("За погонный метр") : UiText.Get("За штуку"), Tag = "unit" });
+            if (unit == "m2") _priceMode.Items.Add(new ComboBoxItem { Content = UiText.Get("За лист"), Tag = "sheet" });
+            if (unit == "lm") _priceMode.Items.Add(new ComboBoxItem { Content = UiText.Get("За бухту"), Tag = "roll" });
             _priceMode.SelectedIndex = 0;
         }
         _priceMode.Visibility = unit == "pc" ? Visibility.Collapsed : Visibility.Visible;
@@ -151,8 +151,8 @@ public sealed class MaterialPageController
     {
         var mode = (_priceMode.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "unit";
         _rollLength.Visibility = _pricingUnit == "lm" && mode == "roll" ? Visibility.Visible : Visibility.Collapsed;
-        _cost.Header = mode == "sheet" ? "Цена за лист" : mode == "roll" ? "Цена за бухту" :
-            _pricingUnit == "m2" ? "Цена за м²" : _pricingUnit == "lm" ? "Цена за погонный метр" : "Цена за единицу";
+        _cost.Header = mode == "sheet" ? UiText.Get("Цена за лист") : mode == "roll" ? UiText.Get("Цена за бухту") :
+            _pricingUnit == "m2" ? UiText.Get("Цена за м²") : _pricingUnit == "lm" ? UiText.Get("Цена за погонный метр") : UiText.Get("Цена за единицу");
     }
 
     private void BindItems()
