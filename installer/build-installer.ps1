@@ -1,4 +1,4 @@
-param([string]$Version = '1.1.2', [switch]$Preview)
+param([string]$Version = '1.1.3', [switch]$Preview)
 
 $ErrorActionPreference = 'Stop'
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"

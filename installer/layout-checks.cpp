@@ -1,9 +1,15 @@
 #include "ui-layout.h"
+#include "localization.h"
 #include <cassert>
 #include <iostream>
 
 int main()
 {
+    for (const auto& entry : installer_l10n::Entries)
+        for (int language = 1; language <= 4; ++language)
+            assert(std::wstring(installer_l10n::Translate(entry.source, language)) != entry.source);
+    assert(std::wstring(installer_l10n::Translate(L"Установить", 1)) == L"Install");
+    assert(std::wstring(installer_l10n::Translate(L"Готово", 4)) == L"完成");
     using namespace installer_ui;
     assert(Scale(17, 96) == 17);
     assert(Scale(17, 144) == 26);
@@ -22,6 +28,7 @@ int main()
         assert(Scale(490, dpi) <= Scale(ContentWidth, dpi));
         assert(Scale(413 + 56, dpi) <= Scale(ContentHeight, dpi));
         assert(Scale(398 + 44, dpi) <= Scale(ContentHeight, dpi));
+        assert(Scale(462 + 24, dpi) <= Scale(ContentHeight, dpi));
     }
     std::cout << "Installer layout checks passed: DPI100/125/150/200, content bounds and scroll clamping.\n";
 }

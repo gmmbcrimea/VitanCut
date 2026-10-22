@@ -12,8 +12,10 @@
 #include <thread>
 #include <vector>
 #include <stdexcept>
+#include <map>
 #include "resource.h"
 #include "ui-layout.h"
+#include "localization.h"
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "uxtheme.lib")
@@ -46,6 +48,24 @@ std::vector<ControlLayout> controlLayouts;
 HBRUSH windowBrush = CreateSolidBrush(RGB(32, 32, 32));
 HBRUSH inputBrush = CreateSolidBrush(RGB(45, 45, 45));
 bool windowMaterial = false;
+constexpr int LanguageControlId = 1010;
+int uiLanguage = 0;
+std::map<HWND, std::wstring> localizedControls;
+
+void SetLocalizedText(HWND control, const std::wstring& source)
+{
+    localizedControls[control] = source;
+    SetWindowTextW(control, installer_l10n::Translate(source, uiLanguage));
+    InvalidateRect(control, nullptr, TRUE);
+}
+
+void RefreshLanguage(HWND window)
+{
+    for (const auto& item : localizedControls)
+        SetWindowTextW(item.first, installer_l10n::Translate(item.second, uiLanguage));
+    SetWindowTextW(window, installer_l10n::Translate(uiPreview ? L"VitanCut - проверка интерфейса" : L"Установка VitanCut", uiLanguage));
+    RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+}
 
 void ApplyWindowMaterial(HWND window)
 {
@@ -702,10 +722,17 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
         break;
     }
     case WM_COMMAND:
+        if (LOWORD(wParam) == LanguageControlId && HIWORD(wParam) == CBN_SELCHANGE)
+        {
+            const auto selected = SendMessageW(reinterpret_cast<HWND>(lParam), CB_GETCURSEL, 0, 0);
+            if (selected >= 0 && selected <= 4) { uiLanguage = static_cast<int>(selected); RefreshLanguage(window); }
+            return 0;
+        }
         if (HIWORD(wParam) != BN_CLICKED) break;
         if (LOWORD(wParam) == IDC_BROWSE)
         {
-            BROWSEINFOW info{}; info.hwndOwner = window; info.lpszTitle = L"Выберите папку для установки VitanCut"; info.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+            const std::wstring title = installer_l10n::Translate(L"Выберите папку для установки VitanCut", uiLanguage);
+            BROWSEINFOW info{}; info.hwndOwner = window; info.lpszTitle = title.c_str(); info.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
             if (PIDLIST_ABSOLUTE item = SHBrowseForFolderW(&info)) { wchar_t folder[MAX_PATH]; if (SHGetPathFromIDListW(item, folder)) SetWindowTextW(pathBox, folder); CoTaskMemFree(item); }
         }
         else if (LOWORD(wParam) == IDC_INSTALL)
@@ -716,17 +743,17 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
                 previewProgress = 0;
                 SendMessageW(progressBar, PBM_SETPOS, 0, 0);
                 ShowWindow(progressBar, SW_SHOW);
-                SetWindowTextW(statusLabel, L"Проверяем интерфейс...");
+                SetLocalizedText(statusLabel, L"Проверяем интерфейс...");
                 EnableWindow(installButton, FALSE);
                 SetTimer(window, PreviewTimer, 100, nullptr);
                 return 0;
             }
 #ifndef VITANCUT_UI_ONLY
             const auto path = GetText(pathBox);
-            if (path.empty()) { SetWindowTextW(statusLabel, L"Укажите папку установки."); return 0; }
+            if (path.empty()) { SetLocalizedText(statusLabel, L"Укажите папку установки."); return 0; }
             EnableWindow(installButton, FALSE); EnableWindow(pathBox, FALSE); EnableWindow(desktopBox, FALSE); EnableWindow(startMenuBox, FALSE); EnableWindow(taskbarBox, FALSE);
             EnableWindow(GetDlgItem(window, IDC_BROWSE), FALSE);
-            SendMessageW(progressBar, PBM_SETPOS, 1, 0); ShowWindow(progressBar, SW_SHOW); SetWindowTextW(statusLabel, L"Готовим установку...");
+            SendMessageW(progressBar, PBM_SETPOS, 1, 0); ShowWindow(progressBar, SW_SHOW); SetLocalizedText(statusLabel, L"Готовим установку...");
             const bool desktop = SendMessageW(desktopBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
             const bool start = SendMessageW(startMenuBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
             const bool taskbar = SendMessageW(taskbarBox, BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -737,14 +764,14 @@ LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
     case WM_INSTALL_PROGRESS: SendMessageW(progressBar, PBM_SETPOS, wParam, 0); return 0;
     case WM_INSTALL_STATUS:
     {
-        auto text = reinterpret_cast<std::wstring*>(lParam); SetWindowTextW(statusLabel, text->c_str()); delete text; return 0;
+        auto text = reinterpret_cast<std::wstring*>(lParam); SetLocalizedText(statusLabel, *text); delete text; return 0;
     }
     case WM_INSTALL_FINISHED:
     {
-        auto text = reinterpret_cast<std::wstring*>(lParam); SetWindowTextW(statusLabel, text->c_str()); delete text;
+        auto text = reinterpret_cast<std::wstring*>(lParam); SetLocalizedText(statusLabel, *text); delete text;
         SendMessageW(progressBar, PBM_SETPOS, wParam ? 100 : 0, 0);
-        if (wParam) { installationComplete = true; SetWindowTextW(installButton, L"Готово"); }
-        else { SetWindowTextW(installButton, L"Повторить"); }
+        if (wParam) { installationComplete = true; SetLocalizedText(installButton, L"Готово"); }
+        else { SetLocalizedText(installButton, L"Повторить"); }
         EnableWindow(GetDlgItem(window, IDC_BROWSE), TRUE);
         EnableWindow(installButton, TRUE); EnableWindow(pathBox, TRUE); EnableWindow(desktopBox, TRUE); EnableWindow(startMenuBox, TRUE); EnableWindow(taskbarBox, TRUE); return 0;
     }
@@ -783,7 +810,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int show
     HWND window = CreateWindowExW(WS_EX_CONTROLPARENT, WindowClass, uiPreview ? L"VitanCut - проверка интерфейса" : L"Установка VitanCut", WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VSCROLL | WS_HSCROLL, CW_USEDEFAULT, CW_USEDEFAULT, Scale(534), Scale(526), nullptr, nullptr, instance, nullptr);
     uiDpi = GetDpiForWindow(window); RecreateFonts(window);
     ApplyWindowMaterial(window);
-    auto createLabel = [window](const wchar_t* text, int x, int y, int width, int height, HFONT* font) { return TrackControl(CreateWindowW(L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_OWNERDRAW, Scale(x), Scale(y), Scale(width), Scale(height), window, nullptr, nullptr, nullptr), x, y, width, height, font); };
+    auto createLabel = [window](const wchar_t* text, int x, int y, int width, int height, HFONT* font) { auto control = TrackControl(CreateWindowW(L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_OWNERDRAW, Scale(x), Scale(y), Scale(width), Scale(height), window, nullptr, nullptr, nullptr), x, y, width, height, font); SetLocalizedText(control, text); return control; };
     createLabel(L"VitanCut", 102, 30, 340, 34, &fontTitle); createLabel(uiPreview ? L"Проверка интерфейса" : L"Установка программы", 104, 64, 300, 24, &fontRegular); createLabel(L"Программа будет установлена в выбранную папку.", 28, 168, 380, 22, &fontSmall);
     createLabel(L"GMMB", 28, 469, 100, 18, &fontSmall);
     wchar_t documents[MAX_PATH]{}; SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, 0, documents);
@@ -792,11 +819,20 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int show
     pathBox = TrackControl(CreateWindowExW(0, L"EDIT", (fs::path(documents) / L"VitanCut").c_str(), WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, Scale(38), Scale(208), Scale(348), Scale(22), window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_INSTALL_PATH)), instance, nullptr), 38, 208, 348, 22, &fontRegular);
     SetWindowLongPtrW(pathBox, GWL_EXSTYLE, GetWindowLongPtrW(pathBox, GWL_EXSTYLE) | WS_EX_LAYERED);
     SetLayeredWindowAttributes(pathBox, 0, 255, LWA_ALPHA);
-    auto createButton = [window, instance](const wchar_t* text, DWORD style, int id, int x, int y, int width, int height) { return TrackControl(CreateWindowW(L"BUTTON", text, WS_CHILD | WS_VISIBLE | WS_TABSTOP | style, Scale(x), Scale(y), Scale(width), Scale(height), window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance, nullptr), x, y, width, height, id == IDC_INSTALL ? &fontBold : &fontRegular); };
+    auto createButton = [window, instance](const wchar_t* text, DWORD style, int id, int x, int y, int width, int height) { auto control = TrackControl(CreateWindowW(L"BUTTON", text, WS_CHILD | WS_VISIBLE | WS_TABSTOP | style, Scale(x), Scale(y), Scale(width), Scale(height), window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), instance, nullptr), x, y, width, height, id == IDC_INSTALL ? &fontBold : &fontRegular); SetLocalizedText(control, text); return control; };
     createButton(L"Обзор", BS_OWNERDRAW, IDC_BROWSE, 406, 196, 84, 40);
     createLabel(L"Ярлыки", 28, 260, 230, 24, &fontBold);
     desktopBox = createButton(L"Ярлык на рабочем столе", BS_AUTOCHECKBOX, IDC_DESKTOP, 28, 288, 300, 27); startMenuBox = createButton(L"Ярлык в меню Пуск", BS_AUTOCHECKBOX, IDC_START_MENU, 28, 320, 300, 27); taskbarBox = createButton(L"Закрепить на панели задач", BS_AUTOCHECKBOX, IDC_TASKBAR, 28, 352, 300, 27); SendMessageW(desktopBox, BM_SETCHECK, BST_CHECKED, 0); SendMessageW(startMenuBox, BM_SETCHECK, BST_CHECKED, 0);
     progressBar = TrackControl(CreateWindowW(PROGRESS_CLASSW, nullptr, WS_CHILD | PBS_SMOOTH, Scale(28), Scale(397), Scale(320), Scale(8), window, reinterpret_cast<HMENU>(IDC_PROGRESS), instance, nullptr), 28, 397, 320, 8, &fontRegular); SendMessageW(progressBar, PBM_SETRANGE, 0, MAKELPARAM(0, 100)); statusLabel = createLabel(L"", 28, 413, 320, 56, &fontSmall); installButton = createButton(uiPreview ? L"Проверить" : L"Установить", BS_OWNERDRAW, IDC_INSTALL, 360, 398, 130, 44);
+    createLabel(L"Язык", 145, 467, 90, 24, &fontSmall);
+    const auto languageBox = TrackControl(CreateWindowW(L"COMBOBOX", nullptr,
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST | WS_VSCROLL,
+        Scale(240), Scale(462), Scale(250), Scale(190), window,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(LanguageControlId)), instance, nullptr),
+        240, 462, 250, 190, &fontSmall);
+    for (const auto* name : { L"Русский", L"English", L"Deutsch", L"Español", L"简体中文" })
+        SendMessageW(languageBox, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
+    SendMessageW(languageBox, CB_SETCURSEL, uiLanguage, 0);
     controlsReady = true; FitWindow(window); ApplyControlLayout(window);
     ShowWindow(window, show); UpdateWindow(window);
     SetFocus(pathBox);

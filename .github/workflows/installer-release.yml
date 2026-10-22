@@ -21,10 +21,10 @@ jobs:
       - name: Publish installer
         uses: softprops/action-gh-release@v2
         with:
-          name: VitanCut Installer 1.1.2
+          name: VitanCut Installer 1.1.3
           make_latest: false
           generate_release_notes: false
-          body_path: release-notes/installer-v1.1.2.md
+          body_path: release-notes/installer-v1.1.3.md
           files: |
             dist/installer/VitanCut.Setup.exe
             dist/installer/VitanCut.Setup.exe.sha256
