@@ -1023,12 +1023,44 @@ public sealed partial class ProductWindow : Window
         var empty = new TextBlock { Text = UiText.Get("Материалы не найдены"), Visibility = Visibility.Collapsed };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search,UiText.Get("Поиск материала по названию и категории"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(scroll,UiText.Get("Категории материалов"));
+        ListView CreateOptionsList(IReadOnlyList<MaterialPickerOption> options, string label)
+        {
+            var list = new ListView
+            {
+                IsItemClickEnabled = true, SelectionMode = ListViewSelectionMode.Single,
+                ItemTemplate = (DataTemplate)Application.Current.Resources["MaterialPickerTemplate"],
+                ItemsSource = options
+            };
+            ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Disabled);
+            ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Disabled);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list, label);
+            list.SelectedItem = options.FirstOrDefault(option => option.Choice == row.SelectedMaterial);
+            list.ItemClick += (_, e) => Select((MaterialPickerOption)e.ClickedItem);
+            list.KeyDown += (_, e) =>
+            {
+                if (e.Key == Windows.System.VirtualKey.Enter && list.SelectedItem is MaterialPickerOption option)
+                { Select(option); e.Handled = true; }
+            };
+            return list;
+        }
+        static ListView? FirstExpandedList(StackPanel content)
+        {
+            foreach (var child in content.Children)
+            {
+                if (child is ListView list && list.Items.Count > 0) return list;
+                if (child is Expander { IsExpanded: true, Content: ListView nested } && nested.Items.Count > 0) return nested;
+            }
+            return null;
+        }
         void Filter()
         {
-            var choices = App.State.MaterialChoices().OrderBy(choice => choice.Type).ThenBy(choice => choice.Material.Name)
+            var searching = !string.IsNullOrWhiteSpace(search.Text);
+            var choices = App.State.MaterialChoices().GroupBy(choice => choice.Type).OrderBy(group => group.Key)
+                .SelectMany(group => MaterialCatalogOrdering.Sort(group, "name-asc"))
                 .Select(choice => new MaterialPickerOption(choice, choice.Material.Name,
                     $"{UnitLabel(choice.Material.Unit)} · {MaterialPricing.UnitCost(choice.Material):N2} {UiText.Get("руб.")}")).ToArray();
-            var matches = choices.Where(option => UiTextSearch.Matches(search.Text, option.Name, option.Choice.Type)).ToArray();
+            var matches = choices.Where(option => UiTextSearch.Matches(search.Text, option.Name, option.Choice.Type,
+                option.Choice.Material.Group)).ToArray();
             categories.Children.Clear();
             var categoryNames = string.IsNullOrWhiteSpace(search.Text)
                 ? App.MaterialLibrary.GetGroups().Concat(choices.Select(option => option.Choice.Type)).Distinct().OrderBy(type => type)
@@ -1036,20 +1068,6 @@ public sealed partial class ProductWindow : Window
             foreach (var categoryName in categoryNames)
             {
                 var options = matches.Where(option => option.Choice.Type == categoryName).ToList();
-                var list = new ListView
-                {
-                    IsItemClickEnabled = true, SelectionMode = ListViewSelectionMode.Single,
-                    ItemTemplate = (DataTemplate)Application.Current.Resources["MaterialPickerTemplate"]
-                };
-                ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Disabled);
-                ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Disabled);
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list,categoryName);
-                list.ItemClick += (_, e) => Select((MaterialPickerOption)e.ClickedItem);
-                list.KeyDown += (_, e) =>
-                {
-                    if (e.Key == Windows.System.VirtualKey.Enter && list.SelectedItem is MaterialPickerOption option)
-                    { Select(option); e.Handled = true; }
-                };
                 var add = new Button { Content = UiText.Get("Добавить"), HorizontalAlignment = HorizontalAlignment.Stretch };
                 CommandAppearance.Decorate(add);
                 add.Click += async (_, _) =>
@@ -1063,7 +1081,6 @@ public sealed partial class ProductWindow : Window
                     NotificationCenter.Publish(UiText.Get("Готово"), UiText.Get("Материал сохранён"));
                 };
                 var categoryContent = new StackPanel { Spacing = 4 };
-                categoryContent.Children.Add(list);
                 categoryContent.Children.Add(add);
                 var expander = new Expander
                 {
@@ -1071,14 +1088,35 @@ public sealed partial class ProductWindow : Window
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     HorizontalContentAlignment = HorizontalAlignment.Stretch
                 };
+                var populated = false;
                 expander.Expanding += (_, _) =>
                 {
-                    if (list.ItemsSource is not null) return;
-                    list.ItemsSource = options;
-                    list.SelectedItem = options.FirstOrDefault(option => option.Choice == row.SelectedMaterial);
+                    if (populated) return;
+                    populated = true;
+                    foreach (var materialGroup in options.GroupBy(option => option.Choice.Material.Group.Trim(), StringComparer.CurrentCultureIgnoreCase))
+                    {
+                        var groupOptions = materialGroup.ToList();
+                        if (materialGroup.Key.Length == 0)
+                        {
+                            categoryContent.Children.Insert(categoryContent.Children.Count - 1, CreateOptionsList(groupOptions, categoryName));
+                            continue;
+                        }
+                        var groupExpander = new Expander
+                        {
+                            Header = materialGroup.Key, HorizontalAlignment = HorizontalAlignment.Stretch,
+                            HorizontalContentAlignment = HorizontalAlignment.Stretch
+                        };
+                        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(groupExpander, materialGroup.Key);
+                        groupExpander.Expanding += (_, _) =>
+                        {
+                            groupExpander.Content ??= CreateOptionsList(groupOptions, $"{categoryName}: {materialGroup.Key}");
+                        };
+                        categoryContent.Children.Insert(categoryContent.Children.Count - 1, groupExpander);
+                        groupExpander.IsExpanded = searching;
+                    }
                 };
                 categories.Children.Add(expander);
-                expander.IsExpanded = !string.IsNullOrWhiteSpace(search.Text);
+                expander.IsExpanded = searching;
             }
             empty.Visibility = matches.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -1093,12 +1131,12 @@ public sealed partial class ProductWindow : Window
             var first = categories.Children.OfType<Expander>().FirstOrDefault();
             if (e.Key == Windows.System.VirtualKey.Down && first is not null)
             {
-                if (first.IsExpanded && first.Content is StackPanel content && content.Children.OfType<ListView>().FirstOrDefault() is { } list) list.Focus(FocusState.Keyboard);
+                if (first.IsExpanded && first.Content is StackPanel content && FirstExpandedList(content) is { } list) list.Focus(FocusState.Keyboard);
                 else first.Focus(FocusState.Keyboard);
                 e.Handled = true;
             }
             else if (e.Key == Windows.System.VirtualKey.Enter && !string.IsNullOrWhiteSpace(search.Text) && first?.Content is StackPanel group &&
-                group.Children.OfType<ListView>().FirstOrDefault() is { } matches &&
+                FirstExpandedList(group) is { } matches &&
                 matches.Items.OfType<MaterialPickerOption>().FirstOrDefault() is { } option)
             { Select(option); e.Handled = true; }
         };

@@ -298,6 +298,14 @@ foreach (var mode in new[] { "name-asc", "name-desc", "date" })
     Check(orderedCatalog.TakeLast(2).Select(choice => choice.Material.Id).SequenceEqual(expectedPlain),
         "Ungrouped materials retain selected sorting below all groups: " + mode);
 }
+var pickerGroupMatches = MaterialCatalogOrdering.Sort(catalogOrderingChoices, "name-asc")
+    .Where(choice => UiTextSearch.Matches("alpha Z", choice.Material.Name, choice.Type, choice.Material.Group)).ToList();
+Check(pickerGroupMatches.Count == 1 && pickerGroupMatches[0].Material.Id == "a-z",
+    "Detail material picker search combines group name and material name without matching unrelated groups");
+Check(catalogOrderingChoices.Count(choice => UiTextSearch.Matches("Alpha", choice.Material.Name, choice.Type, choice.Material.Group)) == 2,
+    "Searching a material group finds all its materials, including whitespace-normalized group names");
+Check(catalogOrderingChoices.Count(choice => UiTextSearch.Matches("Wood Z", choice.Material.Name, choice.Type, choice.Material.Group)) == 3,
+    "Detail material picker still searches across category and material labels");
 var materialSelection = new MaterialSelectionModel();
 materialSelection.SetVisibleOrder(["a", "b", "c", "d", "e"]);
 materialSelection.Apply("b", control: false, shift: false);
