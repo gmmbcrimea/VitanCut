@@ -1046,51 +1046,39 @@ public sealed partial class MainWindow : Window
     {
         if (SelectedMaterial is { } choice)
         {
-            var list = MaterialsList.Visibility == Visibility.Visible ? MaterialsList : GroupedMaterialsList;
-            var offset = FindMaterialScrollViewer(list)?.VerticalOffset ?? 0;
             var previousName = choice.Material.Name;
             var selectedIds = _materialSelectionModel.SelectedIds.Append(choice.Material.Id).ToArray();
             var saved = await _materialCommands.SaveFromEditorAsync(_materialPage, choice);
             if (saved is not null)
             {
-                RefreshMaterials(saved);
-                _materialSelectionModel.ReplaceSelection(selectedIds);
-                var request = _materialFocusRequests.Begin();
-                RestoreSavedMaterialView(saved, offset, previousName != saved.Material.Name);
-                DispatcherQueue.TryEnqueue(() =>
+                _materialFocusRequests.Begin();
+                _loadingMaterials = true;
+                try
                 {
-                    if (_materialFocusRequests.IsCurrent(request) && MaterialsPage.Visibility == Visibility.Visible)
-                        RestoreSavedMaterialView(saved, offset, previousName != saved.Material.Name);
-                });
+                    if (!_materialPage.RefreshSavedMaterial(saved, previousName != saved.Material.Name))
+                        _materialPage.Refresh(saved);
+                }
+                finally { _loadingMaterials = false; }
+                _materialSelectionModel.SetVisibleOrder(_materialPage.ChoicesInViewOrder.Select(item => item.Material.Id));
+                _materialSelectionModel.ReplaceSelection(selectedIds);
+                RestoreMaterialListSelection(MaterialsList);
+                foreach (var list in DescendantListViews(GroupedMaterialsList))
+                    RestoreMaterialListSelection(list);
+                SetMaterialSelection(_materialPage.ChoicesInViewOrder.Where(item =>
+                    _materialSelectionModel.SelectedIds.Contains(item.Material.Id)), saved);
                 ShowSuccess(UiText.Get("Материал сохранён"));
             }
         }
     }
 
-    private void RestoreSavedMaterialView(MaterialChoice saved, double offset, bool renamed)
-    {
-        // Rebinding creates new item containers; restore by ID, not by container identity.
-        var list = MaterialsList.Visibility == Visibility.Visible ? MaterialsList : GroupedMaterialsList;
-        list.UpdateLayout();
-        FindMaterialScrollViewer(list)?.ChangeView(null, offset, null, disableAnimation: true);
-        list.UpdateLayout();
-        ApplyMaterialSelection(_materialPage.ChoicesInViewOrder, saved);
-        if (!renamed) return;
-        if (list == GroupedMaterialsList && list.Items.OfType<MaterialGroupView>()
-            .FirstOrDefault(group => group.Items.Any(item => item.Material.Id == saved.Material.Id)) is { } targetGroup)
-        {
-            list.ScrollIntoView(targetGroup);
-            list.UpdateLayout();
-        }
-        var itemLists = list == MaterialsList ? new[] { MaterialsList } : DescendantListViews(GroupedMaterialsList);
-        foreach (var itemList in itemLists)
-            if (itemList.Items.OfType<MaterialChoice>().FirstOrDefault(item => item.Material.Id == saved.Material.Id) is { } item)
-                itemList.ScrollIntoView(item);
-    }
-
     private void MaterialGroupListLoaded(object sender, RoutedEventArgs e)
     {
-        if (_loadingMaterials || sender is not ListView list) return;
+        if (sender is ListView list) RestoreMaterialListSelection(list);
+    }
+
+    private void RestoreMaterialListSelection(ListView list)
+    {
+        if (_loadingMaterials) return;
         _loadingMaterials = true;
         try
         {
@@ -1099,14 +1087,6 @@ public sealed partial class MainWindow : Window
                     list.SelectedItems.Add(choice);
         }
         finally { _loadingMaterials = false; }
-    }
-
-    private static ScrollViewer? FindMaterialScrollViewer(DependencyObject root)
-    {
-        if (root is ScrollViewer scroll) return scroll;
-        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
-            if (FindMaterialScrollViewer(VisualTreeHelper.GetChild(root, index)) is { } found) return found;
-        return null;
     }
 
     private void SettingsSaveClick(object sender, RoutedEventArgs e)

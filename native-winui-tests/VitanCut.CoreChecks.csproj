@@ -27,6 +27,7 @@
     <Compile Include="../native-winui/Services/AtomicJsonFile.cs" Link="Services/AtomicJsonFile.cs" />
     <Compile Include="../native-winui/Services/AtomicJsonPairFile.cs" Link="Services/AtomicJsonPairFile.cs" />
     <Compile Include="../native-winui/Services/MaterialSelectionModel.cs" Link="Services/MaterialSelectionModel.cs" />
+    <Compile Include="../native-winui/Services/MaterialListUpdates.cs" Link="Services/MaterialListUpdates.cs" />
     <Compile Include="../native-winui/Services/AppUpdateService.cs" Link="Services/AppUpdateService.cs" />
     <Compile Include="../native-winui/Services/CloudSyncService.cs" Link="Services/CloudSyncService.cs" />
     <Compile Include="../native-winui/Services/CloudEntityMerge.cs" Link="Services/CloudEntityMerge.cs" />

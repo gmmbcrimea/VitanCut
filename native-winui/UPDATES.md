@@ -1,6 +1,6 @@
 # Release validation
 
-The primary repository contains the 1.2.20 sources, including material selection and scroll restoration after saving in the catalog. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
+The primary repository contains the 1.2.21 bugfix sources, including in-place material list updates to prevent scroll resets after saving. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
 
 ## Validate version metadata
 

@@ -312,6 +312,38 @@ Check(materialSelection.SelectedIds.SetEquals(["b"]), "Restoring material select
 materialSelection.Reset(["b", "a"]);
 materialSelection.ReplaceSelection(materialSelection.SelectedIds.Append("b").ToArray());
 Check(materialSelection.SelectedIds.SetEquals(["b"]), "Saving an editor material restores its row even when the list had no selection");
+var materialRows = new System.Collections.ObjectModel.ObservableCollection<MaterialChoice>(
+    new[] { "A", "B", "C" }.Select(name => new MaterialChoice("Wood", new Material { Id = name, Name = name })));
+var originalMaterialRows = materialRows.ToArray();
+var materialRowChanges = new List<System.Collections.Specialized.NotifyCollectionChangedAction>();
+materialRows.CollectionChanged += (_, args) => materialRowChanges.Add(args.Action);
+var savedRow = new MaterialChoice("Wood", materialRows[1].Material);
+for (var save = 0; save < 3; save++)
+{
+    savedRow.Material.Cost += 10;
+    Check(MaterialListUpdates.ApplySaved(materialRows, savedRow, materialRows.ToArray(), nameChanged: false),
+        "Repeated material price saves update the existing list");
+}
+Check(materialRowChanges.Count == 0 && materialRows.Zip(originalMaterialRows).All(pair => ReferenceEquals(pair.First, pair.Second)),
+    "Price saves do not reset, replace or move any material row, preserving the scroll containers");
+savedRow.Material.Name = "Z";
+Check(MaterialListUpdates.ApplySaved(materialRows, savedRow, [materialRows[0], materialRows[2], savedRow], nameChanged: true) &&
+    materialRows.Select(item => item.Material.Id).SequenceEqual(["A", "C", "B"]),
+    "Renaming updates the material label and moves only its row into sorted order");
+Check(materialRowChanges.SequenceEqual(new[] { System.Collections.Specialized.NotifyCollectionChangedAction.Replace,
+    System.Collections.Specialized.NotifyCollectionChangedAction.Move }) &&
+    ReferenceEquals(materialRows[0], originalMaterialRows[0]) && ReferenceEquals(materialRows[1], originalMaterialRows[2]),
+    "Renaming never resets the material list or replaces unrelated rows");
+var groupRows = new System.Collections.ObjectModel.ObservableCollection<MaterialChoice>([savedRow]);
+materialRowChanges.Clear();
+groupRows.CollectionChanged += (_, args) => materialRowChanges.Add(args.Action);
+Check(MaterialListUpdates.ApplySaved(groupRows, savedRow, [savedRow], nameChanged: false) && materialRowChanges.Count == 0,
+    "Saving inside a material group leaves its nested list untouched");
+var beforeInvalidMaterialUpdate = materialRows.ToArray();
+materialRowChanges.Clear();
+Check(!MaterialListUpdates.ApplySaved(materialRows, new MaterialChoice("Wood", new Material { Id = "missing" }),
+    materialRows.ToArray(), nameChanged: false) && materialRowChanges.Count == 0 && materialRows.SequenceEqual(beforeInvalidMaterialUpdate),
+    "A missing saved material leaves the current list unchanged for the caller to refresh safely");
 var releaseSummary = AppUpdateService.SummarizeReleaseNotes("## Что нового в VitanCut 1.0.18\n\n- Исправлена прокрутка\n- Добавлена история уведомлений\n\n## Что нового в VitanCut 1.0.17\n- Старые изменения\n\n**Full Changelog**: link", "v1.0.18");
 Check(releaseSummary is not null && releaseSummary.Contains("Исправлена прокрутка") && !releaseSummary.Contains("Старые изменения") && !releaseSummary.Contains("Full Changelog"), "Update notes include only the selected release version");
 var updateScript = AppUpdateService.BuildUpdateScript("C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut\\VitanCut.WinUI.exe", "C:\\Temp\\update", 1234);
@@ -1127,6 +1159,29 @@ Check(freshMaterialState.Database.Materials["Fresh material"].Single().Texture =
     freshMaterialState.Database.Materials["Moved pc"].Single().Texture.Length > 0,
     "New material starts without a texture and leaves existing material textures intact");
 Check(library.ExistsName("  ручка  "), "Duplicate name ignores case and outer spaces");
+var scrollFixtureState = new AppState();
+scrollFixtureState.Load(Path.Combine(output, "material-scroll-fixture.json"));
+scrollFixtureState.Database.Materials.Clear();
+foreach (var prefix in new[] { "Material", "Grouped material" })
+    scrollFixtureState.Database.Materials[prefix] = Enumerable.Range(1, 80)
+        .Select(index => new Material { Name = $"{prefix} {index:000}", Cost = 100, Unit = "pc",
+            Group = prefix == "Material" ? "" : $"Group {(index - 1) / 20 + 1}" }).ToList();
+scrollFixtureState.Save();
+var scrollFixtureLibrary = new MaterialService(scrollFixtureState);
+Check(scrollFixtureState.MaterialChoices().All(choice => !scrollFixtureLibrary.ExistsName(choice.Material.Name, choice.Material)),
+    "Long scroll fixtures have globally unique names and never reject saving an unchanged material name");
+foreach (var prefix in new[] { "Material", "Grouped material" })
+{
+    var scrollFixtureChoice = scrollFixtureLibrary.GetChoices(prefix)[26];
+    for (var save = 0; save < 3; save++)
+    {
+        scrollFixtureChoice.Material.Cost += 10;
+        scrollFixtureChoice = scrollFixtureLibrary.Save(scrollFixtureChoice, prefix);
+    }
+    Check(scrollFixtureChoice.Material.Cost == 130 &&
+        !scrollFixtureLibrary.ExistsName(scrollFixtureChoice.Material.Name, scrollFixtureChoice.Material),
+        "Repeated saves in a long flat or grouped list do not report a duplicate name: " + prefix);
+}
 Reject(() => library.Add("Фурнитура", new Material { Name = "ручка" }), "Duplicate material cannot be added");
 Reject(() => library.Add("Фурнитура", new Material { Name = "Плохая цена", Cost = double.NaN }), "Nonfinite material price rejected");
 Reject(() => library.Delete(new MaterialChoice("Фурнитура", pc)), "Used material cannot be deleted");

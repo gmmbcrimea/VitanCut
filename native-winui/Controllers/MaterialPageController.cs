@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using VitanCut.WinUI.Models;
@@ -79,6 +80,29 @@ public sealed class MaterialPageController
         _selectedMaterial = null;
         BindItems();
         RenderSelected();
+    }
+
+    public bool RefreshSavedMaterial(MaterialChoice saved, bool nameChanged)
+    {
+        if (SelectedCategory != saved.Type) return false;
+        var ordered = ChoicesInViewOrder;
+        if (_items.Visibility == Visibility.Visible && _items.ItemsSource is ObservableCollection<MaterialChoice> items)
+            return MaterialListUpdates.ApplySaved(items, saved, ordered, nameChanged);
+
+        if (_groupedItems.ItemsSource is not ObservableCollection<MaterialGroupView> groups) return false;
+        var group = groups.FirstOrDefault(group => group.Items.Any(item => item.Material.Id == saved.Material.Id));
+        if (group?.Items is not ObservableCollection<MaterialChoice> groupItems) return false;
+        var orderedItems = ordered.Where(item => string.Equals(item.Material.Group.Trim(), group.Name,
+            StringComparison.CurrentCultureIgnoreCase)).ToList();
+        if (!MaterialListUpdates.ApplySaved(groupItems, saved, orderedItems, nameChanged)) return false;
+
+        var orderedGroups = ordered.Select(item => item.Material.Group.Trim()).Distinct(StringComparer.CurrentCultureIgnoreCase).ToList();
+        for (var target = 0; target < orderedGroups.Count; target++)
+        {
+            var current = groups.ToList().FindIndex(item => string.Equals(item.Name, orderedGroups[target], StringComparison.CurrentCultureIgnoreCase));
+            if (current != target) groups.Move(current, target);
+        }
+        return true;
     }
 
     public void OnCategoryChanged()
@@ -187,16 +211,16 @@ public sealed class MaterialPageController
         _groupedItems.Visibility = hasGroups ? Visibility.Visible : Visibility.Collapsed;
         if (hasGroups)
         {
-            _groupedItems.ItemsSource = choices
+            _groupedItems.ItemsSource = new ObservableCollection<MaterialGroupView>(choices
                 .GroupBy(choice => string.IsNullOrWhiteSpace(choice.Material.Group) ? "" : choice.Material.Group.Trim(), StringComparer.CurrentCultureIgnoreCase)
-                .Select(group => new MaterialGroupView(group.Key, group.ToList())
+                .Select(group => new MaterialGroupView(group.Key, new ObservableCollection<MaterialChoice>(group))
                 {
                     IsExpanded = expansion?.GetValueOrDefault(group.Key, true) ?? true
-                }).ToList();
+                }));
         }
         else
         {
-            _items.ItemsSource = choices;
+            _items.ItemsSource = new ObservableCollection<MaterialChoice>(choices);
         }
         _listEmpty.Visibility = choices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
