@@ -59,7 +59,8 @@ public sealed class MaterialPageController
 
     public string? SelectedCategory => _categories.SelectedItem as string;
     public MaterialChoice? SelectedMaterial => _selectedMaterial;
-    public IReadOnlyList<MaterialChoice> ChoicesInViewOrder => SortChoices(_materials.GetChoices(SelectedCategory));
+    public IReadOnlyList<MaterialChoice> ChoicesInViewOrder => MaterialCatalogOrdering.Sort(
+        _materials.GetChoices(SelectedCategory), (_sort.SelectedItem as ComboBoxItem)?.Tag?.ToString());
     public string EditorName => string.IsNullOrWhiteSpace(_name.Text) ? "Новый материал" : _name.Text.Trim();
     public string EditorGroup => string.IsNullOrWhiteSpace(_type.Text) ? "Прочее" : _type.Text.Trim();
 
@@ -215,7 +216,7 @@ public sealed class MaterialPageController
                 .GroupBy(choice => string.IsNullOrWhiteSpace(choice.Material.Group) ? "" : choice.Material.Group.Trim(), StringComparer.CurrentCultureIgnoreCase)
                 .Select(group => new MaterialGroupView(group.Key, new ObservableCollection<MaterialChoice>(group))
                 {
-                    IsExpanded = expansion?.GetValueOrDefault(group.Key, true) ?? true
+                    IsExpanded = expansion?.GetValueOrDefault(group.Key, false) ?? false
                 }));
         }
         else
@@ -231,19 +232,12 @@ public sealed class MaterialPageController
         RenderSelected();
     }
 
-    private List<MaterialChoice> SortChoices(IEnumerable<MaterialChoice> choices) => (_sort.SelectedItem as ComboBoxItem)?.Tag?.ToString() switch
-    {
-        "name-desc" => choices.OrderByDescending(choice => choice.Material.Name, StringComparer.CurrentCultureIgnoreCase).ToList(),
-        "date" => choices.OrderByDescending(choice => choice.Material.CreatedAt).ThenBy(choice => choice.Material.Name, StringComparer.CurrentCultureIgnoreCase).ToList(),
-        _ => choices.OrderBy(choice => choice.Material.Name, StringComparer.CurrentCultureIgnoreCase).ToList()
-    };
-
     private static double EditorValue(NumberBox box) => NumberBoxInput.Read(box);
 }
 
 public sealed class MaterialGroupView(string name, IReadOnlyList<MaterialChoice> items)
 {
-    public bool IsExpanded { get; set; } = true;
+    public bool IsExpanded { get; set; }
     public Visibility GroupVisibility => Name.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     public Visibility PlainVisibility => Name.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     public string Name { get; } = name;

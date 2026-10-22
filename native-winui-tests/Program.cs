@@ -275,6 +275,29 @@ Check(AppUpdateService.TryParseVersion("v1.2.3", out var parsedUpdateVersion) &&
 Check(AppUpdateService.TryParseVersion("1.2.3-beta.1", out parsedUpdateVersion) && parsedUpdateVersion == new Version(1, 2, 3), "Update tags ignore prerelease metadata when comparing versions");
 Check(!AppUpdateService.TryParseVersion("latest", out _), "Invalid GitHub release tag is rejected");
 Check(AppUpdateService.FormatVersion(new Version(2, 4, 0, 0)) == "2.4.0", "Update status formats local version consistently");
+var orderingDate = DateTimeOffset.Parse("2026-10-22T00:00:00Z");
+var catalogOrderingChoices = new[]
+{
+    new MaterialChoice("Wood", new Material { Id = "plain-a", Name = "A", CreatedAt = orderingDate }),
+    new MaterialChoice("Wood", new Material { Id = "b-z", Name = "Z", Group = "Beta", CreatedAt = orderingDate }),
+    new MaterialChoice("Wood", new Material { Id = "a-z", Name = "Z", Group = "Alpha", CreatedAt = orderingDate }),
+    new MaterialChoice("Wood", new Material { Id = "plain-z", Name = "Z", Group = "  ", CreatedAt = orderingDate.AddDays(1) }),
+    new MaterialChoice("Wood", new Material { Id = "b-a", Name = "A", Group = "Beta", CreatedAt = orderingDate.AddDays(1) }),
+    new MaterialChoice("Wood", new Material { Id = "a-a", Name = "A", Group = " Alpha ", CreatedAt = orderingDate.AddDays(1) })
+};
+foreach (var mode in new[] { "name-asc", "name-desc", "date" })
+{
+    var orderedCatalog = MaterialCatalogOrdering.Sort(catalogOrderingChoices, mode);
+    Check(orderedCatalog.Select(choice => choice.Material.Group.Trim()).SequenceEqual(["Alpha", "Alpha", "Beta", "Beta", "", ""]),
+        "Named material groups always precede ungrouped rows with stable group order: " + mode);
+    var expectedNames = mode == "name-desc" ? new[] { "Z", "A" } : new[] { "A", "Z" };
+    Check(orderedCatalog.Take(2).Select(choice => choice.Material.Name).SequenceEqual(expectedNames) &&
+        orderedCatalog.Skip(2).Take(2).Select(choice => choice.Material.Name).SequenceEqual(expectedNames),
+        "Selected sorting applies independently inside each material group: " + mode);
+    var expectedPlain = mode == "name-asc" ? new[] { "plain-a", "plain-z" } : new[] { "plain-z", "plain-a" };
+    Check(orderedCatalog.TakeLast(2).Select(choice => choice.Material.Id).SequenceEqual(expectedPlain),
+        "Ungrouped materials retain selected sorting below all groups: " + mode);
+}
 var materialSelection = new MaterialSelectionModel();
 materialSelection.SetVisibleOrder(["a", "b", "c", "d", "e"]);
 materialSelection.Apply("b", control: false, shift: false);
