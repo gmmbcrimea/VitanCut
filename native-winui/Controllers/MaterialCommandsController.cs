@@ -31,8 +31,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
             Group = choice.Material.Group,
             CreatedAt = choice.Material.CreatedAt
         };
-        editor.ApplyEditor(draft);
-        try { materials.Validate(draft, choice.Material); }
+        try { editor.ApplyEditor(draft); materials.Validate(draft, choice.Material); }
         catch (InvalidOperationException error)
         {
             await dialogs.ShowMessageAsync(UiText.Get("Проверьте материал"),error.Message);

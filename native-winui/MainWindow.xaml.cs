@@ -107,7 +107,7 @@ public sealed partial class MainWindow : Window
         _materialPage = new MaterialPageController(
             App.MaterialLibrary, MaterialCategoriesList, MaterialsList, GroupedMaterialsList, MaterialListEmptyPanel,
             MaterialParametersEmptyPanel, MaterialParametersPanel, MaterialTypeBox, MaterialNameBox,
-            MaterialUnitBox, MaterialCostBox, MaterialWasteAllowanceBox, MaterialPriceModeBox, MaterialRollLengthBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialTextureBox, MaterialEdgeBandingBox,
+            MaterialUnitBox, MaterialCostBox, MaterialWasteAllowanceBox, MaterialPriceModeBox, MaterialRollLengthBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialPriceConversionError, MaterialTextureBox, MaterialEdgeBandingBox,
             MaterialSortBox);
         _catalogPage = new CatalogPageController(
             App.Catalog, CustomersList, CustomerProjectsList, CustomerProjectsTitle, CustomerProjectsSubtitle);

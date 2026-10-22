@@ -6,6 +6,7 @@ internal static class MaterialPricingChecks
 {
     public static void Run(Action<bool, string> check, string output)
     {
+        PriceModeConversions(check);
         var path = Path.Combine(output, "material-pricing.json");
         var state = new AppState();
         state.Load(path);
@@ -99,5 +100,46 @@ internal static class MaterialPricingChecks
         check(MaterialPricing.Error(piece).Length > 0, "Unsupported pricing mode cannot be applied to piece materials");
         roll.RollLength = 250;
         check(MaterialPricing.UnitCost(roll) == 40, "Changing roll length immediately updates effective meter price");
+    }
+    private static void PriceModeConversions(Action<bool, string> check)
+    {
+        var sheet = new Material { Unit = "m2", SheetLength = 2000, SheetWidth = 2000, WasteAllowancePercent = 15 };
+        var total = MaterialPricing.ConvertPrice(sheet, "unit", "sheet", 100);
+        check(total == 400, "Two-meter by two-meter sheet converts 100 per square meter into 400 per sheet");
+        check(MaterialPricing.ConvertPrice(sheet, "sheet", "unit", total) == 100,
+            "Sheet price converts back to the original square-meter price");
+        sheet.SheetWidth = 1000;
+        check(MaterialPricing.ConvertPrice(sheet, "unit", "sheet", 100) == 200,
+            "Two-square-meter sheet converts 100 per square meter into 200 per sheet");
+        check(sheet.WasteAllowancePercent == 15, "Price-mode conversion leaves the waste allowance unchanged");
+        var roll = new Material { Unit = "lm", RollLength = 50 };
+        check(MaterialPricing.ConvertPrice(roll, "unit", "roll", 25) == 1250 &&
+            MaterialPricing.ConvertPrice(roll, "roll", "unit", 1250) == 25,
+            "Meter and roll prices convert in both directions using roll length");
+        foreach (var material in new[] { sheet, roll })
+        {
+            var package = material.Unit == "m2" ? "sheet" : "roll";
+            var amount = 123.456789;
+            for (var i = 0; i < 100; i++)
+                amount = MaterialPricing.ConvertPrice(material, package, "unit", MaterialPricing.ConvertPrice(material, "unit", package, amount));
+            check(Math.Abs(amount - 123.456789) < .00000001, "Repeated price-mode switches preserve fractional prices without rounding drift");
+            check(MaterialPricing.ConvertPrice(material, "unit", package, 0) == 0, "Zero price converts without introducing a charge");
+        }
+        foreach (var invalid in new[] { 0d, -1d, double.NaN, double.PositiveInfinity })
+        {
+            sheet.SheetWidth = invalid;
+            roll.RollLength = invalid;
+            var sheetRejected = false;
+            var rollRejected = false;
+            try { MaterialPricing.ConvertPrice(sheet, "unit", "sheet", 100); } catch (InvalidOperationException) { sheetRejected = true; }
+            try { MaterialPricing.ConvertPrice(roll, "roll", "unit", 100); } catch (InvalidOperationException) { rollRejected = true; }
+            check(sheetRejected && rollRejected, "Missing or invalid dimensions cannot silently reinterpret an unchanged price");
+        }
+        sheet.SheetWidth = 2000;
+        var overflowRejected = false;
+        try { MaterialPricing.ConvertPrice(sheet, "unit", "sheet", double.MaxValue); } catch (InvalidOperationException) { overflowRejected = true; }
+        check(overflowRejected, "Price-mode conversion rejects numeric overflow");
+        check(MaterialPricing.ConvertPrice(new Material { Unit = "pc" }, "unit", "unit", 50) == 50,
+            "Piece prices and unchanged price modes remain untouched");
     }
 }

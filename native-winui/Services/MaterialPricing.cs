@@ -4,6 +4,24 @@ namespace VitanCut.WinUI.Services;
 
 public static class MaterialPricing
 {
+    public static double ConvertPrice(Material material, string fromMode, string toMode, double price)
+    {
+        if (!double.IsFinite(price) || price < 0)
+            throw new InvalidOperationException("Цена должна быть конечным неотрицательным числом.");
+        if (fromMode == toMode) return price;
+        double Quantity(string mode)
+        {
+            var basis = new Material { Unit = material.Unit, PriceMode = mode, Cost = 0,
+                SheetLength = material.SheetLength, SheetWidth = material.SheetWidth, RollLength = material.RollLength };
+            if (Error(basis) is { Length: > 0 } error) throw new InvalidOperationException(error);
+            return PriceQuantity(basis);
+        }
+        var converted = price / Quantity(fromMode) * Quantity(toMode);
+        if (!double.IsFinite(converted))
+            throw new InvalidOperationException("Цена должна быть конечным неотрицательным числом.");
+        return converted;
+    }
+
     public static string Error(Material material)
     {
         if (!double.IsFinite(material.Cost) || material.Cost < 0) return "Цена должна быть конечным неотрицательным числом.";

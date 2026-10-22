@@ -537,6 +537,7 @@
             </ComboBox>
             <ComboBox x:Name="MaterialPriceModeBox" Header="Цена указана" HorizontalAlignment="Stretch" SelectionChanged="MaterialPriceModeChanged"  l10n:UiLocalization.Properties="Header"/>
             <NumberBox x:Name="MaterialCostBox" Header="Цена за единицу"  l10n:UiLocalization.Properties="Header"/>
+            <TextBlock x:Name="MaterialPriceConversionError" TextWrapping="Wrap" Visibility="Collapsed" Foreground="{ThemeResource UiDangerBrush}" />
             <NumberBox x:Name="MaterialWasteAllowanceBox" Header="Допуск на обрезки, %" Minimum="0" Value="0" l10n:UiLocalization.Properties="Header"/>
             <NumberBox x:Name="MaterialRollLengthBox" Header="Длина бухты, м" Minimum="0" Visibility="Collapsed"  l10n:UiLocalization.Properties="Header"/>
             <Grid ColumnSpacing="12">

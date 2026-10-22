@@ -29,6 +29,9 @@ internal static class MaterialCreateDialog
         var upload = new Button { Content = UiText.Get("Загрузить текстуру") };
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed,
             Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"] };
+        var conversionError = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed,
+            Foreground = (Brush)Application.Current.Resources["UiDangerBrush"] };
+        var priceConversion = new MaterialPriceModeEditor(cost, length, width, roll, conversionError);
         string texture = "";
         string Unit() => (unit.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pc";
         string Mode() => (priceMode.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "unit";
@@ -40,6 +43,7 @@ internal static class MaterialCreateDialog
         }
         unit.SelectionChanged += (_, _) =>
         {
+            priceConversion.Reset(Unit());
             var sheet = Unit() == "m2";
             wasteAllowance.Visibility = Unit() is "m2" or "lm" ? Visibility.Visible : Visibility.Collapsed;
             length.Visibility = width.Visibility = direction.Visibility = sheet ? Visibility.Visible : Visibility.Collapsed;
@@ -51,7 +55,11 @@ internal static class MaterialCreateDialog
             priceMode.SelectedIndex = 0;
             UpdatePrice();
         };
-        priceMode.SelectionChanged += (_, _) => UpdatePrice();
+        priceMode.SelectionChanged += (_, _) =>
+        {
+            if (priceMode.SelectedItem is not null) priceConversion.ChangeMode(Mode());
+            UpdatePrice();
+        };
         void ShowError(string message) { error.Text = UiText.Get(message); error.Visibility = Visibility.Visible; }
         upload.Click += async (_, _) =>
         {
@@ -71,7 +79,7 @@ internal static class MaterialCreateDialog
             catch (Exception exception) { ShowError(exception.Message); }
             finally { upload.IsEnabled = true; }
         };
-        foreach (var control in new UIElement[] { name, unit, priceMode, cost, wasteAllowance, roll, length, width, direction, edging,
+        foreach (var control in new UIElement[] { name, unit, priceMode, cost, conversionError, wasteAllowance, roll, length, width, direction, edging,
             new TextBlock { Text = UiText.Get("Текстура материала"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, image, upload, error })
             fields.Children.Add(control);
         unit.SelectedIndex = category == "Кромка" ? 1 : category is "ЛДСП" or "Пиломатериалы" ? 0 : 2;
@@ -89,6 +97,7 @@ internal static class MaterialCreateDialog
         {
             try
             {
+                priceConversion.EnsureReady();
                 var material = new Material
                 {
                     Name = name.Text.Trim(), Unit = Unit(), Cost = NumberBoxInput.Read(cost),

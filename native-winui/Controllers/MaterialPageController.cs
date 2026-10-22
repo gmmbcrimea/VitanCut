@@ -21,6 +21,7 @@ public sealed class MaterialPageController
     private readonly NumberBox _wasteAllowance;
     private readonly ComboBox _priceMode;
     private readonly NumberBox _rollLength;
+    private readonly MaterialPriceModeEditor _priceConversion;
     private string _pricingUnit = "";
     private readonly NumberBox _sheetLength;
     private readonly NumberBox _sheetWidth;
@@ -31,7 +32,7 @@ public sealed class MaterialPageController
 
     public MaterialPageController(MaterialService materials, ListView categories, ListView items, ListView groupedItems,
         UIElement listEmpty, UIElement parametersEmpty, UIElement parameters, TextBox type, TextBox name,
-        ComboBox unit, NumberBox cost, NumberBox wasteAllowance, ComboBox priceMode, NumberBox rollLength, NumberBox sheetLength, NumberBox sheetWidth, CheckBox texture, CheckBox edgeBanding, ComboBox sort)
+        ComboBox unit, NumberBox cost, NumberBox wasteAllowance, ComboBox priceMode, NumberBox rollLength, NumberBox sheetLength, NumberBox sheetWidth, TextBlock priceError, CheckBox texture, CheckBox edgeBanding, ComboBox sort)
     {
         _materials = materials;
         _categories = categories;
@@ -47,6 +48,7 @@ public sealed class MaterialPageController
         _wasteAllowance = wasteAllowance;
         _priceMode = priceMode;
         _rollLength = rollLength;
+        _priceConversion = new(cost, sheetLength, sheetWidth, rollLength, priceError);
         _sheetLength = sheetLength;
         _sheetWidth = sheetWidth;
         _texture = texture;
@@ -88,6 +90,9 @@ public sealed class MaterialPageController
 
     public void RenderSelected()
     {
+        _priceConversion.BeginLoad();
+        try
+        {
         var choice = SelectedMaterial;
         _type.Text = choice?.Type ?? SelectedCategory ?? "Прочее";
         _name.Text = choice?.Material.Name ?? string.Empty;
@@ -108,10 +113,17 @@ public sealed class MaterialPageController
             .FirstOrDefault(item => item.Tag?.ToString() == (choice?.Material.PriceMode ?? "unit"));
         if (_priceMode.SelectedItem is null && _priceMode.Items.Count > 0) _priceMode.SelectedIndex = 0;
         UpdatePriceModeFields();
+        }
+        finally
+        {
+            _priceConversion.EndLoad((_unit.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "pc",
+                (_priceMode.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "unit");
+        }
     }
 
     public void ApplyEditor(Material material)
     {
+        _priceConversion.EnsureReady();
         material.Name = string.IsNullOrWhiteSpace(_name.Text) ? "Новый материал" : _name.Text.Trim();
         material.Cost = EditorValue(_cost);
         material.WasteAllowancePercent = (_unit.SelectedItem as ComboBoxItem)?.Tag?.ToString() is "m2" or "lm" ? EditorValue(_wasteAllowance) : 0;
@@ -142,6 +154,7 @@ public sealed class MaterialPageController
         if (_pricingUnit != unit)
         {
             _pricingUnit = unit;
+            _priceConversion.Reset(unit);
             _priceMode.Items.Clear();
             _priceMode.Items.Add(new ComboBoxItem { Content = unit == "m2" ? UiText.Get("За квадратный метр") : unit == "lm" ? UiText.Get("За погонный метр") : UiText.Get("За штуку"), Tag = "unit" });
             if (unit == "m2") _priceMode.Items.Add(new ComboBoxItem { Content = UiText.Get("За лист"), Tag = "sheet" });
@@ -155,6 +168,7 @@ public sealed class MaterialPageController
     public void UpdatePriceModeFields()
     {
         var mode = (_priceMode.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "unit";
+        if (_priceMode.SelectedItem is not null) _priceConversion.ChangeMode(mode);
         _rollLength.Visibility = _pricingUnit == "lm" && mode == "roll" ? Visibility.Visible : Visibility.Collapsed;
         _cost.Header = mode == "sheet" ? UiText.Get("Цена за лист") : mode == "roll" ? UiText.Get("Цена за бухту") :
             _pricingUnit == "m2" ? UiText.Get("Цена за м²") : _pricingUnit == "lm" ? UiText.Get("Цена за погонный метр") : UiText.Get("Цена за единицу");
