@@ -1,4 +1,6 @@
 {
+  "Допуск на обрезки, %": "Scrap allowance, %",
+  "Допуск на обрезки должен быть конечным неотрицательным числом.": "Scrap allowance must be a finite nonnegative number.",
   "Обновить цены проекта?": "Update project prices?",
   "Цены в каталоге изменились. Обновить цены проекта? Ручные цены останутся без изменений.": "Catalog prices have changed. Update project prices? Manually edited prices will remain unchanged.",
   "Обновить цены": "Update prices",

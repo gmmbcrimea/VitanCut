@@ -19,6 +19,7 @@ internal static class MaterialCreateDialog
             unit.Items.Add(new ComboBoxItem { Tag = code, Content = UiText.Get(label) });
         var priceMode = new ComboBox { Header = UiText.Get("Цена указана"), HorizontalAlignment = HorizontalAlignment.Stretch };
         var cost = new NumberBox { Header = UiText.Get("Цена за единицу"), Minimum = 0, Value = 0 };
+        var wasteAllowance = new NumberBox { Header = UiText.Get("Допуск на обрезки, %"), Minimum = 0, Value = 0 };
         var roll = new NumberBox { Header = UiText.Get("Длина бухты, м"), Minimum = 0, Value = 0 };
         var length = new NumberBox { Header = UiText.Get("Длина листа"), Minimum = 0, Value = 0 };
         var width = new NumberBox { Header = UiText.Get("Ширина листа"), Minimum = 0, Value = 0 };
@@ -40,6 +41,7 @@ internal static class MaterialCreateDialog
         unit.SelectionChanged += (_, _) =>
         {
             var sheet = Unit() == "m2";
+            wasteAllowance.Visibility = Unit() is "m2" or "lm" ? Visibility.Visible : Visibility.Collapsed;
             length.Visibility = width.Visibility = direction.Visibility = sheet ? Visibility.Visible : Visibility.Collapsed;
             priceMode.Items.Clear();
             priceMode.Items.Add(new ComboBoxItem { Tag = "unit", Content = UiText.Get(sheet ? "За квадратный метр" : Unit() == "lm" ? "За погонный метр" : "За штуку") });
@@ -69,7 +71,7 @@ internal static class MaterialCreateDialog
             catch (Exception exception) { ShowError(exception.Message); }
             finally { upload.IsEnabled = true; }
         };
-        foreach (var control in new UIElement[] { name, unit, priceMode, cost, roll, length, width, direction, edging,
+        foreach (var control in new UIElement[] { name, unit, priceMode, cost, wasteAllowance, roll, length, width, direction, edging,
             new TextBlock { Text = UiText.Get("Текстура материала"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, image, upload, error })
             fields.Children.Add(control);
         unit.SelectedIndex = category == "Кромка" ? 1 : category is "ЛДСП" or "Пиломатериалы" ? 0 : 2;
@@ -90,6 +92,7 @@ internal static class MaterialCreateDialog
                 var material = new Material
                 {
                     Name = name.Text.Trim(), Unit = Unit(), Cost = NumberBoxInput.Read(cost),
+                    WasteAllowancePercent = Unit() is "m2" or "lm" ? NumberBoxInput.Read(wasteAllowance) : 0,
                     PriceMode = Mode(), RollLength = Unit() == "lm" ? NumberBoxInput.Read(roll) : 0,
                     SheetLength = Unit() == "m2" ? NumberBoxInput.Read(length) : 0,
                     SheetWidth = Unit() == "m2" ? NumberBoxInput.Read(width) : 0,

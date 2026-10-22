@@ -26,7 +26,9 @@ public static class Calculator
         };
         var unitPrice = material is null ? 0 : ProjectDetailPricing.UnitPrice(detail, material);
         var pricingError = material is null ? "" : ProjectDetailPricing.HasPrice(detail, material)
-            ? (!double.IsFinite(unitPrice) || unitPrice < 0 ? "Цена должна быть конечным неотрицательным числом." : "")
+            ? (!double.IsFinite(ProjectDetailPricing.AllowancePercent(detail, material)) || ProjectDetailPricing.AllowancePercent(detail, material) < 0
+                ? "Допуск на обрезки должен быть конечным неотрицательным числом."
+                : !double.IsFinite(unitPrice) || unitPrice < 0 ? "Цена должна быть конечным неотрицательным числом." : "")
             : MaterialPricing.Error(material);
         var cost = usage * (pricingError.Length == 0 ? unitPrice : 0);
         return new DetailCalc(length, width, qty, area, rawArea, usage, cost, material,

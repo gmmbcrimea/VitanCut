@@ -107,7 +107,7 @@ public sealed partial class MainWindow : Window
         _materialPage = new MaterialPageController(
             App.MaterialLibrary, MaterialCategoriesList, MaterialsList, GroupedMaterialsList, MaterialListEmptyPanel,
             MaterialParametersEmptyPanel, MaterialParametersPanel, MaterialTypeBox, MaterialNameBox,
-            MaterialUnitBox, MaterialCostBox, MaterialPriceModeBox, MaterialRollLengthBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialTextureBox, MaterialEdgeBandingBox,
+            MaterialUnitBox, MaterialCostBox, MaterialWasteAllowanceBox, MaterialPriceModeBox, MaterialRollLengthBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialTextureBox, MaterialEdgeBandingBox,
             MaterialSortBox);
         _catalogPage = new CatalogPageController(
             App.Catalog, CustomersList, CustomerProjectsList, CustomerProjectsTitle, CustomerProjectsSubtitle);
@@ -934,18 +934,19 @@ public sealed partial class MainWindow : Window
                     Text = UiText.Get("Цены в каталоге изменились. Обновить цены проекта? Ручные цены останутся без изменений."),
                     TextWrapping = TextWrapping.Wrap
                 });
-                string PriceLabel(string mode, double price, double quantity, string unit)
+                string PriceLabel(string mode, double price, double quantity, string unit, double allowance)
                 {
                     var label = UiText.Get(mode == "sheet" ? "Цена за лист" : mode == "roll" ? "Цена за бухту" : "Цена за единицу");
                     return $"{label}: {Calculator.Number(price * quantity)} {UiText.Get("руб.")}" +
                         (mode == "unit" ? $" / {MaterialSummaryService.UnitLabel(unit)}" :
-                            $" ({Calculator.Number(quantity, 3)} {MaterialSummaryService.UnitLabel(unit)})");
+                            $" ({Calculator.Number(quantity, 3)} {MaterialSummaryService.UnitLabel(unit)})") +
+                        (unit is "m2" or "lm" ? $" · {UiText.Get("Допуск на обрезки, %")}: {Calculator.Number(allowance)}" : "");
                 }
                 foreach (var change in changes.DistinctBy(change => (change.MaterialId, change.PreviousPrice, change.CurrentPrice,
-                    change.PreviousMode, change.CurrentMode, change.PreviousQuantity, change.CurrentQuantity)))
+                    change.PreviousMode, change.CurrentMode, change.PreviousQuantity, change.CurrentQuantity, change.PreviousAllowance, change.CurrentAllowance)))
                     details.Children.Add(new TextBlock
                     {
-                        Text = $"{change.Name}\n{PriceLabel(change.PreviousMode, change.PreviousPrice, change.PreviousQuantity, change.Unit)} → {PriceLabel(change.CurrentMode, change.CurrentPrice, change.CurrentQuantity, change.Unit)}",
+                        Text = $"{change.Name}\n{PriceLabel(change.PreviousMode, change.PreviousPrice, change.PreviousQuantity, change.Unit, change.PreviousAllowance)} → {PriceLabel(change.CurrentMode, change.CurrentPrice, change.CurrentQuantity, change.Unit, change.CurrentAllowance)}",
                         TextWrapping = TextWrapping.Wrap
                     });
                 var dialog = new ContentDialog

@@ -712,6 +712,10 @@ public sealed partial class ProductWindow : Window
         var content = new StackPanel { Spacing = 12 };
         content.Children.Add(new TextBlock { Text = row.Detail.Name, TextWrapping = TextWrapping.Wrap });
         content.Children.Add(price);
+        var wasteAllowance = new NumberBox { Header = UiText.Get("Допуск на обрезки, %"),
+            Value = ProjectDetailPricing.AllowancePercent(row.Detail, material), Minimum = 0,
+            Visibility = material.Unit is "m2" or "lm" ? Visibility.Visible : Visibility.Collapsed };
+        content.Children.Add(wasteAllowance);
         content.Children.Add(error);
         var dialog = new ContentDialog
         {
@@ -722,7 +726,7 @@ public sealed partial class ProductWindow : Window
         };
         dialog.PrimaryButtonClick += (_, args) =>
         {
-            try { ProjectDetailPricing.SetEnteredPrice(row.Detail, material, NumberBoxInput.Read(price)); }
+            try { ProjectDetailPricing.SetEnteredPrice(row.Detail, material, NumberBoxInput.Read(price), NumberBoxInput.Read(wasteAllowance)); }
             catch (InvalidOperationException exception)
             { args.Cancel = true; error.Text = UiText.Get(exception.Message); error.Visibility = Visibility.Visible; }
         };
@@ -1249,6 +1253,7 @@ public sealed partial class ProductWindow : Window
             ProjectPriceMode = detail.ProjectPriceMode,
             ProjectPriceQuantity = detail.ProjectPriceQuantity,
             ProjectPriceIsManual = detail.ProjectPriceIsManual,
+            ProjectWasteAllowancePercent = detail.ProjectWasteAllowancePercent,
             LengthExpr = detail.LengthExpr,
             WidthExpr = detail.WidthExpr,
             AllowRotation = detail.AllowRotation,

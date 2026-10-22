@@ -18,6 +18,7 @@ public sealed class MaterialPageController
     private readonly TextBox _name;
     private readonly ComboBox _unit;
     private readonly NumberBox _cost;
+    private readonly NumberBox _wasteAllowance;
     private readonly ComboBox _priceMode;
     private readonly NumberBox _rollLength;
     private string _pricingUnit = "";
@@ -30,7 +31,7 @@ public sealed class MaterialPageController
 
     public MaterialPageController(MaterialService materials, ListView categories, ListView items, ListView groupedItems,
         UIElement listEmpty, UIElement parametersEmpty, UIElement parameters, TextBox type, TextBox name,
-        ComboBox unit, NumberBox cost, ComboBox priceMode, NumberBox rollLength, NumberBox sheetLength, NumberBox sheetWidth, CheckBox texture, CheckBox edgeBanding, ComboBox sort)
+        ComboBox unit, NumberBox cost, NumberBox wasteAllowance, ComboBox priceMode, NumberBox rollLength, NumberBox sheetLength, NumberBox sheetWidth, CheckBox texture, CheckBox edgeBanding, ComboBox sort)
     {
         _materials = materials;
         _categories = categories;
@@ -43,6 +44,7 @@ public sealed class MaterialPageController
         _name = name;
         _unit = unit;
         _cost = cost;
+        _wasteAllowance = wasteAllowance;
         _priceMode = priceMode;
         _rollLength = rollLength;
         _sheetLength = sheetLength;
@@ -90,6 +92,7 @@ public sealed class MaterialPageController
         _type.Text = choice?.Type ?? SelectedCategory ?? "Прочее";
         _name.Text = choice?.Material.Name ?? string.Empty;
         _cost.Value = choice?.Material.Cost ?? 0;
+        _wasteAllowance.Value = choice?.Material.WasteAllowancePercent ?? 0;
         _sheetLength.Value = choice?.Material.SheetLength ?? 0;
         _sheetWidth.Value = choice?.Material.SheetWidth ?? 0;
         _texture.IsChecked = choice?.Material.TextureDirection ?? false;
@@ -111,6 +114,7 @@ public sealed class MaterialPageController
     {
         material.Name = string.IsNullOrWhiteSpace(_name.Text) ? "Новый материал" : _name.Text.Trim();
         material.Cost = EditorValue(_cost);
+        material.WasteAllowancePercent = (_unit.SelectedItem as ComboBoxItem)?.Tag?.ToString() is "m2" or "lm" ? EditorValue(_wasteAllowance) : 0;
         material.Unit = _unit.SelectedItem is ComboBoxItem item ? item.Tag?.ToString() ?? "pc" : "pc";
         material.PriceMode = material.Unit == "pc" ? "unit" : (_priceMode.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "unit";
         material.RollLength = material.Unit == "lm" ? EditorValue(_rollLength) : 0;
@@ -128,6 +132,7 @@ public sealed class MaterialPageController
         _sheetLength.Visibility = visibility;
         _sheetWidth.Visibility = visibility;
         _texture.Visibility = visibility;
+        _wasteAllowance.Visibility = (_unit.SelectedItem as ComboBoxItem)?.Tag?.ToString() is "m2" or "lm" ? Visibility.Visible : Visibility.Collapsed;
         UpdatePricingFields();
     }
 

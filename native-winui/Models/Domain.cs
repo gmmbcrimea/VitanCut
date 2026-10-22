@@ -125,6 +125,7 @@ public sealed class Detail
     public string ProjectPriceMode { get; set; } = "";
     public double ProjectPriceQuantity { get; set; } = 1;
     public bool? ProjectPriceIsManual { get; set; }
+    public double ProjectWasteAllowancePercent { get; set; }
     public string Id { get; set; } = Ids.NewId();
     public string Name { get; set; } = "Новая деталь";
     public double Qty { get; set; } = 1;
@@ -153,6 +154,7 @@ public sealed class Material
     public string Group { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
     public double Cost { get; set; }
+    public double WasteAllowancePercent { get; set; }
     public string Unit { get; set; } = "pc";
     public string PriceMode { get; set; } = "unit";
     public double RollLength { get; set; }

@@ -39,7 +39,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
             return null;
         }
         var material = choice.Material;
-        var previous = new Material { Name = material.Name, Group = material.Group, CreatedAt = material.CreatedAt, Unit = material.Unit, Cost = material.Cost, PriceMode = material.PriceMode, RollLength = material.RollLength, SheetLength = material.SheetLength, SheetWidth = material.SheetWidth, TextureDirection = material.TextureDirection, Texture = material.Texture, EdgeBandingEnabled = material.EdgeBandingEnabled };
+        var previous = new Material { Name = material.Name, Group = material.Group, CreatedAt = material.CreatedAt, Unit = material.Unit, Cost = material.Cost, WasteAllowancePercent = material.WasteAllowancePercent, PriceMode = material.PriceMode, RollLength = material.RollLength, SheetLength = material.SheetLength, SheetWidth = material.SheetWidth, TextureDirection = material.TextureDirection, Texture = material.Texture, EdgeBandingEnabled = material.EdgeBandingEnabled };
         try
         {
             Copy(draft, material);
@@ -56,6 +56,7 @@ public sealed class MaterialCommandsController(MaterialService materials, Dialog
     private static void Copy(Material source, Material target)
     {
         target.Name = source.Name; target.Unit = source.Unit; target.Cost = source.Cost;
+        target.WasteAllowancePercent = source.WasteAllowancePercent;
         target.Group = source.Group; target.CreatedAt = source.CreatedAt; target.Texture = source.Texture;
         target.SheetLength = source.SheetLength; target.SheetWidth = source.SheetWidth;
         target.TextureDirection = source.TextureDirection;

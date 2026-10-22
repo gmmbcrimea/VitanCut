@@ -7,22 +7,31 @@ public static class MaterialPricing
     public static string Error(Material material)
     {
         if (!double.IsFinite(material.Cost) || material.Cost < 0) return "Цена должна быть конечным неотрицательным числом.";
-        if (material.PriceMode == "unit") return "";
-        if (material.PriceMode == "sheet" && material.Unit == "m2")
-            return Positive(material.SheetLength) && Positive(material.SheetWidth) && Positive(SheetArea(material)) &&
+        if (!double.IsFinite(material.WasteAllowancePercent) || material.WasteAllowancePercent < 0)
+            return "Допуск на обрезки должен быть конечным неотрицательным числом.";
+        string error;
+        if (material.PriceMode == "unit") error = "";
+        else if (material.PriceMode == "sheet" && material.Unit == "m2")
+            error = Positive(material.SheetLength) && Positive(material.SheetWidth) && Positive(SheetArea(material)) &&
                 double.IsFinite(material.Cost / SheetArea(material))
                 ? "" : "Для цены за лист укажите положительные длину и ширину листа.";
-        if (material.PriceMode == "roll" && material.Unit == "lm")
-            return Positive(material.RollLength) && double.IsFinite(material.Cost / material.RollLength)
+        else if (material.PriceMode == "roll" && material.Unit == "lm")
+            error = Positive(material.RollLength) && double.IsFinite(material.Cost / material.RollLength)
                 ? "" : "Укажите положительную длину бухты в метрах.";
-        return "Способ задания цены не соответствует единице измерения материала.";
+        else error = "Способ задания цены не соответствует единице измерения материала.";
+        if (error.Length > 0) return error;
+        return double.IsFinite(material.Cost / PriceQuantity(material) * (1 + AllowancePercent(material) / 100))
+            ? "" : "Цена должна быть конечным неотрицательным числом.";
     }
 
     public static double UnitCost(Material material)
     {
         if (Error(material).Length > 0) return 0;
-        return material.Cost / PriceQuantity(material);
+        return material.Cost / PriceQuantity(material) * (1 + AllowancePercent(material) / 100);
     }
+
+    public static double BaseUnitCost(Material material) => Error(material).Length > 0 ? 0 : material.Cost / PriceQuantity(material);
+    public static double AllowancePercent(Material material) => material.Unit is "m2" or "lm" ? material.WasteAllowancePercent : 0;
 
     public static double PriceQuantity(Material material) => material.PriceMode switch
     {

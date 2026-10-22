@@ -1,4 +1,6 @@
 {
+  "Допуск на обрезки, %": "Verschnittzuschlag, %",
+  "Допуск на обрезки должен быть конечным неотрицательным числом.": "Der Verschnittzuschlag muss eine endliche, nichtnegative Zahl sein.",
   "Обновить цены проекта?": "Projektpreise aktualisieren?",
   "Цены в каталоге изменились. Обновить цены проекта? Ручные цены останутся без изменений.": "Die Katalogpreise haben sich geändert. Projektpreise aktualisieren? Manuell bearbeitete Preise bleiben unverändert.",
   "Обновить цены": "Preise aktualisieren",

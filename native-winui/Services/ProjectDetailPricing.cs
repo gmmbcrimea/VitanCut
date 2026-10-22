@@ -7,7 +7,7 @@ public static class ProjectDetailPricing
     public sealed record EditorPrice(string Mode, double Quantity, double Amount);
     public sealed record CatalogChange(string ProductId, string DetailId, string MaterialId, string Name, string Unit,
         double PreviousPrice, double CurrentPrice, string PreviousMode, string CurrentMode,
-        double PreviousQuantity, double CurrentQuantity);
+        double PreviousQuantity, double CurrentQuantity, double PreviousAllowance, double CurrentAllowance);
 
     public static IReadOnlyList<CatalogChange> CatalogChanges(AppState state, Project project)
     {
@@ -17,13 +17,16 @@ public static class ProjectDetailPricing
         {
             if (detail.ProjectPriceIsManual != false || state.FindMaterial(detail.Type, detail.MaterialId) is not { } material ||
                 !HasPrice(detail, material) || MaterialPricing.Error(material).Length > 0) continue;
-            var previous = UnitPrice(detail, material);
-            var current = MaterialPricing.UnitCost(material);
+            var previous = BaseUnitPrice(detail, material);
+            var current = MaterialPricing.BaseUnitCost(material);
             if (!double.IsFinite(previous)) continue;
             var quantity = MaterialPricing.PriceQuantity(material);
-            if (Same(previous, current) && detail.ProjectPriceMode == material.PriceMode && Same(detail.ProjectPriceQuantity, quantity)) continue;
+            var previousAllowance = AllowancePercent(detail, material);
+            var currentAllowance = MaterialPricing.AllowancePercent(material);
+            if (Same(previous, current) && detail.ProjectPriceMode == material.PriceMode && Same(detail.ProjectPriceQuantity, quantity) &&
+                Same(previousAllowance, currentAllowance)) continue;
             changes.Add(new(product.Id, detail.Id, material.Id, material.Name, material.Unit, previous, current,
-                detail.ProjectPriceMode, material.PriceMode, detail.ProjectPriceQuantity, quantity));
+                detail.ProjectPriceMode, material.PriceMode, detail.ProjectPriceQuantity, quantity, previousAllowance, currentAllowance));
         }
         return changes;
     }
@@ -33,12 +36,23 @@ public static class ProjectDetailPricing
     public static bool HasPrice(Detail detail, Material material) => detail.ProjectUnitPrice.HasValue &&
         detail.ProjectPriceMaterialId == material.Id && detail.ProjectPriceUnit == material.Unit;
 
-    public static double UnitPrice(Detail detail, Material material) => HasPrice(detail, material)
-        ? detail.ProjectUnitPrice!.Value : MaterialPricing.UnitCost(material);
+    public static double BaseUnitPrice(Detail detail, Material material) => HasPrice(detail, material)
+        ? detail.ProjectUnitPrice!.Value : MaterialPricing.BaseUnitCost(material);
 
-    public static void Set(Detail detail, Material material, double price)
+    public static double AllowancePercent(Detail detail, Material material) => material.Unit is "m2" or "lm"
+        ? HasPrice(detail, material) ? detail.ProjectWasteAllowancePercent : MaterialPricing.AllowancePercent(material) : 0;
+
+    public static double UnitPrice(Detail detail, Material material) =>
+        BaseUnitPrice(detail, material) * (1 + AllowancePercent(detail, material) / 100);
+
+    public static void Set(Detail detail, Material material, double price, double? wasteAllowancePercent = null)
     {
         if (!double.IsFinite(price) || price < 0) throw new InvalidOperationException("Цена должна быть конечным неотрицательным числом.");
+        var allowance = material.Unit is "m2" or "lm" ? wasteAllowancePercent ?? AllowancePercent(detail, material) : 0;
+        if (!double.IsFinite(allowance) || allowance < 0)
+            throw new InvalidOperationException("Допуск на обрезки должен быть конечным неотрицательным числом.");
+        if (!double.IsFinite(price * (1 + allowance / 100)))
+            throw new InvalidOperationException("Цена должна быть конечным неотрицательным числом.");
         var basis = Basis(detail, material);
         detail.ProjectUnitPrice = price;
         detail.ProjectPriceMaterialId = material.Id;
@@ -46,6 +60,7 @@ public static class ProjectDetailPricing
         detail.ProjectPriceMode = basis.Mode;
         detail.ProjectPriceQuantity = basis.Quantity;
         detail.ProjectPriceIsManual = true;
+        detail.ProjectWasteAllowancePercent = allowance;
     }
 
     private static (string Mode, double Quantity) Basis(Detail detail, Material material)
@@ -60,27 +75,28 @@ public static class ProjectDetailPricing
     public static EditorPrice Editor(Detail detail, Material material)
     {
         var basis = Basis(detail, material);
-        return new(basis.Mode, basis.Quantity, UnitPrice(detail, material) * basis.Quantity);
+        return new(basis.Mode, basis.Quantity, BaseUnitPrice(detail, material) * basis.Quantity);
     }
 
-    public static void SetEnteredPrice(Detail detail, Material material, double amount)
+    public static void SetEnteredPrice(Detail detail, Material material, double amount, double? wasteAllowancePercent = null)
     {
         var basis = Basis(detail, material);
         var unitPrice = amount / basis.Quantity;
         if (!double.IsFinite(amount) || amount < 0 || !double.IsFinite(unitPrice))
             throw new InvalidOperationException("Цена должна быть конечным неотрицательным числом.");
-        Set(detail, material, unitPrice);
+        Set(detail, material, unitPrice, wasteAllowancePercent);
     }
 
     public static void UseCatalogPrice(Detail detail, Material material)
     {
         if (MaterialPricing.Error(material) is { Length: > 0 } error) throw new InvalidOperationException(error);
-        detail.ProjectUnitPrice = MaterialPricing.UnitCost(material);
+        detail.ProjectUnitPrice = MaterialPricing.BaseUnitCost(material);
         detail.ProjectPriceMaterialId = material.Id;
         detail.ProjectPriceUnit = material.Unit;
         detail.ProjectPriceMode = material.PriceMode;
         detail.ProjectPriceQuantity = MaterialPricing.PriceQuantity(material);
         detail.ProjectPriceIsManual = false;
+        detail.ProjectWasteAllowancePercent = MaterialPricing.AllowancePercent(material);
     }
 
     public static void Capture(AppState state, Product product)
@@ -112,6 +128,7 @@ public static class ProjectDetailPricing
             detail.ProjectPriceMode = "";
             detail.ProjectPriceQuantity = 1;
             detail.ProjectPriceIsManual = null;
+            detail.ProjectWasteAllowancePercent = 0;
         }
     }
 }

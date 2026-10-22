@@ -1,4 +1,6 @@
 {
+  "Допуск на обрезки, %": "Margen para recortes, %",
+  "Допуск на обрезки должен быть конечным неотрицательным числом.": "El margen para recortes debe ser un número finito no negativo.",
   "Обновить цены проекта?": "¿Actualizar los precios del proyecto?",
   "Цены в каталоге изменились. Обновить цены проекта? Ручные цены останутся без изменений.": "Los precios del catálogo han cambiado. ¿Actualizar los precios del proyecto? Los precios editados manualmente no cambiarán.",
   "Обновить цены": "Actualizar precios",
