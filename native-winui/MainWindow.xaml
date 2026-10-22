@@ -190,6 +190,7 @@
                               Spacing="8">
                     <Button Content="Создать деталировку"
                             Click="CreateDetailingClick"  l10n:UiLocalization.Properties="Content"/>
+                    <Button Content="Сводная таблица" Click="CreateMaterialSummaryClick" l10n:UiLocalization.Properties="Content"/>
                     <Button Content="Создать карту кроя"
                             Click="CreateCutMapClick"
                             Style="{StaticResource AccentButtonStyle}"  l10n:UiLocalization.Properties="Content"/>

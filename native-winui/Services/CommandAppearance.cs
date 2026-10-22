@@ -11,9 +11,10 @@ internal static class CommandAppearance
         if (button.Content is not string label) return;
         Symbol? symbol = UiText.Original(label) switch
         {
-            "Сохранить" or "Сохранить раскрой" or "Сохранить деталировку" => Symbol.Save,
+            "Сохранить" or "Сохранить раскрой" or "Сохранить деталировку" or "Сохранить в Excel" => Symbol.Save,
             "Печать" => Symbol.Print,
             "Создать деталировку" => Symbol.Document,
+            "Сводная таблица" => Symbol.List,
             "Создать карту кроя" => Symbol.Crop,
             "Добавить" or "Добавить изделие" or "Добавить материал" or "Создать проект" => Symbol.Add,
             "Добавить изображение" => Symbol.Pictures,

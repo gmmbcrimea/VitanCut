@@ -585,7 +585,14 @@ public sealed partial class MainWindow : Window
 
     private void ShowTab(string tab)
     {
+        var returningToProject = tab == "projects" && ProjectsPage.Visibility != Visibility.Visible;
         _navigation.Show(tab, App.Preferences.Current.AnimationsEnabled);
+        if (tab != "projects") _priceCheckedProjectId = null;
+        else if (returningToProject && SelectedProject is { } project)
+        {
+            _priceCheckedProjectId = project.Id;
+            QueueProjectPriceCheck(project.Id);
+        }
         if (tab == "customers") RefreshCustomers();
         if (tab == "materials") RefreshMaterials(SelectedMaterial);
         if (tab == "settings") LoadSettings();
@@ -895,10 +902,79 @@ public sealed partial class MainWindow : Window
             _showingProjectListOnNarrow = false;
         }
         FillProjectCard();
+        if (SelectedProject is { } project && _priceCheckedProjectId != project.Id)
+        {
+            _priceCheckedProjectId = project.Id;
+            QueueProjectPriceCheck(project.Id);
+        }
+    }
+
+    private string? _priceCheckedProjectId;
+    private string? _pendingPriceCheck;
+    private bool _priceCheckDialogOpen;
+
+    private void QueueProjectPriceCheck(string projectId)
+    {
+        _pendingPriceCheck = projectId;
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            if (_priceCheckDialogOpen || Root.XamlRoot is null || ProjectsPage.Visibility != Visibility.Visible || SelectedProject?.Id != _pendingPriceCheck) return;
+            var id = _pendingPriceCheck;
+            _pendingPriceCheck = null;
+            var project = id is null ? null : App.Projects.Find(id);
+            if (project is null) return;
+            var changes = ProjectDetailPricing.CatalogChanges(App.State, project);
+            if (changes.Count == 0) return;
+            _priceCheckDialogOpen = true;
+            try
+            {
+                var details = new StackPanel { Spacing = 8, MaxWidth = 460 };
+                details.Children.Add(new TextBlock
+                {
+                    Text = UiText.Get("Цены в каталоге изменились. Обновить цены проекта? Ручные цены останутся без изменений."),
+                    TextWrapping = TextWrapping.Wrap
+                });
+                string PriceLabel(string mode, double price, double quantity, string unit)
+                {
+                    var label = UiText.Get(mode == "sheet" ? "Цена за лист" : mode == "roll" ? "Цена за бухту" : "Цена за единицу");
+                    return $"{label}: {Calculator.Number(price * quantity)} {UiText.Get("руб.")}" +
+                        (mode == "unit" ? $" / {MaterialSummaryService.UnitLabel(unit)}" :
+                            $" ({Calculator.Number(quantity, 3)} {MaterialSummaryService.UnitLabel(unit)})");
+                }
+                foreach (var change in changes.DistinctBy(change => (change.MaterialId, change.PreviousPrice, change.CurrentPrice,
+                    change.PreviousMode, change.CurrentMode, change.PreviousQuantity, change.CurrentQuantity)))
+                    details.Children.Add(new TextBlock
+                    {
+                        Text = $"{change.Name}\n{PriceLabel(change.PreviousMode, change.PreviousPrice, change.PreviousQuantity, change.Unit)} → {PriceLabel(change.CurrentMode, change.CurrentPrice, change.CurrentQuantity, change.Unit)}",
+                        TextWrapping = TextWrapping.Wrap
+                    });
+                var dialog = new ContentDialog
+                {
+                    XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Обновить цены проекта?"),
+                    Content = new ScrollViewer { Content = details, MaxHeight = Math.Max(160, Root.ActualHeight - 260),
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
+                    PrimaryButtonText = UiText.Get("Обновить цены"), CloseButtonText = UiText.Get("Оставить цены проекта"),
+                    DefaultButton = ContentDialogButton.Close, MinWidth = Math.Min(540, Root.ActualWidth - 48)
+                };
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary && SelectedProject?.Id == id)
+                {
+                    App.Projects.UpdateCatalogPrices(project, changes);
+                    FillProjectCard();
+                    NotificationCenter.Publish(UiText.Get("Готово"), UiText.Get("Цены проекта обновлены"));
+                }
+            }
+            catch (Exception error) { NotificationCenter.Publish(UiText.Get("Обновить цены проекта?"), error.Message); }
+            finally
+            {
+                _priceCheckDialogOpen = false;
+                if (_pendingPriceCheck is { } pending) QueueProjectPriceCheck(pending);
+            }
+        });
     }
 
     private void BackToProjectsClick(object sender, RoutedEventArgs e)
     {
+        _priceCheckedProjectId = null;
         _showingProjectListOnNarrow = true;
         ProjectsList.SelectedIndex = -1;
         FillProjectCard();
@@ -1515,6 +1591,21 @@ public sealed partial class MainWindow : Window
         }
     }
     private bool _buildingDetailing;
+
+    private bool _buildingMaterialSummary;
+    private async void CreateMaterialSummaryClick(object sender, RoutedEventArgs e)
+    {
+        if (SelectedProject is not { } project || _buildingMaterialSummary) return;
+        _buildingMaterialSummary = true;
+        if (sender is Button button) button.IsEnabled = false;
+        try { await _reports.OpenMaterialSummaryAsync(project); }
+        catch (Exception error) { await _dialogs.ShowMessageAsync(UiText.Get("Сводная таблица"), error.Message); }
+        finally
+        {
+            _buildingMaterialSummary = false;
+            if (sender is Button control) control.IsEnabled = true;
+        }
+    }
 
     private async void ExportDatabaseClick(object sender, RoutedEventArgs e)
     {

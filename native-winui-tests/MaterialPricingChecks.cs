@@ -37,6 +37,28 @@ internal static class MaterialPricingChecks
             "Normalized sheet and roll prices flow into product and project totals with quantities");
         var detailing = CuttingService.BuildDetailingReport(state, project);
         check(detailing.Products[0].Rows.Sum(row => row.Cost) == 2160, "Detailing report uses the same normalized prices");
+        var summary = MaterialSummaryService.Build(state, project);
+        check(summary.Rows.Count == 3 && summary.Total == 2160 && summary.Issues.Count == 0,
+            "Material summary aggregates generated banding and manual details without payroll");
+        check(summary.Rows.Single(row => row.MaterialId == sheet.Id).Quantity == 3 &&
+            summary.Rows.Single(row => row.MaterialId == sheet.Id).UnitPrice == 500 &&
+            summary.Rows.Single(row => row.MaterialId == roll.Id).Quantity == 15 &&
+            summary.Rows.Single(row => row.MaterialId == piece.Id).Quantity == 12,
+            "Material summary includes product quantities and normalized sheet/roll prices");
+        var repeated = MaterialSummaryService.Build(state, new Project { Products = [product, product] });
+        check(repeated.Rows.Count == 3 && repeated.Total == 4320, "Material summary merges materials across multiple products");
+        var summaryPath = Path.Combine(output, "material-summary.xlsx");
+        ReportDocumentService.SaveXlsx(summary, summaryPath);
+        using (var workbook = new ClosedXML.Excel.XLWorkbook(summaryPath))
+        {
+            var worksheet = workbook.Worksheet(1);
+            check(worksheet.Cell(7, 5).GetDouble() == 2160 && worksheet.Cell(4, 3).DataType == ClosedXML.Excel.XLDataType.Number,
+                "Summary Excel export preserves numeric quantities and total");
+        }
+        var missing = MaterialSummaryService.Build(state, new Project { Products = [new Product
+            { Details = [new Detail { Type = "Missing", MaterialId = "missing" }] }] });
+        check(missing.Issues.Count == 1, "Summary reports missing materials instead of silently omitting them");
+        check(MaterialSummaryService.Build(state, new Project()).Rows.Count == 0, "Empty project summary is supported");
         sheet.PriceMode = "unit";
         sheet.Cost = 500;
         roll.PriceMode = "unit";
@@ -58,6 +80,8 @@ internal static class MaterialPricingChecks
             "Price modes, roll length, group and creation date survive save and restart");
         var legacy = JsonSerializer.Deserialize<Material>("{\"Unit\":\"lm\",\"Cost\":25}")!;
         check(legacy.PriceMode == "unit" && MaterialPricing.UnitCost(legacy) == 25, "Legacy materials keep unit pricing without migration");
+        // These checks exercise live catalog pricing, not a project's frozen prices.
+        ProjectDetailPricing.Clear(product);
         foreach (var value in new[] { 0d, -1, double.NaN, double.PositiveInfinity, double.Epsilon })
         {
             roll.RollLength = value;

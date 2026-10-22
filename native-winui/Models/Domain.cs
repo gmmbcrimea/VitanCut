@@ -119,6 +119,12 @@ public sealed class Product
 
 public sealed class Detail
 {
+    public double? ProjectUnitPrice { get; set; }
+    public string ProjectPriceMaterialId { get; set; } = "";
+    public string ProjectPriceUnit { get; set; } = "";
+    public string ProjectPriceMode { get; set; } = "";
+    public double ProjectPriceQuantity { get; set; } = 1;
+    public bool? ProjectPriceIsManual { get; set; }
     public string Id { get; set; } = Ids.NewId();
     public string Name { get; set; } = "Новая деталь";
     public double Qty { get; set; } = 1;

@@ -14,6 +14,37 @@ public static class ReportDocumentService
 {
     static ReportDocumentService() => QuestPDF.Settings.License = LicenseType.Community;
 
+    public static void SaveXlsx(MaterialSummaryReport report, string path)
+    {
+        using var book = new XLWorkbook();
+        var sheet = book.Worksheets.Add(UiText.Get("Материалы"));
+        sheet.Cell(1, 1).Value = report.ProjectName;
+        var headers = new[] { "Материал", "Единица", "Количество", "Цена за единицу", "Стоимость" };
+        for (var column = 0; column < headers.Length; column++) sheet.Cell(3, column + 1).Value = UiText.Get(headers[column]);
+        var rowNumber = 4;
+        foreach (var row in report.Rows)
+        {
+            sheet.Cell(rowNumber, 1).Value = row.Name;
+            sheet.Cell(rowNumber, 2).Value = MaterialSummaryService.UnitLabel(row.Unit);
+            sheet.Cell(rowNumber, 3).Value = row.Quantity;
+            sheet.Cell(rowNumber, 4).Value = row.UnitPrice;
+            sheet.Cell(rowNumber, 5).Value = row.Cost;
+            rowNumber++;
+        }
+        sheet.Cell(rowNumber, 1).Value = UiText.Get("Итого");
+        sheet.Cell(rowNumber, 5).Value = report.Total;
+        sheet.Range(3, 1, 3, 5).Style.Font.Bold = true;
+        sheet.Range(rowNumber, 1, rowNumber, 5).Style.Font.Bold = true;
+        sheet.Range(4, 3, rowNumber, 3).Style.NumberFormat.Format = "0.###";
+        sheet.Range(4, 4, rowNumber, 5).Style.NumberFormat.Format = "#,##0.00";
+        foreach (var issue in report.Issues) sheet.Cell(++rowNumber, 1).Value = issue;
+        sheet.Column(1).Width = 55;
+        sheet.Column(1).Style.Alignment.WrapText = true;
+        sheet.Columns(2, 5).Width = 20;
+        sheet.SheetView.FreezeRows(3);
+        book.SaveAs(path);
+    }
+
     public static void SavePdf(CutReport report, string path) => CreateCutPdf(report).GeneratePdf(path);
     public static void SavePdf(DetailingReport report, string path) => CreateDetailingPdf(report).GeneratePdf(path);
     public static void SaveXlsx(CutReport report, string path) { using var book = CreateCutWorkbook(report); book.SaveAs(path); }

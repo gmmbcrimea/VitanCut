@@ -76,6 +76,9 @@ public sealed class CatalogService(AppState state)
 
     public void SaveProduct(string counterparty, Product? previous, Product saved)
     {
+        if (saved.Details.Any(detail => detail.ProjectUnitPrice.HasValue))
+            saved = JsonSerializer.Deserialize<Product>(JsonSerializer.Serialize(saved))!;
+        ProjectDetailPricing.Clear(saved);
         var products = GetProducts(counterparty).ToList();
         if (previous is null)
         {

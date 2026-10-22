@@ -237,6 +237,8 @@ public sealed partial class ProductWindow : Window
     private void RefreshDetails(Detail? select = null)
     {
         EdgeBandingService.Refresh(App.State, _sourceProduct);
+        if (_catalogEditor) ProjectDetailPricing.Clear(_sourceProduct);
+        else ProjectDetailPricing.Capture(App.State, _sourceProduct);
         using var measurement = App.UiPerformance.Measure(UiWork.ProductRows);
         var selectedId = select?.Id ?? _selectedDetailRow?.Detail.Id;
         foreach (var flyout in _formulaFlyouts.Values)
@@ -514,6 +516,7 @@ public sealed partial class ProductWindow : Window
     {
         SaveProductFields();
         SyncEdgeBandRows();
+        if (!_catalogEditor) ProjectDetailPricing.Capture(App.State, _sourceProduct);
         foreach (var row in _detailRows) UpdateDetailRowCalculation(row);
         var totals = Calculator.Product(App.State, _sourceProduct);
         SummaryAreaText.Text = UiText.Format($"{Calculator.Number(totals.Area)} м²");
@@ -665,17 +668,71 @@ public sealed partial class ProductWindow : Window
             TextWrapping = TextWrapping.Wrap
         };
         row.CalculationText = calculationText;
-        Grid.SetColumn(calculationText, 6);
-        grid.Children.Add(calculationText);
+        FrameworkElement calculationCell = calculationText;
+        Button? priceButton = null;
+        if (!_catalogEditor)
+        {
+            priceButton = new Button
+            {
+                Content = calculationText, MinWidth = 0, MinHeight = 0, Padding = new Thickness(4),
+                BorderThickness = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                HorizontalContentAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center
+            };
+            priceButton.Click += async (_, _) => await EditProjectDetailPriceAsync(row);
+            ToolTipService.SetToolTip(priceButton, UiText.Get("Цена детали в проекте"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(priceButton, UiText.Get("Цена детали в проекте") + ": " + row.Detail.Name);
+            calculationCell = priceButton;
+        }
+        Grid.SetColumn(calculationCell, 6);
+        grid.Children.Add(calculationCell);
 
         border.Child = grid;
         if (row.Detail.IsGeneratedEdgeBand)
         {
             nameBox.IsReadOnly = true;
             foreach (var control in grid.Children.OfType<Control>()) control.IsEnabled = false;
+            if (priceButton is not null) priceButton.IsEnabled = true;
             ToolTipService.SetToolTip(border,UiText.Get("Длина кромки рассчитывается по выбранным граням деталей."));
         }
         return border;
+    }
+
+    private async Task EditProjectDetailPriceAsync(DetailRow row)
+    {
+        var material = App.State.FindMaterial(row.Detail.Type, row.Detail.MaterialId);
+        if (_catalogEditor || material is null) return;
+        var editorPrice = ProjectDetailPricing.Editor(row.Detail, material);
+        var priceHeader = editorPrice.Mode == "sheet" ? "Цена за лист" : editorPrice.Mode == "roll" ? "Цена за бухту" :
+            material.Unit == "m2" ? "Цена за м²" : material.Unit == "lm" ? "Цена за погонный метр" : "Цена за единицу";
+        var price = new NumberBox { Header = UiText.Get(priceHeader) + (editorPrice.Mode == "unit" ? "" :
+                $" · {Calculator.Number(editorPrice.Quantity, 3)} {UnitLabel(material.Unit)}"),
+            Value = editorPrice.Amount, Minimum = 0, MinWidth = 280 };
+        var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed,
+            Foreground = (Brush)Application.Current.Resources["UiDangerBrush"] };
+        var content = new StackPanel { Spacing = 12 };
+        content.Children.Add(new TextBlock { Text = row.Detail.Name, TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(price);
+        content.Children.Add(error);
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Цена детали в проекте"), Content = content,
+            MinWidth = Math.Min(540, Root.XamlRoot.Size.Width - 48),
+            PrimaryButtonText = UiText.Get("Сохранить"), SecondaryButtonText = UiText.Get("Цена каталога"),
+            CloseButtonText = UiText.Get("Отмена"), DefaultButton = ContentDialogButton.Primary
+        };
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            try { ProjectDetailPricing.SetEnteredPrice(row.Detail, material, NumberBoxInput.Read(price)); }
+            catch (InvalidOperationException exception)
+            { args.Cancel = true; error.Text = UiText.Get(exception.Message); error.Visibility = Visibility.Visible; }
+        };
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Secondary)
+        {
+            if (MaterialPricing.Error(material).Length > 0) return;
+            ProjectDetailPricing.UseCatalogPrice(row.Detail, material);
+        }
+        if (result != ContentDialogResult.None) UpdateSummary();
     }
 
     private TextBox CreateFormulaBox(DetailRow row, bool width, bool visible)
@@ -960,17 +1017,21 @@ public sealed partial class ProductWindow : Window
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
         var empty = new TextBlock { Text = UiText.Get("Материалы не найдены"), Visibility = Visibility.Collapsed };
-        var choices = row.MaterialChoices.OrderBy(choice => choice.Type).ThenBy(choice => choice.Material.Name)
-            .Select(choice => new MaterialPickerOption(choice, choice.Material.Name, $"{choice.Type} / {UnitLabel(choice.Material.Unit)}")).ToArray();
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search,UiText.Get("Поиск материала по названию и категории"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(scroll,UiText.Get("Категории материалов"));
         void Filter()
         {
+            var choices = App.State.MaterialChoices().OrderBy(choice => choice.Type).ThenBy(choice => choice.Material.Name)
+                .Select(choice => new MaterialPickerOption(choice, choice.Material.Name,
+                    $"{UnitLabel(choice.Material.Unit)} · {MaterialPricing.UnitCost(choice.Material):N2} {UiText.Get("руб.")}")).ToArray();
             var matches = choices.Where(option => UiTextSearch.Matches(search.Text, option.Name, option.Choice.Type)).ToArray();
             categories.Children.Clear();
-            foreach (var category in matches.GroupBy(option => option.Choice.Type))
+            var categoryNames = string.IsNullOrWhiteSpace(search.Text)
+                ? App.MaterialLibrary.GetGroups().Concat(choices.Select(option => option.Choice.Type)).Distinct().OrderBy(type => type)
+                : matches.Select(option => option.Choice.Type).Distinct().OrderBy(type => type);
+            foreach (var categoryName in categoryNames)
             {
-                var options = category.ToList();
+                var options = matches.Where(option => option.Choice.Type == categoryName).ToList();
                 var list = new ListView
                 {
                     IsItemClickEnabled = true, SelectionMode = ListViewSelectionMode.Single,
@@ -978,16 +1039,31 @@ public sealed partial class ProductWindow : Window
                 };
                 ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Disabled);
                 ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Disabled);
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list,category.Key);
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list,categoryName);
                 list.ItemClick += (_, e) => Select((MaterialPickerOption)e.ClickedItem);
                 list.KeyDown += (_, e) =>
                 {
                     if (e.Key == Windows.System.VirtualKey.Enter && list.SelectedItem is MaterialPickerOption option)
                     { Select(option); e.Handled = true; }
                 };
+                var add = new Button { Content = UiText.Get("Добавить"), HorizontalAlignment = HorizontalAlignment.Stretch };
+                CommandAppearance.Decorate(add);
+                add.Click += async (_, _) =>
+                {
+                    flyout.Hide();
+                    var added = await MaterialCreateDialog.ShowAsync(this, button.XamlRoot, categoryName);
+                    if (added is null) return;
+                    foreach (var materialChoices in _detailRows.Select(detailRow => detailRow.MaterialChoices).Distinct())
+                        materialChoices.Add(added);
+                    SelectRowMaterial(row, button, added);
+                    NotificationCenter.Publish(UiText.Get("Готово"), UiText.Get("Материал сохранён"));
+                };
+                var categoryContent = new StackPanel { Spacing = 4 };
+                categoryContent.Children.Add(list);
+                categoryContent.Children.Add(add);
                 var expander = new Expander
                 {
-                    Header = category.Key, Content = list,
+                    Header = categoryName, Content = categoryContent,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     HorizontalContentAlignment = HorizontalAlignment.Stretch
                 };
@@ -1013,11 +1089,12 @@ public sealed partial class ProductWindow : Window
             var first = categories.Children.OfType<Expander>().FirstOrDefault();
             if (e.Key == Windows.System.VirtualKey.Down && first is not null)
             {
-                if (first.IsExpanded && first.Content is ListView list) list.Focus(FocusState.Keyboard);
+                if (first.IsExpanded && first.Content is StackPanel content && content.Children.OfType<ListView>().FirstOrDefault() is { } list) list.Focus(FocusState.Keyboard);
                 else first.Focus(FocusState.Keyboard);
                 e.Handled = true;
             }
-            else if (e.Key == Windows.System.VirtualKey.Enter && !string.IsNullOrWhiteSpace(search.Text) && first?.Content is ListView matches &&
+            else if (e.Key == Windows.System.VirtualKey.Enter && !string.IsNullOrWhiteSpace(search.Text) && first?.Content is StackPanel group &&
+                group.Children.OfType<ListView>().FirstOrDefault() is { } matches &&
                 matches.Items.OfType<MaterialPickerOption>().FirstOrDefault() is { } option)
             { Select(option); e.Handled = true; }
         };
@@ -1166,6 +1243,12 @@ public sealed partial class ProductWindow : Window
             Qty = detail.Qty,
             Type = detail.Type,
             MaterialId = detail.MaterialId,
+            ProjectUnitPrice = detail.ProjectUnitPrice,
+            ProjectPriceMaterialId = detail.ProjectPriceMaterialId,
+            ProjectPriceUnit = detail.ProjectPriceUnit,
+            ProjectPriceMode = detail.ProjectPriceMode,
+            ProjectPriceQuantity = detail.ProjectPriceQuantity,
+            ProjectPriceIsManual = detail.ProjectPriceIsManual,
             LengthExpr = detail.LengthExpr,
             WidthExpr = detail.WidthExpr,
             AllowRotation = detail.AllowRotation,

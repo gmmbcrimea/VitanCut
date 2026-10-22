@@ -21,13 +21,15 @@ public static class MaterialPricing
     public static double UnitCost(Material material)
     {
         if (Error(material).Length > 0) return 0;
-        return material.PriceMode switch
-        {
-            "sheet" => material.Cost / SheetArea(material),
-            "roll" => material.Cost / material.RollLength,
-            _ => material.Cost
-        };
+        return material.Cost / PriceQuantity(material);
     }
+
+    public static double PriceQuantity(Material material) => material.PriceMode switch
+    {
+        "sheet" => SheetArea(material),
+        "roll" => material.RollLength,
+        _ => 1
+    };
 
     private static double SheetArea(Material material) => (material.SheetLength / 1000d) * (material.SheetWidth / 1000d);
     private static bool Positive(double value) => double.IsFinite(value) && value > 0;

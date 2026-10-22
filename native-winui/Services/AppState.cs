@@ -261,6 +261,11 @@ public sealed class AppState
             material.Unit = Empty(material.Unit, "pc");
         }
 
+        foreach (var product in Database.Projects.SelectMany(project => project.Products))
+            ProjectDetailPricing.Capture(this, product);
+        foreach (var product in Database.Catalog.Values.SelectMany(products => products))
+            ProjectDetailPricing.Clear(product);
+
         EnsureUnique(Database.Projects.Select(project => project.Id), "project");
         EnsureUnique(Database.Materials.SelectMany(group => group.Value).Select(material => material.Id), "material");
         EnsureUnique(Database.Catalog.Values.SelectMany(products => products).Select(product => product.Id), "catalog product");

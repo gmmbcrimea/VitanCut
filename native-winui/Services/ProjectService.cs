@@ -9,6 +9,28 @@ public sealed class ProjectService(AppState state)
 {
     public Project? Find(string id) => state.Database.Projects.FirstOrDefault(project => project.Id == id);
 
+    public int UpdateCatalogPrices(Project project, IReadOnlyList<ProjectDetailPricing.CatalogChange> offered)
+    {
+        project = Resolve(project);
+        var current = ProjectDetailPricing.CatalogChanges(state, project);
+        if (!current.SequenceEqual(offered))
+            throw new InvalidOperationException("Цены проекта или каталога изменились. Откройте проект заново.");
+        if (current.Count == 0) return 0;
+        state.CommitMutation(() =>
+        {
+            foreach (var change in current)
+            {
+                var product = project.Products.Single(item => item.Id == change.ProductId);
+                var detail = product.Details.Single(item => item.Id == change.DetailId);
+                var material = state.FindMaterial(detail.Type, detail.MaterialId)
+                    ?? throw new InvalidOperationException("Материал не найден");
+                ProjectDetailPricing.UseCatalogPrice(detail, material);
+            }
+            Touch(project);
+        });
+        return current.Count;
+    }
+
     public IReadOnlyList<Project> GetOrdered(string sortKey) => sortKey switch
     {
         "created" => state.Database.Projects.OrderByDescending(project => project.CreatedAt).ToList(),
@@ -24,6 +46,7 @@ public sealed class ProjectService(AppState state)
     {
         state.CommitMutation(() =>
         {
+            foreach (var product in project.Products) ProjectDetailPricing.Capture(state, product);
             state.Database.Projects.Add(project);
             EnsureCounterparty(project.Counterparty);
         });
@@ -51,6 +74,7 @@ public sealed class ProjectService(AppState state)
     public void SaveProduct(Project project, Product? previous, Product saved)
     {
         project = Resolve(project);
+        ProjectDetailPricing.Capture(state, saved);
         state.CommitMutation(() =>
         {
             if (previous is null)
