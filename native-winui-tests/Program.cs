@@ -301,6 +301,17 @@ Check(materialSelection.Move("c", int.MaxValue, false, false) == "d" && material
 Check(materialSelection.Move("d", int.MinValue, false, false) == "a" && materialSelection.SelectedIds.SetEquals(["a"]), "Keyboard Home reaches the first material without integer overflow");
 Check(materialSelection.Move("a", -1, false, false) == "a", "Material focus does not wrap beyond the first row");
 Check(materialSelection.Move("missing", 1, false, false) is null && materialSelection.SelectedIds.SetEquals(["a"]), "Missing material focus cannot alter the current selection");
+materialSelection.ReplaceSelection(["b", "d"]);
+var savedMaterialSelection = materialSelection.SelectedIds.Append("b").ToArray();
+materialSelection.Reset(["d", "c", "b", "a"]);
+materialSelection.ReplaceSelection(savedMaterialSelection);
+Check(materialSelection.SelectedIds.SetEquals(["b", "d"]), "Saving a material restores selection by ID after rebuilding and reordering the list");
+materialSelection.Reset(["b", "a"]);
+materialSelection.ReplaceSelection(savedMaterialSelection);
+Check(materialSelection.SelectedIds.SetEquals(["b"]), "Restoring material selection ignores IDs no longer in the current category");
+materialSelection.Reset(["b", "a"]);
+materialSelection.ReplaceSelection(materialSelection.SelectedIds.Append("b").ToArray());
+Check(materialSelection.SelectedIds.SetEquals(["b"]), "Saving an editor material restores its row even when the list had no selection");
 var releaseSummary = AppUpdateService.SummarizeReleaseNotes("## Что нового в VitanCut 1.0.18\n\n- Исправлена прокрутка\n- Добавлена история уведомлений\n\n## Что нового в VitanCut 1.0.17\n- Старые изменения\n\n**Full Changelog**: link", "v1.0.18");
 Check(releaseSummary is not null && releaseSummary.Contains("Исправлена прокрутка") && !releaseSummary.Contains("Старые изменения") && !releaseSummary.Contains("Full Changelog"), "Update notes include only the selected release version");
 var updateScript = AppUpdateService.BuildUpdateScript("C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut", "C:\\Users\\gmmbc\\OneDrive\\Заметки\\VitanCut\\VitanCut.WinUI.exe", "C:\\Temp\\update", 1234);

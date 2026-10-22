@@ -471,7 +471,7 @@
                     <DataTemplate>
                       <Grid>
                       <Expander Header="{Binding Name}" AutomationProperties.Name="{Binding Name}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" Visibility="{Binding GroupVisibility}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                        <ListView ItemsSource="{Binding Items}" PreviewKeyDown="MaterialListKeyDown" SelectionChanged="MaterialGroupSelectionChanged" ItemClick="MaterialItemClicked" IsItemClickEnabled="True"
+                        <ListView ItemsSource="{Binding Items}" Loaded="MaterialGroupListLoaded" PreviewKeyDown="MaterialListKeyDown" SelectionChanged="MaterialGroupSelectionChanged" ItemClick="MaterialItemClicked" IsItemClickEnabled="True"
                                   RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" SelectionMode="Extended">
                           <ListView.ItemTemplate>
                             <DataTemplate>
@@ -480,7 +480,7 @@
                           </ListView.ItemTemplate>
                         </ListView>
                       </Expander>
-                      <ListView ItemsSource="{Binding Items}" PreviewKeyDown="MaterialListKeyDown" Visibility="{Binding PlainVisibility}" SelectionMode="Extended" ItemTemplate="{StaticResource MaterialChoiceTemplate}"
+                      <ListView ItemsSource="{Binding Items}" Loaded="MaterialGroupListLoaded" PreviewKeyDown="MaterialListKeyDown" Visibility="{Binding PlainVisibility}" SelectionMode="Extended" ItemTemplate="{StaticResource MaterialChoiceTemplate}"
                                 SelectionChanged="MaterialGroupSelectionChanged" ItemClick="MaterialItemClicked" IsItemClickEnabled="True"
                                 RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" />
                       </Grid>
