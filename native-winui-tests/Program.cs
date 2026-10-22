@@ -264,11 +264,31 @@ Check(deltaMigration.Contains("perform public.seed_vitan_workspace_entities(v_wo
 foreach (var viewport in new[] { 640d, 998d, 1200d, 1840d })
 {
     var columns = DetailTableLayout.ColumnWidths(viewport);
-    Check(Math.Abs(columns.Sum() + 60 - Math.Max(viewport, DetailTableLayout.MinimumWidth)) < .001,
+    Check(Math.Abs(columns.Sum() + 70 - Math.Max(viewport, DetailTableLayout.MinimumWidth)) < .001,
         $"Detail columns fill viewport {viewport} without content-dependent widths");
-    Check(columns[2] == 72 && columns[5] == 56 && columns[6] == 150 && columns.Min() >= 56,
+    Check(columns.Length == 8 && columns[2] == 72 && columns[4] == 32 && columns[6] == 56 && columns[7] == 150 &&
+        columns.Where((_, index) => index != 4).Min() >= 56,
         $"Detail fixed columns remain stable at {viewport}");
 }
+
+var swapMaterial = new Material { Unit = "m2" };
+var swapDetail = new Detail { LengthExpr = "600", WidthExpr = "400", Qty = 3, AllowRotation = false };
+Check(DetailDimensions.Swap(swapDetail, swapMaterial) && swapDetail.LengthExpr == "400" && swapDetail.WidthExpr == "600",
+    "Detail dimension button exchanges numeric expressions");
+Check(swapDetail.Qty == 3 && !swapDetail.AllowRotation,
+    "Swapping detail dimensions leaves quantity and rotation permission unchanged");
+swapDetail.LengthExpr = "длина изделия - 32";
+swapDetail.WidthExpr = "=[[detail:stable-reference:length]] / 2";
+Check(DetailDimensions.Swap(swapDetail, swapMaterial) && swapDetail.LengthExpr == "=[[detail:stable-reference:length]] / 2" &&
+    swapDetail.WidthExpr == "длина изделия - 32", "Dimension swap preserves full formulas and stable references without evaluating them");
+Check(DetailDimensions.Swap(swapDetail, swapMaterial) && swapDetail.LengthExpr == "длина изделия - 32" &&
+    swapDetail.WidthExpr == "=[[detail:stable-reference:length]] / 2", "A second dimension swap restores both original expressions");
+foreach (var unit in new[] { "lm", "pc" })
+    Check(!DetailDimensions.Swap(swapDetail, new Material { Unit = unit }) && swapDetail.LengthExpr == "длина изделия - 32",
+        "Dimension swap is unavailable for materials without editable width: " + unit);
+swapDetail.IsGeneratedEdgeBand = true;
+Check(!DetailDimensions.Swap(swapDetail, swapMaterial) && !DetailDimensions.Swap(swapDetail, null),
+    "Generated edge bands and rows without a material cannot swap dimensions");
 
 Check(AccentPalette.Options.Select(x => x.Id).Distinct().Count() == AccentPalette.Options.Count, "Accent palette IDs are unique");
 Check(AppUpdateService.TryParseVersion("v1.2.3", out var parsedUpdateVersion) && parsedUpdateVersion == new Version(1, 2, 3), "Update tags accept a v-prefixed semantic version");

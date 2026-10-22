@@ -150,6 +150,7 @@
                 <ColumnDefinition Width="2*" />
                 <ColumnDefinition Width="72" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="32" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="56" />
                 <ColumnDefinition Width="150" />
@@ -158,9 +159,9 @@
               <TextBlock Grid.Column="1" Text="Материал" Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
               <TextBlock Grid.Column="2" Text="Кол-во" Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
               <TextBlock x:Name="DetailLengthHeader" Grid.Column="3" Text="Длина / формула" Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
-              <TextBlock x:Name="DetailWidthHeader" Grid.Column="4" Text="Ширина / формула" Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
-              <TextBlock x:Name="DetailRotationHeader" Grid.Column="5" Text="Поворот детали" Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
-              <TextBlock Grid.Column="6" Text="Расчет" Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
+              <TextBlock x:Name="DetailWidthHeader" Grid.Column="5" Text="Ширина / формула" Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
+              <TextBlock x:Name="DetailRotationHeader" Grid.Column="6" Text="Поворот детали" Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
+              <TextBlock Grid.Column="7" Text="Расчет" Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
             </Grid>
             </Border>
 

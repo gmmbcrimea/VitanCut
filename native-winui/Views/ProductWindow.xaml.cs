@@ -558,6 +558,7 @@ public sealed partial class ProductWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(56) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
@@ -622,8 +623,27 @@ public sealed partial class ProductWindow : Window
         Grid.SetColumn(lengthBox, 3);
         grid.Children.Add(lengthBox);
 
+        var swapDimensions = new Button
+        {
+            Content = new FontIcon { Glyph = "\uE8AB", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 16 },
+            Width = 32, Height = 32, MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = isSheetMaterial ? Visibility.Visible : Visibility.Collapsed
+        };
+        var swapLabel = UiText.Get("Поменять местами длину и ширину");
+        ToolTipService.SetToolTip(swapDimensions, swapLabel);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(swapDimensions, swapLabel);
+        swapDimensions.Click += (_, _) =>
+        {
+            foreach (var target in _formulaFlyouts.Keys.ToList()) HideFormulaSuggestions(target);
+            if (!DetailDimensions.Swap(row.Detail, row.SelectedMaterial?.Material)) return;
+            UpdateSummary();
+        };
+        Grid.SetColumn(swapDimensions, 4);
+        grid.Children.Add(swapDimensions);
+
         var widthBox = CreateFormulaBox(row, true, isSheetMaterial);
-        Grid.SetColumn(widthBox, 4);
+        Grid.SetColumn(widthBox, 5);
         grid.Children.Add(widthBox);
 
         var rotationBox = new ToggleSwitch
@@ -658,7 +678,7 @@ public sealed partial class ProductWindow : Window
         UpdateRotationIndicator();
         rotationCell.Children.Add(rotationBox);
         rotationCell.Children.Add(rotationLock);
-        Grid.SetColumn(rotationCell, 5);
+        Grid.SetColumn(rotationCell, 6);
         grid.Children.Add(rotationCell);
 
         var calculationText = new TextBlock
@@ -683,7 +703,7 @@ public sealed partial class ProductWindow : Window
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(priceButton, UiText.Get("Цена детали в проекте") + ": " + row.Detail.Name);
             calculationCell = priceButton;
         }
-        Grid.SetColumn(calculationCell, 6);
+        Grid.SetColumn(calculationCell, 7);
         grid.Children.Add(calculationCell);
 
         border.Child = grid;
@@ -1176,8 +1196,8 @@ public sealed partial class ProductWindow : Window
         {
             var column = Grid.GetColumn(child);
             if (column == 3) child.Visibility = sheet || material?.Unit == "lm" ? Visibility.Visible : Visibility.Collapsed;
-            if (column == 4 || column == 5) child.Visibility = sheet ? Visibility.Visible : Visibility.Collapsed;
-            if (column != 5 || child is not Grid rotation) continue;
+            if (column is 4 or 5 or 6) child.Visibility = sheet ? Visibility.Visible : Visibility.Collapsed;
+            if (column != 6 || child is not Grid rotation) continue;
             _updatingMaterialView = true;
             try
             {
