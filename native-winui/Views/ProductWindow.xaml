@@ -39,7 +39,7 @@
     <ScrollViewer x:Name="ProductScrollViewer" Grid.Row="1"
                   Padding="24,0,24,0"
                   HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
-                  VerticalScrollBarVisibility="Auto">
+                  VerticalScrollBarVisibility="Auto" ViewChanged="ProductScrollViewChanged" SizeChanged="DetailsToolbarSizeChanged">
       <StackPanel Spacing="16">
         <Border x:Name="CatalogPickerCard" Style="{StaticResource PaneSurfaceStyle}" Padding="16">
           <Grid ColumnSpacing="12">
@@ -122,16 +122,18 @@
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <Grid ColumnSpacing="12">
+            <Grid x:Name="DetailsToolbarHeader" ColumnSpacing="12" SizeChanged="DetailsToolbarSizeChanged">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <TextBlock Text="Детали" Style="{StaticResource CardTitleTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
-              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <Grid x:Name="DetailsActionsSlot" Grid.Column="1">
+              <StackPanel x:Name="DetailsActionsPanel" Orientation="Horizontal" Spacing="8">
                 <Button Content="Добавить" Click="AddDetailClick" Style="{StaticResource AccentButtonStyle}"  l10n:UiLocalization.Properties="Content"/>
                 <Button Content="Удалить" Click="DeleteDetailClick"  l10n:UiLocalization.Properties="Content"/>
               </StackPanel>
+              </Grid>
             </Grid>
 
             <ScrollViewer x:Name="DetailsTableViewport" Grid.Row="1" Grid.RowSpan="2"
@@ -174,6 +176,20 @@
         </Border>
       </StackPanel>
     </ScrollViewer>
+
+    <Border x:Name="StickyDetailsToolbar" Grid.Row="1" VerticalAlignment="Top" HorizontalAlignment="Stretch"
+            Margin="24,0,24,0" Padding="16,8" CornerRadius="6" Visibility="Collapsed"
+            Background="{StaticResource SectionSurfaceBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1" SizeChanged="StickyDetailsToolbarSizeChanged">
+      <Grid ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="Детали" Style="{StaticResource CardTitleTextBlockStyle}" VerticalAlignment="Center" l10n:UiLocalization.Properties="Text" />
+        <Grid x:Name="StickyDetailsActionsSlot" Grid.Column="1" />
+      </Grid>
+    </Border>
 
     <Border Grid.Row="2"
             Padding="24,14"

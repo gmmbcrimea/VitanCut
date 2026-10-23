@@ -45,6 +45,64 @@ public sealed partial class ProductWindow : Window
     private bool _loading = true;
     private bool _insertingReference;
     private bool _updatingMaterialView;
+    private bool _updatingStickyDetailActions;
+
+    private void ProductScrollViewChanged(object sender, ScrollViewerViewChangedEventArgs e) => UpdateStickyDetailActions();
+
+    private void DetailsToolbarSizeChanged(object sender, SizeChangedEventArgs e) => UpdateStickyDetailActions();
+
+    private void StickyDetailsToolbarSizeChanged(object sender, SizeChangedEventArgs e) => UpdateStickyDetailClip();
+
+    private void UpdateStickyDetailClip()
+    {
+        if (StickyDetailsToolbar.Visibility != Visibility.Visible)
+        {
+            ProductScrollViewer.Clip = null;
+            return;
+        }
+        // The reveal overlay also reads this clip, so hidden controls cannot shine through the toolbar.
+        var height = Math.Min(ProductScrollViewer.ActualHeight,
+            Math.Max(StickyDetailsToolbar.ActualHeight, DetailsActionsPanel.ActualHeight + 18));
+        var rect = new Windows.Foundation.Rect(0, height, ProductScrollViewer.ActualWidth,
+            Math.Max(0, ProductScrollViewer.ActualHeight - height));
+        if (ProductScrollViewer.Clip is RectangleGeometry clip)
+        {
+            if (clip.Rect != rect) clip.Rect = rect;
+        }
+        else ProductScrollViewer.Clip = new RectangleGeometry { Rect = rect };
+    }
+
+    private void UpdateStickyDetailActions()
+    {
+        if (_updatingStickyDetailActions || DetailsActionsPanel is null || StickyDetailsActionsSlot is null ||
+            !DetailsToolbarHeader.IsLoaded || ProductScrollViewer.ActualHeight <= 0) return;
+        var top = DetailsToolbarHeader.TransformToVisual(ProductScrollViewer).TransformPoint(new Windows.Foundation.Point()).Y;
+        var pin = top < 0;
+        var pinned = StickyDetailsActionsSlot.Children.Contains(DetailsActionsPanel);
+        if (pin == pinned) { UpdateStickyDetailClip(); return; }
+        _updatingStickyDetailActions = true;
+        try
+        {
+            if (pin)
+            {
+                DetailsActionsSlot.Width = DetailsActionsPanel.ActualWidth;
+                DetailsActionsSlot.Height = DetailsActionsPanel.ActualHeight;
+                DetailsActionsSlot.Children.Remove(DetailsActionsPanel);
+                StickyDetailsActionsSlot.Children.Add(DetailsActionsPanel);
+                StickyDetailsToolbar.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                StickyDetailsActionsSlot.Children.Remove(DetailsActionsPanel);
+                DetailsActionsSlot.Children.Add(DetailsActionsPanel);
+                StickyDetailsToolbar.Visibility = Visibility.Collapsed;
+                DetailsActionsSlot.Width = double.NaN;
+                DetailsActionsSlot.Height = double.NaN;
+            }
+        }
+        finally { _updatingStickyDetailActions = false; }
+        UpdateStickyDetailClip();
+    }
 
     private void DetailsTableViewportSizeChanged(object sender, SizeChangedEventArgs e)
     {
@@ -114,6 +172,7 @@ public sealed partial class ProductWindow : Window
     private void RootSizeChanged(object sender, SizeChangedEventArgs e)
     {
         UpdateResponsiveLayout();
+        DispatcherQueue.TryEnqueue(UpdateStickyDetailActions);
     }
 
     private void UpdateResponsiveLayout()
