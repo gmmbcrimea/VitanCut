@@ -15,6 +15,7 @@ MaterialPricingChecks.Run(Check, output);
 LocalizationChecks.Run(Check, output);
 ProjectDetailPricingChecks.Run(Check, output);
 WasteAllowanceChecks.Run(Check, output);
+ProjectCatalogPickerChecks.Run(Check, output);
 var orderedDetails = new Product
 {
     Details = [new() { Type = "Стекло", Name = "Glass" }, new() { Type = "Кромка", Name = "Edge", IsGeneratedEdgeBand = true },

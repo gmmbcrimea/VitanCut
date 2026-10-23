@@ -1,4 +1,5 @@
 using VitanCut.WinUI.Models;
+using System.Text.Json;
 
 namespace VitanCut.WinUI.Services;
 
@@ -69,6 +70,20 @@ public sealed class ProjectService(AppState state)
     {
         project = Resolve(project);
         state.CommitMutation(() => state.Database.Projects.Remove(project));
+    }
+
+    public Product AddCatalogProduct(Project project, string productId)
+    {
+        project = Resolve(project);
+        var template = state.Database.Catalog.GetValueOrDefault(project.Counterparty)?
+            .FirstOrDefault(product => product.Id == productId)
+            ?? throw new InvalidOperationException("Изделие каталога уже удалено или изменено в облаке.");
+        var copy = JsonSerializer.Deserialize<Product>(JsonSerializer.Serialize(template))
+            ?? throw new InvalidDataException("Не удалось скопировать изделие.");
+        copy.Qty = 1;
+        ProjectDetailPricing.Clear(copy);
+        SaveProduct(project, null, copy);
+        return copy;
     }
 
     public void SaveProduct(Project project, Product? previous, Product saved)
