@@ -1,6 +1,6 @@
 # Release validation
 
-The primary repository contains the 1.2.26 sources, including sticky detail action buttons and clipping to prevent underlying controls and reveal highlights from showing through the toolbar. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
+The primary repository contains the 1.2.27 sources, including consistent export filenames with project names and save-time dates for detailing, cutting and material summaries. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
 
 ## Validate version metadata
 

@@ -16,6 +16,16 @@ LocalizationChecks.Run(Check, output);
 ProjectDetailPricingChecks.Run(Check, output);
 WasteAllowanceChecks.Run(Check, output);
 ProjectCatalogPickerChecks.Run(Check, output);
+var exportDate = new DateTime(2026, 10, 26, 14, 30, 0);
+foreach (var reportName in new[] { "Деталировка", "Раскрой", "Сводная таблица" })
+    Check(ReportFileName.Create(reportName, "Гурзуф", exportDate) == $"{reportName}_Гурзуф_2026-10-26_14-30",
+        "Export filename includes report type, project and save date: " + reportName);
+Check(ReportFileName.Create("Раскрой", "  Кухня: А/Б\\В?*\"<>|\n. ", exportDate) ==
+    "Раскрой_Кухня_ А_Б_В" + new string('_', 8) + "2026-10-26_14-30", "Export filename replaces Windows-invalid characters and trims trailing dots");
+Check(ReportFileName.Create("Раскрой", " ... ", exportDate) == "Раскрой_Проект_2026-10-26_14-30",
+    "Export filename uses a project fallback for an empty sanitized name");
+Check(ReportFileName.Create("Раскрой", new string('A', 300), exportDate).Length < 180,
+    "Very long project names leave room for the report prefix, date and extension");
 var orderedDetails = new Product
 {
     Details = [new() { Type = "Стекло", Name = "Glass" }, new() { Type = "Кромка", Name = "Edge", IsGeneratedEdgeBand = true },

@@ -468,7 +468,8 @@ public sealed partial class ReportWindow : Window
         var picker = new FileSavePicker
         {
             SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            SuggestedFileName = isCut ? "раскрой" : DetailingFileName(_detailingReport?.ProjectName ?? "проект")
+            SuggestedFileName = ReportFileName.Create(UiText.Get(isCut ? "Раскрой" : "Деталировка"),
+                _cutReport?.ProjectName ?? _detailingReport?.ProjectName)
         };
         picker.FileTypeChoices.Add(format == "xlsx" ? "Excel" : "PDF", new List<string> { extension });
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
@@ -490,15 +491,6 @@ public sealed partial class ReportWindow : Window
             HintText.Text = UiText.Format($"Не удалось сохранить: {ex.Message}");
         }
         finally { SetExportBusy(false); }
-    }
-
-    private static string DetailingFileName(string projectName)
-    {
-        var invalidCharacters = System.IO.Path.GetInvalidFileNameChars();
-        var safeProjectName = string.Concat(projectName.Trim().Select(character =>
-            invalidCharacters.Contains(character) ? '_' : character)).Trim(' ', '.');
-        if (string.IsNullOrWhiteSpace(safeProjectName)) safeProjectName = "проект";
-        return $"Деталировка_{safeProjectName}_{DateTime.Now:yyyy-MM-dd_HH-mm}";
     }
 
     private async void PrintReportClick(object sender, RoutedEventArgs e)

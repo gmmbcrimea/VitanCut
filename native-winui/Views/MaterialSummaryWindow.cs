@@ -64,7 +64,11 @@ public sealed class MaterialSummaryWindow : Window
             save.IsEnabled = false;
             try
             {
-                var picker = new FileSavePicker { SuggestedFileName = "VitanCut-materials" };
+                var picker = new FileSavePicker
+                {
+                    SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                    SuggestedFileName = ReportFileName.Create(UiText.Get("Сводная таблица"), report.ProjectName)
+                };
                 picker.FileTypeChoices.Add("Excel", [".xlsx"]);
                 InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
                 var file = await picker.PickSaveFileAsync();
