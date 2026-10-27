@@ -1,6 +1,6 @@
 # Release validation
 
-The primary repository contains the 1.2.28 sources, including customer/group catalog views, global product search, product information, drag-and-drop transfers, and a segmented project product picker. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
+The primary repository contains the 1.3.0 sources, including background update checks at startup and formula support for powers and square roots. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
 
 ## Validate version metadata
 

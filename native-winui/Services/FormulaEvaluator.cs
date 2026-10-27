@@ -121,26 +121,50 @@ public static class FormulaEvaluator
                 Skip();
                 if (Take('+')) return Factor();
                 if (Take('-')) return -Factor();
-                if (Take('('))
+                var value = Primary();
+                Skip();
+                // Recurse through Factor so powers associate right and allow negative exponents.
+                if (Take('^'))
                 {
-                    var value = AddSub();
-                    Skip();
-                    if (!Take(')')) throw new FormatException("Не закрыта скобка");
-                    return value;
+                    value = Math.Pow(value, Factor());
+                    if (!double.IsFinite(value)) throw new FormatException("Недопустимое значение степени");
                 }
-                var start = _position;
-                while (_position < text.Length && (char.IsAsciiDigit(text[_position]) || text[_position] == '.')) _position++;
-                if (_position < text.Length && text[_position] is 'e' or 'E')
-                {
-                    _position++;
-                    if (_position < text.Length && text[_position] is '+' or '-') _position++;
-                    while (_position < text.Length && char.IsAsciiDigit(text[_position])) _position++;
-                }
-                if (start == _position || !double.TryParse(text[start.._position], NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
-                    throw new FormatException("Ожидается число или ссылка на размер");
-                return number;
+                return value;
             }
             finally { _depth--; }
+        }
+
+        private double Primary()
+        {
+            if (text.AsSpan(_position).StartsWith("sqrt", StringComparison.OrdinalIgnoreCase))
+            {
+                _position += 4;
+                Skip();
+                if (!Take('(')) throw new FormatException("После sqrt ожидается открывающая скобка");
+                var argument = AddSub();
+                Skip();
+                if (!Take(')')) throw new FormatException("Не закрыта скобка");
+                if (argument < 0) throw new FormatException("Квадратный корень из отрицательного числа не определён");
+                return Math.Sqrt(argument);
+            }
+            if (Take('('))
+            {
+                var value = AddSub();
+                Skip();
+                if (!Take(')')) throw new FormatException("Не закрыта скобка");
+                return value;
+            }
+            var start = _position;
+            while (_position < text.Length && (char.IsAsciiDigit(text[_position]) || text[_position] == '.')) _position++;
+            if (_position < text.Length && text[_position] is 'e' or 'E')
+            {
+                _position++;
+                if (_position < text.Length && text[_position] is '+' or '-') _position++;
+                while (_position < text.Length && char.IsAsciiDigit(text[_position])) _position++;
+            }
+            if (start == _position || !double.TryParse(text[start.._position], NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+                throw new FormatException("Ожидается число или ссылка на размер");
+            return number;
         }
 
         private bool Take(char value)

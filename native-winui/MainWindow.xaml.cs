@@ -71,6 +71,8 @@ public sealed partial class MainWindow : Window
     private Button? _cloudSyncNowButton;
     private int _cloudUiOperations;
     private Timer? _updateTimer;
+    private bool _onlineServicesStarted;
+    private bool _updateCheckInProgress;
     private Timer? _cloudPublishTimer;
     private Views.CloudPublishWindow? _activeCloudPublishWindow;
     private int _activeCloudPublishInterval;
@@ -145,8 +147,10 @@ public sealed partial class MainWindow : Window
         Root.Loaded += async (_, _) =>
         {
             UpdateResponsiveLayout();
-            await InitializeOnlineServicesAsync();
+            if (_onlineServicesStarted) return;
+            _onlineServicesStarted = true;
             StartBackgroundTimers();
+            await InitializeOnlineServicesAsync();
         };
         MaterialUnitBox.SelectionChanged += MaterialUnitChanged;
         ConfigureNestedScrolling();
@@ -363,7 +367,7 @@ public sealed partial class MainWindow : Window
     private void StartBackgroundTimers()
     {
         _updateTimer ??= new Timer(_ => QueueBackgroundOperation(CheckForUpdatesAsync, "Не удалось проверить обновления"));
-        _updateTimer.Change(TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(30));
+        _updateTimer.Change(TimeSpan.Zero, TimeSpan.FromMinutes(30));
         ConfigureCloudPublishTimer();
         Closed += (_, _) =>
         {
@@ -438,13 +442,18 @@ public sealed partial class MainWindow : Window
 
     private async Task CheckForUpdatesAsync()
     {
-        if (_shutdownRequested || _shutdownInProgress || _updatePreview is not null) return;
-        var update = await App.Updates.CheckAsync();
-        if (_shutdownRequested || _shutdownInProgress) return;
-        RefreshUpdateSurface(update);
-        if (update.Availability != UpdateAvailability.Available) return;
+        if (_shutdownRequested || _shutdownInProgress || _updatePreview is not null || _updateCheckInProgress) return;
+        _updateCheckInProgress = true;
+        try
+        {
+            var update = await App.Updates.CheckAsync();
+            if (_shutdownRequested || _shutdownInProgress) return;
+            RefreshUpdateSurface(update);
+            if (update.Availability != UpdateAvailability.Available) return;
 
-        NotificationCenter.Publish(UiText.Get("Доступно обновление"),update.Message);
+            NotificationCenter.Publish(UiText.Get("Доступно обновление"),update.Message);
+        }
+        finally { _updateCheckInProgress = false; }
     }
 
     private async void CheckUpdatesClick(object sender, RoutedEventArgs e)

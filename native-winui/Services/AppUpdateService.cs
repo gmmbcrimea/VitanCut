@@ -135,6 +135,11 @@ public sealed class AppUpdateService
         {
             throw;
         }
+        catch (OperationCanceledException)
+        {
+            return Remember(new AppUpdateInfo(UpdateAvailability.Unavailable, _currentVersion, null,
+                "Не удалось подключиться к GitHub для проверки обновлений."));
+        }
         catch (HttpRequestException)
         {
             return Remember(new AppUpdateInfo(UpdateAvailability.Unavailable, _currentVersion, null,

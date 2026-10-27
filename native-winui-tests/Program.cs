@@ -1164,6 +1164,26 @@ foreach (var expression in new[]
 }
 a.LengthExpr = "=Полка   2+Полка*2";
 Check(FormulaEvaluator.Evaluate(product, a) is { IsValid: true, Value: 40 }, "Fixed-size references tolerate repeated spaces");
+foreach (var (expression, expected) in new (string, double)[]
+{
+    ("2^3", 8), ("2*3^2+1", 19), ("2^3^2", 512), ("(2^3)^2", 64),
+    ("2^-2", .25), ("-2^2+5", 1), ("(-2)^2", 4), ("2^0,5", Math.Sqrt(2)),
+    ("sqrt(81)", 9), ("SQRT ( 0 )", 0), ("sqrt(sqrt(81))", 3),
+    ("sqrt(длина изделия^2+Полка^2)", Math.Sqrt(360100)),
+    ($"sqrt([[detail:{b.Id}:width]]^2)", 500), ("sqrt(4)^3", 8)
+})
+{
+    a.LengthExpr = expression;
+    var result = FormulaEvaluator.Evaluate(product, a);
+    Check(result.IsValid && Math.Abs(result.Value - expected) < 1e-9, "Power and square root formula: " + expression);
+}
+foreach (var expression in new[] { "sqrt(-1)", "sqrt(4", "sqrt 4", "sqrt()", "sqrt(1,2,3)", "2^", "^2", "0^-1", "(-2)^0.5", "10^1000",
+    string.Join("^", Enumerable.Repeat("1", 110)), string.Concat(Enumerable.Repeat("sqrt(", 110)) + "1" + new string(')', 110) })
+{
+    a.LengthExpr = expression;
+    Check(!FormulaEvaluator.Evaluate(product, a).IsValid, "Invalid power or square root is diagnosed: " + expression);
+}
+a.LengthExpr = "=Полка 2+Полка*2";
 product.FixedSizes.Add(new() { Name = "  Зазор\u00a0  фасада  ", Value = 3 });
 a.WidthExpr = "= 500 - Зазор фасада * 2";
 Check(Calculator.Detail(state, product, a).Width == 494, "Stored fixed-size whitespace and width formulas use the same rules");
