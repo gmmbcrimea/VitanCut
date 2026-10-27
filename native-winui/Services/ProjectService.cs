@@ -72,15 +72,17 @@ public sealed class ProjectService(AppState state)
         state.CommitMutation(() => state.Database.Projects.Remove(project));
     }
 
-    public Product AddCatalogProduct(Project project, string productId)
+    public Product AddCatalogProduct(Project project, string productId, string? counterparty = null)
     {
         project = Resolve(project);
-        var template = state.Database.Catalog.GetValueOrDefault(project.Counterparty)?
+        var template = state.Database.Catalog.GetValueOrDefault(counterparty ?? project.Counterparty)?
             .FirstOrDefault(product => product.Id == productId)
             ?? throw new InvalidOperationException("Изделие каталога уже удалено или изменено в облаке.");
         var copy = JsonSerializer.Deserialize<Product>(JsonSerializer.Serialize(template))
             ?? throw new InvalidDataException("Не удалось скопировать изделие.");
         copy.Qty = 1;
+        copy.SourceCatalogProductId = template.Id;
+        copy.CreatedAt = DateTimeOffset.Now;
         ProjectDetailPricing.Clear(copy);
         SaveProduct(project, null, copy);
         return copy;
@@ -95,6 +97,7 @@ public sealed class ProjectService(AppState state)
             if (previous is null)
             {
                 saved.Id = Ids.NewId();
+                if (saved.CreatedAt == DateTimeOffset.MinValue) saved.CreatedAt = DateTimeOffset.Now;
                 project.Products.Add(saved);
             }
             else

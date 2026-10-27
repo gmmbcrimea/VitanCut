@@ -167,6 +167,7 @@ public static class ThemeService
         {
             text.MinHeight = compact ? 32 : 40;
             text.Padding = compact ? new Thickness(8, 3, 8, 3) : new Thickness(12, 8, 12, 8);
+            if (text.Tag is "search-field") text.Padding = new Thickness(36, text.Padding.Top, text.Padding.Right, text.Padding.Bottom);
             return;
         }
         if (root is ToggleSwitch toggle)

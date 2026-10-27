@@ -255,6 +255,12 @@ public sealed class AppState
         // Missing JSON properties already use Detail.AllowRotation's default; preserve explicit false.
         Database.Preferences.RotationDefaultsMigrated = true;
 
+        foreach (var product in Database.Projects.SelectMany(project => project.Products).Concat(Database.Catalog.Values.SelectMany(products => products)))
+        {
+            product.Group = (product.Group ?? "").Trim();
+            product.SourceCatalogProductId ??= "";
+        }
+
         foreach (var material in Database.Materials.SelectMany(item => item.Value))
         {
             material.Id = Empty(material.Id, Ids.NewId());

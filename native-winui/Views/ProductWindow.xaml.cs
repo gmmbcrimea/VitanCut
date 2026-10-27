@@ -351,6 +351,7 @@ public sealed partial class ProductWindow : Window
         _sourceProduct.LegHeight = copy.LegHeight;
         _sourceProduct.FixedSizes = copy.FixedSizes;
         _sourceProduct.Details = copy.Details;
+        _sourceProduct.SourceCatalogProductId = product.Id;
         FillProduct();
         RefreshDetails();
         UpdateSummary();
@@ -1348,6 +1349,9 @@ public sealed partial class ProductWindow : Window
     private static Product CloneProduct(Product source) => new()
     {
         Id = source.Id,
+        Group = source.Group,
+        CreatedAt = source.CreatedAt,
+        SourceCatalogProductId = source.SourceCatalogProductId,
         Name = source.Name,
         Image = source.Image,
         Length = source.Length,

@@ -29,12 +29,15 @@ public sealed class CatalogPageController
         _subtitle = subtitle;
     }
 
-    public string? SelectedCounterparty => _counterparties.SelectedItem as string;
+    public bool GroupMode { get; set; }
+    public string SearchText { get; set; } = "";
+    public string? SelectedCounterparty => GroupMode ? null : _counterparties.SelectedItem as string;
+    public string SelectedGroup => (_counterparties.SelectedItem as string) == UiText.Get("Без группы") ? "" : _counterparties.SelectedItem as string ?? "";
 
     public void Refresh(string? selected = null)
     {
-        selected ??= SelectedCounterparty;
-        var counterparties = _catalog.GetCounterparties();
+        selected ??= _counterparties.SelectedItem as string;
+        var counterparties = GroupMode ? _catalog.GetProductGroups().Select(group => group.Length == 0 ? UiText.Get("Без группы") : group).ToList() : _catalog.GetCounterparties();
         _counterparties.ItemsSource = null;
         _counterparties.ItemsSource = counterparties;
 
@@ -52,18 +55,17 @@ public sealed class CatalogPageController
     {
         using var measurement = App.UiPerformance.Measure(UiWork.Catalog);
         var counterparty = SelectedCounterparty;
-        var products = string.IsNullOrWhiteSpace(counterparty)
-            ? new List<CustomerProductItem>()
-            : _catalog.GetProducts(counterparty)
-                .OrderBy(product => product.Name)
-                .Select(product => new CustomerProductItem(counterparty, null, product))
-                .ToList();
+        var searching = !string.IsNullOrWhiteSpace(SearchText);
+        var products = _catalog.Browse(SearchText).Where(item => searching || (GroupMode
+            ? string.Equals(item.Product.Group?.Trim() ?? "", SelectedGroup, StringComparison.CurrentCultureIgnoreCase)
+            : item.Counterparty == counterparty)).ToList();
 
         _products.ItemsSource = null;
         _products.ItemsSource = products;
-        _title.Text = string.IsNullOrWhiteSpace(counterparty) ? UiText.Get("Изделия заказчика") : counterparty;
+        _title.Text = searching ? UiText.Get("Результаты поиска") : GroupMode ? (SelectedGroup.Length == 0 ? UiText.Get("Без группы") : SelectedGroup)
+            : string.IsNullOrWhiteSpace(counterparty) ? UiText.Get("Изделия заказчика") : counterparty;
         _subtitle.Text = products.Count == 0
-            ? UiText.Get("Изделий у этого заказчика пока нет.")
+            ? UiText.Get("Изделий пока нет")
             : UiText.Format($"{products.Count} изделие(й)");
     }
 }

@@ -13,10 +13,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <Version>1.2.27</Version>
-    <AssemblyVersion>1.2.27.0</AssemblyVersion>
-    <FileVersion>1.2.27.0</FileVersion>
-    <InformationalVersion>1.2.27</InformationalVersion>
+    <Version>1.2.28</Version>
+    <AssemblyVersion>1.2.28.0</AssemblyVersion>
+    <FileVersion>1.2.28.0</FileVersion>
+    <InformationalVersion>1.2.28</InformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

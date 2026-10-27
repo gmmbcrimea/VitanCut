@@ -100,6 +100,9 @@ public sealed class AppPreferences
 public sealed class Product
 {
     public string Id { get; set; } = Ids.NewId();
+    public string Group { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.MinValue;
+    public string SourceCatalogProductId { get; set; } = "";
     public string Name { get; set; } = "Новое изделие";
     public string Image { get; set; } = "";
     public double Length { get; set; } = 600;
@@ -196,6 +199,7 @@ public sealed record MaterialChoice(string Type, Material Material)
 
 public sealed record CustomerProductItem(string Counterparty, Project? Project, Product Product)
 {
+    public string CustomerName => Counterparty;
     public string ProductName => Product.Name;
     public string ProjectName => Project?.Name ?? "Каталог";
     public string SizeText => $"{Product.Length:0} x {Product.Depth:0} x {Product.Height:0} · {Product.Qty:0} шт.";

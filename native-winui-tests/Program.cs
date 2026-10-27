@@ -16,6 +16,7 @@ LocalizationChecks.Run(Check, output);
 ProjectDetailPricingChecks.Run(Check, output);
 WasteAllowanceChecks.Run(Check, output);
 ProjectCatalogPickerChecks.Run(Check, output);
+CatalogBrowserChecks.Run(Check, output);
 var exportDate = new DateTime(2026, 10, 26, 14, 30, 0);
 foreach (var reportName in new[] { "Деталировка", "Раскрой", "Сводная таблица" })
     Check(ReportFileName.Create(reportName, "Гурзуф", exportDate) == $"{reportName}_Гурзуф_2026-10-26_14-30",

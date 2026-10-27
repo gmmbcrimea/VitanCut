@@ -328,21 +328,47 @@
         </Border>
       </Grid>
 
-      <Grid x:Name="CustomersPage" Visibility="Collapsed" ColumnSpacing="20">
+      <Grid x:Name="CustomersPage" Visibility="Collapsed" ColumnSpacing="20" RowSpacing="12">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="280" />
           <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
-        <Border Style="{StaticResource PaneSurfaceStyle}">
+        <StackPanel Grid.ColumnSpan="2" Spacing="10">
+          <Border HorizontalAlignment="Center" Background="{StaticResource SectionSurfaceBrush}" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1" CornerRadius="6" Padding="2">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <RadioButton x:Name="CatalogByCustomer" Style="{StaticResource CatalogSegmentStyle}" GroupName="CatalogView" Content="По заказчикам" IsChecked="True" Checked="CatalogViewChanged" l10n:UiLocalization.Properties="Content"/>
+              <RadioButton x:Name="CatalogByGroup" Style="{StaticResource CatalogSegmentStyle}" GroupName="CatalogView" Content="По группам" Checked="CatalogViewChanged" l10n:UiLocalization.Properties="Content"/>
+            </StackPanel>
+          </Border>
+          <Grid>
+            <TextBox x:Name="CatalogSearchBox" CornerRadius="8" Tag="search-field" PlaceholderText="Поиск изделий" TextChanged="CatalogSearchChanged" l10n:UiLocalization.Properties="PlaceholderText"/>
+            <FontIcon Glyph="&#xE721;" FontFamily="Segoe Fluent Icons" FontSize="16" Width="20" Height="20" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0" Opacity="0.65" IsHitTestVisible="False"/>
+          </Grid>
+        </StackPanel>
+        <Border x:Name="CatalogSidebar" Grid.Row="1" Style="{StaticResource PaneSurfaceStyle}">
           <Grid Padding="16" RowSpacing="12">
             <Grid.RowDefinitions>
               <RowDefinition Height="Auto" />
               <RowDefinition Height="*" />
               <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <TextBlock Text="Заказчики" Style="{StaticResource SectionTitleTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
+            <TextBlock x:Name="CatalogSidebarTitle" Text="Заказчики" Style="{StaticResource SectionTitleTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
             <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
-              <ListView x:Name="CustomersList" SelectionChanged="CustomersSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
+              <ListView x:Name="CustomersList" SelectionChanged="CustomersSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" AllowDrop="True" DragOver="CatalogTargetDragOver" DragLeave="CatalogTargetDragLeave" Drop="CatalogTargetDrop">
+                <ListView.ItemContainerStyle>
+                  <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Padding" Value="0"/>
+                  </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                  <DataTemplate>
+                    <Border Tag="catalog-drop-surface" BorderThickness="2" BorderBrush="Transparent" Background="Transparent" CornerRadius="6" Padding="8,6">
+                      <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                    </Border>
+                  </DataTemplate>
+                </ListView.ItemTemplate>
                 <ListView.ContextFlyout>
                   <MenuFlyout>
                     <MenuFlyoutItem Text="Добавить" Click="AddCustomerClick"  l10n:UiLocalization.Properties="Text"/>
@@ -352,13 +378,13 @@
                 </ListView.ContextFlyout>
               </ListView>
             </Border>
-            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+            <StackPanel x:Name="CatalogCustomerActions" Grid.Row="2" Orientation="Horizontal" Spacing="8">
               <Button Content="Добавить" Click="AddCustomerClick" Style="{StaticResource AccentButtonStyle}"  l10n:UiLocalization.Properties="Content"/>
               <Button Content="Удалить" Click="DeleteCustomerClick"  l10n:UiLocalization.Properties="Content"/>
             </StackPanel>
           </Grid>
         </Border>
-        <Border Grid.Column="1" Style="{StaticResource PaneSurfaceStyle}">
+        <Border x:Name="CatalogProductsPane" Grid.Row="1" Grid.Column="1" Style="{StaticResource PaneSurfaceStyle}">
           <Grid Padding="20" RowSpacing="12">
             <Grid.RowDefinitions>
               <RowDefinition Height="Auto" />
@@ -376,6 +402,7 @@
             </Grid>
             <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
               <ListView x:Name="CustomerProjectsList"
+                        SelectionMode="Extended" CanDragItems="True" DragItemsStarting="CatalogDragStarting" DragItemsCompleted="CatalogDragCompleted"
                         DoubleTapped="CustomerProjectsDoubleTapped"
                         RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
                 <ListView.ItemTemplate>
@@ -384,13 +411,16 @@
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                       </Grid.ColumnDefinitions>
                       <Image Width="56" Height="56" Stretch="Uniform" Tag="{x:Bind Product.Image}" Loaded="ProductThumbnailLoaded" />
                       <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                         <TextBlock Text="{x:Bind ProductName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{x:Bind ProjectName}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{x:Bind CustomerName}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{x:Bind SizeText}" Opacity="0.56" TextTrimming="CharacterEllipsis" />
                       </StackPanel>
+                      <Button Grid.Column="2" Style="{StaticResource CatalogInfoButtonStyle}" Click="CatalogProductInfoClick" VerticalAlignment="Center" ToolTipService.ToolTip="Справка об изделии" AutomationProperties.Name="Справка об изделии" l10n:UiLocalization.Properties="ToolTipService.ToolTip,AutomationProperties.Name">
+                      </Button>
                     </Grid>
                   </DataTemplate>
                 </ListView.ItemTemplate>

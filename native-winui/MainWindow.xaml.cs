@@ -625,6 +625,12 @@ public sealed partial class MainWindow : Window
             Add("Добавить", () => AddCatalogProductClick(list, new RoutedEventArgs()));
             if (menuData is CustomerProductItem item)
             {
+                if (_catalogPage.GroupMode)
+                {
+                    Add("Добавить в группу", async () => await AssignCatalogGroupAsync(item, false));
+                    Add("Исключить из группы", async () => await AssignCatalogGroupAsync(item, true));
+                    ((MenuFlyoutItem)menu.Items.Last()).IsEnabled = SelectedCatalogProducts(item).Any(selected => !string.IsNullOrWhiteSpace(selected.Product.Group));
+                }
                 Add("Изменить", () => OpenCatalogProductWindow(item.Counterparty, item.Product));
                 Add("Копировать другому заказчику", async () => await CopyCatalogProductToCounterpartyAsync(item));
                 Add("Удалить", async () =>
@@ -673,6 +679,7 @@ public sealed partial class MainWindow : Window
 
         if (list == CustomersList)
         {
+            if (_catalogPage.GroupMode) return menu;
             Add("Добавить", () => AddCustomerClick(list, new RoutedEventArgs()));
             if (menuData is string customer)
             {
@@ -829,66 +836,8 @@ public sealed partial class MainWindow : Window
 
     private void AddProductClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedProject is not { } project) return;
-        var flyout = new Flyout();
-        var panel = new StackPanel { Spacing = 8, Width = Math.Max(240, Math.Min(360, Root.ActualWidth - 80)) };
-        var newContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        newContent.Children.Add(new SymbolIcon(Symbol.Add));
-        newContent.Children.Add(new TextBlock { Text = UiText.Get("Новое изделие"), VerticalAlignment = VerticalAlignment.Center });
-        var create = new Button { Content = newContent, HorizontalAlignment = HorizontalAlignment.Stretch };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(create, UiText.Get("Новое изделие"));
-        create.Click += (_, _) => { flyout.Hide(); OpenProductWindow(project, null); };
-        panel.Children.Add(create);
-        var products = App.Catalog.GetProducts(project.Counterparty)
-            .OrderBy(product => product.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
-        if (products.Count == 0)
-            panel.Children.Add(new TextBlock { Text = UiText.Get("Изделий у этого заказчика пока нет."), TextWrapping = TextWrapping.Wrap });
-        else
-        {
-            var list = new ListView { IsItemClickEnabled = true, SelectionMode = ListViewSelectionMode.Single, MaxHeight = 320 };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list, project.Counterparty);
-            foreach (var product in products)
-            {
-                var content = new Grid { ColumnSpacing = 10, Tag = product.Id };
-                content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                var image = new Image { Width = 40, Height = 40, Tag = product.Image, Stretch = Stretch.Uniform };
-                image.Loaded += ProductThumbnailLoaded;
-                content.Children.Add(image);
-                var name = new TextBlock { Text = product.Name, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-                Grid.SetColumn(name, 1);
-                content.Children.Add(name);
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(content, product.Name);
-                list.Items.Add(content);
-            }
-            async Task AddSelectedAsync(string productId)
-            {
-                flyout.Hide();
-                try
-                {
-                    var added = App.Projects.AddCatalogProduct(project, productId);
-                    FillProjectCard();
-                    ProductsList.SelectedItem = added;
-                    ProductsList.ScrollIntoView(added);
-                    ShowSuccess(UiText.Format($"Сохранено: {added.Name}"));
-                }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
-                { await _dialogs.ShowMessageAsync(UiText.Get("Не удалось сохранить"), error.Message); }
-            }
-            list.ItemClick += async (_, args) =>
-            {
-                if (args.ClickedItem is FrameworkElement { Tag: string productId }) await AddSelectedAsync(productId);
-            };
-            list.KeyDown += async (_, args) =>
-            {
-                if (args.Key != Windows.System.VirtualKey.Enter || list.SelectedItem is not FrameworkElement { Tag: string productId }) return;
-                args.Handled = true;
-                await AddSelectedAsync(productId);
-            };
-            panel.Children.Add(list);
-        }
-        flyout.Content = panel;
-        flyout.ShowAt(sender as FrameworkElement ?? ProductsList);
+        if (SelectedProject is { } project)
+            CreateProjectCatalogPicker(project).ShowAt(sender as FrameworkElement ?? ProductsList);
     }
 
     private void ProductRowMenuClick(object sender, RoutedEventArgs e)
@@ -1047,9 +996,18 @@ public sealed partial class MainWindow : Window
         OpenProductWindow(project, product);
     }
 
-    private void AddCatalogProductClick(object sender, RoutedEventArgs e)
+    private async void AddCatalogProductClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedCustomer is not { } counterparty) return;
+        var counterparty = _catalogPage.SelectedCounterparty;
+        if (_catalogPage.GroupMode)
+        {
+            var customers = new ComboBox { ItemsSource = App.Catalog.GetCounterparties(), HorizontalAlignment = HorizontalAlignment.Stretch, SelectedIndex = 0 };
+            var choice = await new ContentDialog { XamlRoot = Root.XamlRoot, Title = UiText.Get("Заказчик"), Content = customers,
+                PrimaryButtonText = UiText.Get("Добавить"), CloseButtonText = UiText.Get("Отмена") }.ShowAsync();
+            if (choice != ContentDialogResult.Primary) return;
+            counterparty = customers.SelectedItem as string;
+        }
+        if (counterparty is null) return;
         OpenCatalogProductWindow(counterparty, null);
     }
 

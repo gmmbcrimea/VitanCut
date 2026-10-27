@@ -24,6 +24,44 @@ public sealed class CatalogService(AppState state)
         return [];
     }
 
+    public IReadOnlyList<CustomerProductItem> Browse(string? query = null) => state.Database.Catalog
+        .SelectMany(pair => pair.Value.Select(product => new CustomerProductItem(pair.Key, null, product)))
+        .Where(item => UiTextSearch.Matches(query ?? "", item.Product.Name, item.Counterparty, item.Product.Group ?? ""))
+        .OrderBy(item => item.Product.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Counterparty).ToList();
+
+    public IReadOnlyList<string> GetProductGroups() => new[] { "" }.Concat(Browse().Select(item => item.Product.Group?.Trim() ?? "")
+        .Where(group => group.Length > 0).Distinct(StringComparer.CurrentCultureIgnoreCase).OrderBy(group => group, StringComparer.CurrentCultureIgnoreCase)).ToList();
+
+    private CustomerProductItem ResolveProduct(string id) => Browse().FirstOrDefault(item => item.Product.Id == id)
+        ?? throw new InvalidOperationException("Изделие каталога уже удалено или изменено в облаке.");
+
+    public void SetProductGroup(IEnumerable<string> productIds, string group)
+    {
+        var products = productIds.Distinct().Select(ResolveProduct).ToList();
+        state.CommitMutation(() => { foreach (var item in products) item.Product.Group = group.Trim(); });
+    }
+
+    public void TransferProducts(IEnumerable<string> productIds, string targetCounterparty, bool copy)
+    {
+        if (!GetCounterparties().Contains(targetCounterparty)) throw new InvalidOperationException("Выберите заказчика");
+        var products = productIds.Distinct().Select(ResolveProduct).Where(item => item.Counterparty != targetCounterparty).ToList();
+        var transfers = products.Select(item => (Source: item, Product: copy ? CloneForCatalog(item.Product) : item.Product)).ToList();
+        state.CommitMutation(() =>
+        {
+            state.Database.Catalog.TryAdd(targetCounterparty, []);
+            foreach (var transfer in transfers)
+            {
+                if (!copy) state.Database.Catalog[transfer.Source.Counterparty].Remove(transfer.Source.Product);
+                state.Database.Catalog[targetCounterparty].Add(transfer.Product);
+            }
+        });
+    }
+
+    public IReadOnlyList<Project> UsingProjects(Product product) => state.Database.Projects.Where(project => project.Products.Any(item =>
+        item.SourceCatalogProductId == product.Id || item.Id == product.Id ||
+        (item.SourceCatalogProductId.Length == 0 && item.Name == product.Name && item.Details.Count > 0 &&
+         item.Details.Select(detail => detail.Id).SequenceEqual(product.Details.Select(detail => detail.Id))))).ToList();
+
     public void AddCounterparty(string name)
     {
         if (string.IsNullOrWhiteSpace(name) ||
@@ -83,6 +121,7 @@ public sealed class CatalogService(AppState state)
         if (previous is null)
         {
             saved.Id = Ids.NewId();
+            if (saved.CreatedAt == DateTimeOffset.MinValue) saved.CreatedAt = DateTimeOffset.Now;
             products.Add(saved);
         }
         else
@@ -90,6 +129,8 @@ public sealed class CatalogService(AppState state)
             var index = products.FindIndex(item => item.Id == previous.Id);
             if (index < 0) throw new InvalidOperationException("Изделие каталога уже удалено или изменено в облаке.");
             saved.Id = products[index].Id;
+            saved.Group = products[index].Group;
+            saved.CreatedAt = products[index].CreatedAt;
             products[index] = saved;
         }
         state.CommitMutation(() => state.Database.Catalog[counterparty] = products);
@@ -106,9 +147,18 @@ public sealed class CatalogService(AppState state)
     public void CopyProduct(string sourceCounterparty, Product source, string targetCounterparty)
     {
         if (string.Equals(sourceCounterparty, targetCounterparty, StringComparison.CurrentCultureIgnoreCase)) return;
+        var copy = CloneForCatalog(source);
+        SaveProduct(targetCounterparty, null, copy);
+    }
+
+    private static Product CloneForCatalog(Product source)
+    {
         var copy = JsonSerializer.Deserialize<Product>(JsonSerializer.Serialize(source))
             ?? throw new InvalidDataException("Не удалось скопировать изделие.");
         copy.Id = Ids.NewId();
+        copy.CreatedAt = DateTimeOffset.Now;
+        copy.SourceCatalogProductId = "";
+        ProjectDetailPricing.Clear(copy);
         var detailIds = copy.Details.ToDictionary(detail => detail.Id, _ => Ids.NewId(), StringComparer.OrdinalIgnoreCase);
         foreach (var detail in copy.Details)
         {
@@ -117,6 +167,6 @@ public sealed class CatalogService(AppState state)
             detail.Id = detailIds[detail.Id];
         }
         foreach (var size in copy.FixedSizes) size.Id = Ids.NewId();
-        SaveProduct(targetCounterparty, null, copy);
+        return copy;
     }
 }

@@ -178,6 +178,61 @@
       <Setter Property="BorderBrush" Value="{StaticResource AccentEdgeBrush}" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
+    <Style x:Key="CatalogInfoButtonStyle" TargetType="Button" BasedOn="{StaticResource UiButtonStyle}">
+      <Setter Property="Tag" Value="icon-tool" />
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="MinWidth" Value="28" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="UseSystemFocusVisuals" Value="True" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="InfoSurface" CornerRadius="14" Background="Transparent" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1" Opacity="0.55">
+              <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                  <VisualState x:Name="Normal" />
+                  <VisualState x:Name="PointerOver"><VisualState.Setters><Setter Target="InfoSurface.Opacity" Value="1"/><Setter Target="InfoSurface.Background" Value="{StaticResource SoftPanelBrush}"/></VisualState.Setters></VisualState>
+                  <VisualState x:Name="Pressed"><VisualState.Setters><Setter Target="InfoSurface.Opacity" Value="0.8"/><Setter Target="InfoSurface.Background" Value="{StaticResource ButtonBackgroundPressed}"/></VisualState.Setters></VisualState>
+                  <VisualState x:Name="Disabled"><VisualState.Setters><Setter Target="InfoSurface.Opacity" Value="0.3"/></VisualState.Setters></VisualState>
+                </VisualStateGroup>
+              </VisualStateManager.VisualStateGroups>
+              <PathIcon Data="M 7,1 A 1.5,1.5 0 1 1 4,1 A 1.5,1.5 0 1 1 7,1 Z M 4.5,5 L 6.5,5 L 6.5,13 L 4.5,13 Z" Width="12" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="CatalogSegmentStyle" TargetType="RadioButton">
+      <Setter Property="MinWidth" Value="140" />
+      <Setter Property="MinHeight" Value="32" />
+      <Setter Property="UseSystemFocusVisuals" Value="True" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Grid x:Name="SegmentSurface" Background="Transparent" CornerRadius="4">
+              <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                  <VisualState x:Name="Normal" />
+                  <VisualState x:Name="PointerOver"><VisualState.Setters><Setter Target="SegmentSurface.Background" Value="{StaticResource SoftPanelBrush}"/></VisualState.Setters></VisualState>
+                  <VisualState x:Name="Pressed"><VisualState.Setters><Setter Target="SegmentSurface.Opacity" Value="0.75"/></VisualState.Setters></VisualState>
+                  <VisualState x:Name="Disabled"><VisualState.Setters><Setter Target="SegmentSurface.Opacity" Value="0.4"/></VisualState.Setters></VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="CheckStates">
+                  <VisualState x:Name="Unchecked" />
+                  <VisualState x:Name="Checked"><VisualState.Setters><Setter Target="SelectedSurface.Opacity" Value="1"/></VisualState.Setters></VisualState>
+                </VisualStateGroup>
+              </VisualStateManager.VisualStateGroups>
+              <Border x:Name="SelectedSurface" Opacity="0" Background="{StaticResource ButtonBackground}" BorderBrush="{StaticResource PanelStrokeBrush}" BorderThickness="1" CornerRadius="4" />
+              <ContentPresenter Content="{TemplateBinding Content}" Margin="12,5" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <Style x:Key="IconTextButtonStyle" TargetType="Button" BasedOn="{StaticResource UiButtonStyle}" />
     <Style x:Key="TopNavButtonStyle" TargetType="Button" BasedOn="{StaticResource IconTextButtonStyle}">
       <Setter Property="Width" Value="86" />
