@@ -414,13 +414,20 @@ void WriteUtf8Line(std::ofstream& file, const std::wstring& text)
     file << bytes << '\n';
 }
 
-void RunProcess(const std::wstring& command)
+void RunProcess(const std::wstring& command, DWORD timeout = INFINITE)
 {
     STARTUPINFOW startup{}; startup.cb = sizeof(startup);
     PROCESS_INFORMATION process{};
     std::vector<wchar_t> mutableCommand(command.begin(), command.end()); mutableCommand.push_back(L'\0');
     if (!CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) throw std::runtime_error("unpack");
-    WaitForSingleObject(process.hProcess, INFINITE);
+    const auto wait = WaitForSingleObject(process.hProcess, timeout);
+    if (wait != WAIT_OBJECT_0)
+    {
+        TerminateProcess(process.hProcess, 1);
+        WaitForSingleObject(process.hProcess, 5000);
+        CloseHandle(process.hThread); CloseHandle(process.hProcess);
+        throw std::runtime_error("process timeout");
+    }
     DWORD code = 1; GetExitCodeProcess(process.hProcess, &code);
     CloseHandle(process.hThread); CloseHandle(process.hProcess);
     if (code != 0) throw std::runtime_error("unpack");
@@ -547,6 +554,24 @@ void ScheduleInstallDirectoryRemoval(const fs::path& target)
     else throw std::runtime_error("uninstall");
 }
 
+void RemoveCloudTaskBeforeUninstall(const fs::path& target)
+{
+    const auto script = fs::temp_directory_path() / (L"VitanCut-task-cleanup-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64()) + L".ps1");
+    WriteScriptResource(202, script);
+    try
+    {
+        RunProcess(L"powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + script.wstring() + L"\" -Target \"" + target.wstring() + L"\" -RemoveCloudTaskOnly", 30000);
+    }
+    catch (...)
+    {
+        std::error_code ignored;
+        fs::remove(script, ignored);
+        throw;
+    }
+    std::error_code ignored;
+    fs::remove(script, ignored);
+}
+
 int RunUninstaller()
 {
     const auto uninstaller = GetCurrentExecutable();
@@ -558,6 +583,7 @@ int RunUninstaller()
     }
     if (MessageBoxW(nullptr, L"Удалить VitanCut и созданные им ярлыки?\nБаза данных и другие пользовательские файлы будут сохранены.", L"Удаление VitanCut", MB_ICONQUESTION | MB_YESNO) != IDYES)
         return 0;
+    RemoveCloudTaskBeforeUninstall(target);
     ScheduleInstallDirectoryRemoval(target);
     TryTaskbarVerb(target / L"VitanCut.WinUI.exe", L"taskbarunpin");
     std::error_code ignored;

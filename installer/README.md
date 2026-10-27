@@ -1,11 +1,11 @@
-# VitanCut Installer 1.1.2
+# VitanCut Installer 1.1.4
 
 Production installer sources live on `codex/installer`, independently of the application on `main`.
 
 Build with Visual Studio C++ tools and the Windows SDK:
 
 ```powershell
-./installer/build-installer.ps1 -Version 1.1.2
+./installer/build-installer.ps1 -Version 1.1.4
 ./installer/contract-checks.ps1
 powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./installer/contract-checks.ps1
 ```
@@ -18,4 +18,6 @@ The production installer downloads the latest published stable application archi
 
 Installation writes a relative file manifest. Uninstall uses that manifest rather than recursively deleting the chosen folder, preserving `data` and unrelated files. Missing manifests, escaping paths and reparse points stop deletion. Registry/shortcut creation and a real installation have not been run against the developer's working installation during these release checks.
 
-Release tags use `installer-v1.1.2`. The installer workflow checks PowerShell 7 and Windows PowerShell 5.1 and publishes EXE/checksum with `make_latest: false`, leaving the application release as GitHub's latest release.
+Before scheduling file removal, uninstall synchronously removes the current user's `VitanCut.CloudHealth-<user hash>` task via Task Scheduler COM. It verifies that the only action targets this installation's `VitanCut.WinUI.exe --cloud-health-check`; tasks for other installations are preserved. A running check is disabled and stopped before deletion. Missing tasks are harmless for older versions. Cleanup errors or a 30-second timeout abort uninstall before removing application files or registration. The cleanup does not run the main application or access user databases.
+
+Release tags use `installer-v1.1.4`. The installer workflow checks PowerShell 7 and Windows PowerShell 5.1 and publishes EXE/checksum with `make_latest: false`, leaving the application release as GitHub's latest release.

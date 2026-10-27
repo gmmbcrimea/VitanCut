@@ -1,5 +1,40 @@
-param([Parameter(Mandatory)][string]$Target, [Parameter(Mandatory)][int]$ParentPid)
+param([Parameter(Mandatory)][string]$Target, [int]$ParentPid, [switch]$RemoveCloudTaskOnly)
 $ErrorActionPreference = 'Stop'
+
+function Remove-VitanCutCloudHealthTask {
+    param([string]$InstallationRoot, [string]$UserId, [object]$Scheduler)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $hash = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($UserId))).Replace('-', '').Substring(0, 16) }
+    finally { $sha.Dispose() }
+    $taskName = 'VitanCut.CloudHealth-' + $hash
+    $Scheduler.Connect()
+    $folder = $Scheduler.GetFolder('\')
+    try { $task = $folder.GetTask($taskName) }
+    catch {
+        for ($error = $_.Exception; $null -ne $error; $error = $error.InnerException) {
+            if ($error.HResult -eq -2147024894) { return $false }
+        }
+        throw
+    }
+    $actions = $task.Definition.Actions
+    if ($actions.Count -ne 1) { return $false }
+    $action = $actions.Item(1)
+    if ($action.Type -ne 0 -or $action.Arguments -ne '--cloud-health-check') { return $false }
+    $expected = [IO.Path]::GetFullPath((Join-Path $InstallationRoot 'VitanCut.WinUI.exe'))
+    $actual = [IO.Path]::GetFullPath($action.Path.Trim('"'))
+    if (-not [string]::Equals($actual, $expected, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    $task.Enabled = $false
+    if ($task.GetInstances(0).Count -gt 0) { $task.Stop(0) }
+    $folder.DeleteTask($taskName, 0)
+    return $true
+}
+
+if ($RemoveCloudTaskOnly) {
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    Remove-VitanCutCloudHealthTask -InstallationRoot $Target -UserId $sid -Scheduler (New-Object -ComObject Schedule.Service) | Out-Null
+    return
+}
+if ($ParentPid -le 0) { throw 'A valid uninstaller parent process is required.' }
 Wait-Process -Id $ParentPid -ErrorAction SilentlyContinue
 $root = [IO.Path]::GetFullPath($Target).TrimEnd('\')
 $manifest = Join-Path $root 'VitanCut.install-files.txt'
