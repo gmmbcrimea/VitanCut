@@ -63,11 +63,23 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        var commandLine = Environment.GetCommandLineArgs();
+        if (commandLine.Length == 2 && commandLine[1] is CloudHealthTask.CheckArgument or CloudHealthTask.RemoveArgument)
+        {
+            try
+            {
+                Environment.ExitCode = commandLine[1] == CloudHealthTask.CheckArgument
+                    ? await CloudHealthProbe.RunAsync(Paths)
+                    : await CloudHealthTask.ForCurrentUser(Paths).RemoveAsync();
+            }
+            catch (Exception error) { LogError(error); Environment.ExitCode = 1; }
+            finally { Current.Exit(); }
+            return;
+        }
         StartupWindow? startup = null;
         var startupClosed = false;
         try
         {
-            var commandLine = Environment.GetCommandLineArgs();
             if (commandLine.Length == 3 && commandLine[1] == "--wait-for-process"
                 && int.TryParse(commandLine[2], out var parentId) && parentId != Environment.ProcessId)
             {

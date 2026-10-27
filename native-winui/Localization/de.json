@@ -788,5 +788,7 @@
   "Создать группу": "Gruppe erstellen",
   "Название группы": "Gruppenname",
   "Введите название группы": "Geben Sie einen Gruppennamen ein",
-  "Группа уже существует": "Die Gruppe ist bereits vorhanden"
+  "Группа уже существует": "Die Gruppe ist bereits vorhanden",
+  "Фоновая проверка облака": "Cloud-Prüfung im Hintergrund",
+  "Не удалось настроить фоновую проверку Supabase. Проверьте доступность Планировщика заданий Windows.": "Die Supabase-Hintergrundprüfung konnte nicht eingerichtet werden. Prüfen Sie die Verfügbarkeit der Windows-Aufgabenplanung."
 }

@@ -355,18 +355,13 @@
             </Grid.RowDefinitions>
             <TextBlock x:Name="CatalogSidebarTitle" Text="Заказчики" Style="{StaticResource SectionTitleTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
             <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
-              <ListView x:Name="CustomersList" SelectionChanged="CustomersSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" AllowDrop="True" DragOver="CatalogTargetDragOver" DragLeave="CatalogTargetDragLeave" Drop="CatalogTargetDrop">
-                <ListView.ItemContainerStyle>
-                  <Style TargetType="ListViewItem">
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                    <Setter Property="Padding" Value="0"/>
-                  </Style>
-                </ListView.ItemContainerStyle>
+              <ListView x:Name="CustomersList" ItemContainerStyle="{StaticResource CatalogNavigationItemStyle}" SelectionChanged="CustomersSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" AllowDrop="True" DragOver="CatalogTargetDragOver" DragLeave="CatalogTargetDragLeave" Drop="CatalogTargetDrop">
                 <ListView.ItemTemplate>
                   <DataTemplate>
-                    <Border Tag="catalog-drop-surface" BorderThickness="2" BorderBrush="Transparent" Background="Transparent" CornerRadius="6" Padding="8,6">
+                    <Grid MinHeight="36">
+                      <Border Tag="catalog-drop-surface" BorderThickness="2" BorderBrush="Transparent" Background="Transparent" CornerRadius="4" IsHitTestVisible="False"/>
                       <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                    </Border>
+                    </Grid>
                   </DataTemplate>
                 </ListView.ItemTemplate>
                 <ListView.ContextFlyout>
@@ -447,7 +442,7 @@
             </Grid.RowDefinitions>
             <TextBlock Text="Категории" Style="{StaticResource SectionTitleTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
             <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
-              <ListView x:Name="MaterialCategoriesList" SelectionChanged="MaterialCategoriesSelectionChanged" />
+              <ListView x:Name="MaterialCategoriesList" ItemContainerStyle="{StaticResource CatalogNavigationItemStyle}" SelectionChanged="MaterialCategoriesSelectionChanged" />
             </Border>
           </Grid>
         </Border>

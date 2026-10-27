@@ -76,6 +76,16 @@ try {
   await db.exec(productGroupsMigration);
   await db.exec(productGroupsMigration);
   console.log('PASS: product group migration applies idempotently');
+  const healthMigration = await readFile(path.join(migrationDir, '2026102702_cloud_health.sql'), 'utf8');
+  await db.exec(healthMigration);
+  await db.exec(healthMigration);
+  await db.exec('set role anon');
+  await check('Anonymous cloud health RPC returns only a database availability boolean',
+    'select public.vitan_cloud_health() as healthy', [{ healthy: true }]);
+  await assert.rejects(db.query('select * from public.workspace_snapshots'), /permission denied/);
+  await db.exec('reset role');
+  await check('Cloud health RPC does not elevate privileges',
+    "select prosecdef as definer from pg_proc where oid = 'public.vitan_cloud_health()'::regprocedure", [{ definer: false }]);
 
   await check('Composer is not executable by public, anon, or authenticated', `
     select

@@ -9,8 +9,8 @@ namespace VitanCut.WinUI.Services;
 
 public sealed class CloudSyncService
 {
-    private const string DefaultProjectUrl = "https://oihkaipfyjpoekdzewzn.supabase.co";
-    private const string DefaultPublishableKey = "sb_publishable_6IS_guUveBXMRS2RMuHHgw_ESWRBE0f";
+    internal const string DefaultProjectUrl = "https://oihkaipfyjpoekdzewzn.supabase.co";
+    internal const string DefaultPublishableKey = "sb_publishable_6IS_guUveBXMRS2RMuHHgw_ESWRBE0f";
     private const string SettingsFileName = "vitan-cut-cloud.json";
     private const string WorkspaceName = "Cutlist";
     private const string BaselineFileName = "vitan-cut-cloud-baseline.json";

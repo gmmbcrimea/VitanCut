@@ -788,5 +788,7 @@
   "Создать группу": "Crear grupo",
   "Название группы": "Nombre del grupo",
   "Введите название группы": "Introduzca un nombre de grupo",
-  "Группа уже существует": "El grupo ya existe"
+  "Группа уже существует": "El grupo ya existe",
+  "Фоновая проверка облака": "Comprobación de nube en segundo plano",
+  "Не удалось настроить фоновую проверку Supabase. Проверьте доступность Планировщика заданий Windows.": "No se pudo configurar la comprobación de Supabase en segundo plano. Compruebe que el Programador de tareas de Windows esté disponible."
 }

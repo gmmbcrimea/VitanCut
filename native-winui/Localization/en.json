@@ -788,5 +788,7 @@
   "Создать группу": "Create group",
   "Название группы": "Group name",
   "Введите название группы": "Enter a group name",
-  "Группа уже существует": "The group already exists"
+  "Группа уже существует": "The group already exists",
+  "Фоновая проверка облака": "Background cloud check",
+  "Не удалось настроить фоновую проверку Supabase. Проверьте доступность Планировщика заданий Windows.": "Could not configure the background Supabase check. Check that Windows Task Scheduler is available."
 }

@@ -98,6 +98,7 @@
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="TextWrapping" Value="NoWrap" />
     </Style>
+    <Style x:Key="CatalogNavigationItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}" />
     <Style x:Key="SectionTitleTextBlockStyle" TargetType="TextBlock">
       <Setter Property="FontSize" Value="{StaticResource UiPageSize}" />
       <Setter Property="FontWeight" Value="SemiBold" />

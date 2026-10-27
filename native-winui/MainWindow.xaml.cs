@@ -151,6 +151,7 @@ public sealed partial class MainWindow : Window
             if (_onlineServicesStarted) return;
             _onlineServicesStarted = true;
             StartBackgroundTimers();
+            QueueBackgroundOperation(EnsureCloudHealthTaskAsync, "Фоновая проверка облака");
             await InitializeOnlineServicesAsync();
         };
         MaterialUnitBox.SelectionChanged += MaterialUnitChanged;
@@ -364,6 +365,14 @@ public sealed partial class MainWindow : Window
             return;
         }
         await RestoreCloudSessionAfterLaunchAsync();
+    }
+
+    private async Task EnsureCloudHealthTaskAsync()
+    {
+        if (App.Paths.IsDevelopment) return;
+        var result = await CloudHealthTask.ForCurrentUser(App.Paths).EnsureAsync();
+        if (!result.Succeeded && !_shutdownRequested && !_shutdownInProgress)
+            NotificationCenter.Publish(UiText.Get("Фоновая проверка облака"), UiText.Get("Не удалось настроить фоновую проверку Supabase. Проверьте доступность Планировщика заданий Windows."));
     }
 
     private void StartBackgroundTimers()
