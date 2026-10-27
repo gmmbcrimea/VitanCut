@@ -29,8 +29,19 @@ public sealed class CatalogService(AppState state)
         .Where(item => UiTextSearch.Matches(query ?? "", item.Product.Name, item.Counterparty, item.Product.Group ?? ""))
         .OrderBy(item => item.Product.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Counterparty).ToList();
 
-    public IReadOnlyList<string> GetProductGroups() => new[] { "" }.Concat(Browse().Select(item => item.Product.Group?.Trim() ?? "")
+    public IReadOnlyList<string> GetProductGroups() => new[] { "" }.Concat(state.Database.ProductGroups.Concat(Browse().Select(item => item.Product.Group?.Trim() ?? ""))
         .Where(group => group.Length > 0).Distinct(StringComparer.CurrentCultureIgnoreCase).OrderBy(group => group, StringComparer.CurrentCultureIgnoreCase)).ToList();
+
+    public string CreateProductGroup(string name)
+    {
+        name = name.Trim();
+        if (name.Length == 0) throw new InvalidOperationException(UiText.Get("Введите название группы"));
+        if (string.Equals(name, UiText.Get("Без группы"), StringComparison.CurrentCultureIgnoreCase) ||
+            GetProductGroups().Contains(name, StringComparer.CurrentCultureIgnoreCase))
+            throw new InvalidOperationException(UiText.Get("Группа уже существует"));
+        state.CommitMutation(() => state.Database.ProductGroups.Add(name));
+        return name;
+    }
 
     private CustomerProductItem ResolveProduct(string id) => Browse().FirstOrDefault(item => item.Product.Id == id)
         ?? throw new InvalidOperationException("Изделие каталога уже удалено или изменено в облаке.");
@@ -38,7 +49,13 @@ public sealed class CatalogService(AppState state)
     public void SetProductGroup(IEnumerable<string> productIds, string group)
     {
         var products = productIds.Distinct().Select(ResolveProduct).ToList();
-        state.CommitMutation(() => { foreach (var item in products) item.Product.Group = group.Trim(); });
+        group = group.Trim();
+        state.CommitMutation(() =>
+        {
+            if (group.Length > 0 && !state.Database.ProductGroups.Contains(group, StringComparer.CurrentCultureIgnoreCase))
+                state.Database.ProductGroups.Add(group);
+            foreach (var item in products) item.Product.Group = group;
+        });
     }
 
     public void TransferProducts(IEnumerable<string> productIds, string targetCounterparty, bool copy)

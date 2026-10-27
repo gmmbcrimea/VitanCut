@@ -24,6 +24,7 @@
     <Compile Include="../native-winui/Models/AccentPalette.cs" Link="Models/AccentPalette.cs" />
     <Compile Include="../native-winui/Services/AppState.cs" Link="Services/AppState.cs" />
     <Compile Include="../native-winui/Services/AppPaths.cs" Link="Services/AppPaths.cs" />
+    <Compile Include="../native-winui/Services/WindowPlacementService.cs" Link="Services/WindowPlacementService.cs" />
     <Compile Include="../native-winui/Services/AtomicJsonFile.cs" Link="Services/AtomicJsonFile.cs" />
     <Compile Include="../native-winui/Services/AtomicJsonPairFile.cs" Link="Services/AtomicJsonPairFile.cs" />
     <Compile Include="../native-winui/Services/MaterialSelectionModel.cs" Link="Services/MaterialSelectionModel.cs" />

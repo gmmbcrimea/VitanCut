@@ -3,6 +3,7 @@ namespace VitanCut.WinUI.Models;
 public sealed class Database
 {
     public List<string> Counterparties { get; set; } = ["Частный заказчик", "Дилер"];
+    public List<string> ProductGroups { get; set; } = [];
     public List<string> MaterialGroups { get; set; } = ["ЛДСП", "Фурнитура", "Кромка", "Прочее"];
     public Dictionary<string, List<Material>> Materials { get; set; } = SeedMaterials();
     public Dictionary<string, List<Product>> Catalog { get; set; } = [];

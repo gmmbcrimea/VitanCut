@@ -13,6 +13,7 @@ public sealed class AppPaths
     public string DataRoot { get; }
     public bool IsDevelopment { get; }
     public string DatabasePath => Path.Combine(DataRoot, "database.json");
+    public string WindowSessionPath => Path.Combine(DataRoot, "window-session.json");
     public string CloudSettingsPath => Path.Combine(DataRoot, "vitan-cut-cloud.json");
     public string CloudBaselinePath => Path.Combine(DataRoot, "vitan-cut-cloud-baseline.json");
     public string CloudSessionPath => Path.Combine(DataRoot, "vitan-cut-cloud-session.dat");

@@ -190,6 +190,8 @@ public sealed class AppState
     private void Normalize()
     {
         Database.Counterparties ??= ["Частный заказчик", "Дилер"];
+        Database.ProductGroups = (Database.ProductGroups ?? []).Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim()).Distinct(StringComparer.CurrentCultureIgnoreCase).ToList();
         Database.MaterialGroups ??= ["ЛДСП", "Фурнитура", "Кромка", "Прочее"];
         Database.Materials ??= new Database().Materials;
         Database.Catalog ??= [];

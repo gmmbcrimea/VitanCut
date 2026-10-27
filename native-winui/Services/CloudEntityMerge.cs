@@ -22,6 +22,7 @@ public static class CloudEntityMerge
         var result = new Dictionary<CloudEntityKey, CloudEntity>();
         Add(result, "cut-settings", "root", CutSettings.From(database.Preferences));
         Add(result, "counterparties", "root", database.Counterparties);
+        Add(result, "product-groups", "root", database.ProductGroups);
         Add(result, "material-groups", "root", database.MaterialGroups);
 
         foreach (var (group, materials) in database.Materials)
@@ -52,6 +53,7 @@ public static class CloudEntityMerge
         var database = new Database
         {
             Counterparties = ReadOrDefault<List<string>>(entities, "counterparties", "root", ["Частный заказчик", "Дилер"]),
+            ProductGroups = ReadOrDefault<List<string>>(entities, "product-groups", "root", []),
             MaterialGroups = ReadOrDefault<List<string>>(entities, "material-groups", "root", ["ЛДСП", "Фурнитура", "Кромка", "Прочее"]),
             Preferences = preferences,
             Materials = [],

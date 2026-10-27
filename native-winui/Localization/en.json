@@ -784,5 +784,9 @@
   "Используется в проектах": "Used in projects",
   "Проекты не найдены": "No projects found",
   "Копировать или переместить?": "Copy or move?",
-  "Переместить": "Move"
+  "Переместить": "Move",
+  "Создать группу": "Create group",
+  "Название группы": "Group name",
+  "Введите название группы": "Enter a group name",
+  "Группа уже существует": "The group already exists"
 }

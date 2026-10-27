@@ -23,6 +23,7 @@ public sealed partial class MainWindow : Window
     private const int MinimumWindowWidth = 980;
     private const int MinimumWindowHeight = 620;
     private const int WmGetMinMaxInfo = 0x0024;
+    private readonly WindowPlacementService _windowPlacement = new(App.Paths.WindowSessionPath);
 
 
     private readonly WindowSubclassProc _minSizeSubclassProc;
@@ -160,6 +161,7 @@ public sealed partial class MainWindow : Window
         RefreshProjects(select: null, allowAutoSelect: false);
         RefreshMaterials();
         ShowTab("projects");
+        _windowPlacement.Restore(WindowNative.GetWindowHandle(this));
     }
 
     private void ConfigureTopNavigation()
@@ -385,6 +387,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        _windowPlacement.Capture(WindowNative.GetWindowHandle(this));
         var cloudOperationInProgress = App.Cloud.IsOperationInProgress;
         _shutdownInProgress = true;
         StopBackgroundTimers();
@@ -542,6 +545,7 @@ public sealed partial class MainWindow : Window
             if (_updateDescription is not null) _updateDescription.Text = UiText.Get("Файлы подготовлены. Перезапуск приложения...");
             NotificationCenter.Publish(UiText.Get("Обновление готово"),UiText.Get("Приложение перезапустится после замены файлов."));
             await Task.Delay(700);
+            _windowPlacement.Capture(WindowNative.GetWindowHandle(this));
             Application.Current.Exit();
             return;
         }
@@ -631,7 +635,6 @@ public sealed partial class MainWindow : Window
 
         if (list == CustomerProjectsList)
         {
-            Add("Добавить", () => AddCatalogProductClick(list, new RoutedEventArgs()));
             if (menuData is CustomerProductItem item)
             {
                 if (_catalogPage.GroupMode)

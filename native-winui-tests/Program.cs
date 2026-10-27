@@ -17,6 +17,19 @@ ProjectDetailPricingChecks.Run(Check, output);
 WasteAllowanceChecks.Run(Check, output);
 ProjectCatalogPickerChecks.Run(Check, output);
 CatalogBrowserChecks.Run(Check, output);
+var windowSession = new WindowPlacementService(Path.Combine(output, "window-session.json"));
+Check(windowSession.Load() is null, "A missing window session keeps the default placement");
+var normalWindow = new WindowSessionState(-1500, 80, -400, 780, false);
+windowSession.Save(normalWindow);
+Check(windowSession.Load() == normalWindow, "Normal window size and position survive reload, including negative monitor coordinates");
+windowSession.Save(normalWindow with { Maximized = true });
+Check(windowSession.Load() == normalWindow with { Maximized = true }, "Maximized state preserves the normal restore bounds");
+windowSession.Save(normalWindow with { Right = normalWindow.Left });
+Check(windowSession.Load() is { Maximized: true }, "Invalid window bounds cannot overwrite a valid session");
+File.WriteAllText(Path.Combine(output, "window-session.json"), "broken json");
+Check(windowSession.Load() is null, "A corrupted window session does not prevent startup");
+File.WriteAllText(Path.Combine(output, "window-session.json"), "{\"Left\":0,\"Top\":0,\"Right\":-1,\"Bottom\":600}");
+Check(windowSession.Load() is null, "Invalid persisted window bounds are ignored");
 var exportDate = new DateTime(2026, 10, 26, 14, 30, 0);
 foreach (var reportName in new[] { "Деталировка", "Раскрой", "Сводная таблица" })
     Check(ReportFileName.Create(reportName, "Гурзуф", exportDate) == $"{reportName}_Гурзуф_2026-10-26_14-30",

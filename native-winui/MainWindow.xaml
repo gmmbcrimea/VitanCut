@@ -382,6 +382,7 @@
               <Button Content="Добавить" Click="AddCustomerClick" Style="{StaticResource AccentButtonStyle}"  l10n:UiLocalization.Properties="Content"/>
               <Button Content="Удалить" Click="DeleteCustomerClick"  l10n:UiLocalization.Properties="Content"/>
             </StackPanel>
+            <Button x:Name="CreateCatalogGroupButton" Grid.Row="2" Content="Создать группу" Click="CreateCatalogGroupClick" Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}" l10n:UiLocalization.Properties="Content"/>
           </Grid>
         </Border>
         <Border x:Name="CatalogProductsPane" Grid.Row="1" Grid.Column="1" Style="{StaticResource PaneSurfaceStyle}">

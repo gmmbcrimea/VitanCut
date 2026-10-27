@@ -72,6 +72,11 @@ try {
   await check('Migration is idempotent for existing entity keys',
     'select count(*)::int as count from public.workspace_entities', [{ count: 6 }]);
 
+  const productGroupsMigration = await readFile(path.join(migrationDir, '2026102701_product_groups.sql'), 'utf8');
+  await db.exec(productGroupsMigration);
+  await db.exec(productGroupsMigration);
+  console.log('PASS: product group migration applies idempotently');
+
   await check('Composer is not executable by public, anon, or authenticated', `
     select
       has_function_privilege('public', 'public.compose_vitan_snapshot(uuid,jsonb)', 'execute') as public_exec,
@@ -149,6 +154,13 @@ try {
     join public.workspace_entities e using (workspace_id)
     where s.workspace_id = $1 and e.entity_type = 'project' and e.entity_id = 'project-1'
   `, [{ revision: 3, projects: 0, deleted: true }], [newWorkspaceId]);
+
+  const groupChange = [{ entity_type: 'product-groups', entity_id: 'root', payload: ['Empty group'], expected_revision: 0, deleted: false }];
+  await db.query('select * from public.sync_vitan_entity_changes($1, 3, $2::jsonb)',
+    [newWorkspaceId, JSON.stringify(groupChange)]);
+  await check('Empty product groups appear in cloud snapshots after delta synchronization',
+    "select payload->'productGroups' as groups from public.workspace_snapshots where workspace_id = $1",
+    [{ groups: ['Empty group'] }], [newWorkspaceId]);
 } finally {
   await db.close();
 }

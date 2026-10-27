@@ -1,6 +1,6 @@
 # Release validation
 
-The primary repository contains the 1.3.0 sources, including background update checks at startup and formula support for powers and square roots. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
+The primary repository contains the 1.3.1 sources, including standalone catalog group creation and local main-window placement persistence. Cloud synchronization of empty product groups requires `supabase/migrations/2026102701_product_groups.sql`; the migration has been tested locally but has not been applied to the production service. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
 
 ## Validate version metadata
 

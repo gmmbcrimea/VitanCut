@@ -157,6 +157,7 @@ public sealed partial class MainWindow
         _catalogPage.GroupMode = CatalogByGroup.IsChecked == true;
         CatalogSidebarTitle.Text = UiText.Get(_catalogPage.GroupMode ? "Группы" : "Заказчики");
         CatalogCustomerActions.Visibility = _catalogPage.GroupMode ? Visibility.Collapsed : Visibility.Visible;
+        CreateCatalogGroupButton.Visibility = _catalogPage.GroupMode ? Visibility.Visible : Visibility.Collapsed;
         _catalogPage.Refresh();
     }
 
@@ -185,8 +186,28 @@ public sealed partial class MainWindow
         if (!remove)
         {
             var groups = new ComboBox { IsEditable = true, ItemsSource = App.Catalog.GetProductGroups().Where(name => name.Length > 0).ToList(),
-                Text = clicked.Product.Group, HorizontalAlignment = HorizontalAlignment.Stretch, MinWidth = 280 };
-            var result = await new ContentDialog { XamlRoot = Root.XamlRoot, Title = UiText.Get("Добавить в группу"), Content = groups,
+                Text = clicked.Product.Group, Header = UiText.Get("Название группы"), PlaceholderText = UiText.Get("Название группы"),
+                HorizontalAlignment = HorizontalAlignment.Stretch, MinWidth = 280 };
+            var create = new Button { Content = UiText.Get("Создать группу") };
+            var errorText = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+            create.Click += (_, _) =>
+            {
+                try
+                {
+                    var name = App.Catalog.CreateProductGroup(groups.Text);
+                    groups.ItemsSource = App.Catalog.GetProductGroups().Where(groupName => groupName.Length > 0).ToList();
+                    groups.SelectedItem = name;
+                    groups.Text = name;
+                    errorText.Visibility = Visibility.Collapsed;
+                    _catalogPage.Refresh();
+                }
+                catch (Exception error) { errorText.Text = error.Message; errorText.Visibility = Visibility.Visible; }
+            };
+            var content = new StackPanel { Spacing = 8 };
+            content.Children.Add(groups);
+            content.Children.Add(create);
+            content.Children.Add(errorText);
+            var result = await new ContentDialog { XamlRoot = Root.XamlRoot, Title = UiText.Get("Добавить в группу"), Content = content,
                 PrimaryButtonText = UiText.Get("Добавить"), CloseButtonText = UiText.Get("Отмена"), RequestedTheme = Root.ActualTheme }.ShowAsync();
             if (result != ContentDialogResult.Primary || string.IsNullOrWhiteSpace(groups.Text)) return;
             group = groups.Text;
@@ -198,6 +219,25 @@ public sealed partial class MainWindow
             _catalogPage.Refresh();
         }
         catch (Exception error) { await _dialogs.ShowMessageAsync(UiText.Get("Не удалось сохранить"), error.Message); }
+    }
+
+    private async void CreateCatalogGroupClick(object sender, RoutedEventArgs e)
+    {
+        var name = new TextBox { PlaceholderText = UiText.Get("Название группы"), MinWidth = 280 };
+        var errorText = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+        var content = new StackPanel { Spacing = 8 };
+        content.Children.Add(name);
+        content.Children.Add(errorText);
+        string? created = null;
+        var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, Title = UiText.Get("Создать группу"), Content = content,
+            PrimaryButtonText = UiText.Get("Создать"), CloseButtonText = UiText.Get("Отмена"), RequestedTheme = Root.ActualTheme };
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            try { created = App.Catalog.CreateProductGroup(name.Text); }
+            catch (Exception error) { args.Cancel = true; errorText.Text = error.Message; errorText.Visibility = Visibility.Visible; }
+        };
+        await dialog.ShowAsync();
+        if (created is not null) _catalogPage.Refresh(created);
     }
 
     private async void CatalogProductInfoClick(object sender, RoutedEventArgs e)

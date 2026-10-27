@@ -19,6 +19,14 @@ internal static class CatalogBrowserChecks
         catalog.SaveProduct("A", null, first); catalog.SaveProduct("B", null, second);
         var created = first.CreatedAt;
         check(created != DateTimeOffset.MinValue && catalog.GetProductGroups().SequenceEqual([""]), "New catalog products get a creation date and start ungrouped");
+        check(catalog.CreateProductGroup(" Empty ") == "Empty" && catalog.GetProductGroups().Contains("Empty") && catalog.Browse().Count == 2,
+            "Creating an empty group trims its name without adding or changing products");
+        foreach (var invalid in new[] { " ", "empty", UiText.Get("Без группы") })
+        {
+            var invalidRejected = false;
+            try { catalog.CreateProductGroup(invalid); } catch (InvalidOperationException) { invalidRejected = true; }
+            check(invalidRejected, "Group creation rejects empty, duplicate and reserved names: " + invalid);
+        }
         catalog.SetProductGroup([first.Id, second.Id], " Furniture ");
         check(first.Group == "Furniture" && second.Group == "Furniture" && catalog.GetProducts("A").Contains(first) && catalog.GetProducts("B").Contains(second),
             "Bulk grouping across customers changes groups without changing ownership");
@@ -53,9 +61,11 @@ internal static class CatalogBrowserChecks
         check(rejected && catalog.GetProducts("B").Contains(second), "Stale customer transfer cannot partially move selected products");
         state.Save();
         var restarted = new AppState(); restarted.Load(path);
+        check(new CatalogService(restarted).GetProductGroups().Contains("Empty"), "Empty product groups survive restart");
         check(new CatalogService(restarted).GetProducts("B").Single(item => item.Id == second.Id).Group == "Furniture",
             "Catalog groups persist across restart");
         var cloud = CloudEntityMerge.Restore(CloudEntityMerge.Snapshot(state.Database));
+        check(cloud.ProductGroups.Contains("Empty"), "Empty product groups survive cloud entity serialization");
         check(cloud.Catalog["A"].Single().Group == "Furniture" && cloud.Catalog["B"].Single(item => item.Id == first.Id).CreatedAt == created &&
             cloud.Projects.Single().Products.Single().SourceCatalogProductId == first.Id,
             "Cloud entities preserve product groups, creation dates and project origin without a new entity type");
