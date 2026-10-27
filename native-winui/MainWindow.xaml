@@ -219,7 +219,7 @@
                   </Border>
                   <Border x:Name="MetricMaterialsCard" Grid.Column="1" Style="{StaticResource MetricSurfaceStyle}" Padding="14" BorderBrush="{StaticResource MetricMaterialBrush}" BorderThickness="0,0,3,0">
                     <StackPanel>
-                      <Grid ColumnSpacing="8" MinHeight="32"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><SymbolIcon Symbol="Library" Foreground="{StaticResource MetricMaterialBrush}"/><TextBlock Grid.Column="1" Text="Себестоимость материалов" Style="{StaticResource MutedTextBlockStyle}" VerticalAlignment="Center"  l10n:UiLocalization.Properties="Text"/></Grid>
+                      <Grid ColumnSpacing="8" MinHeight="32"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><SymbolIcon Symbol="Library" Foreground="{StaticResource MetricMaterialBrush}"/><TextBlock Grid.Column="1" Text="Стоимость ЛДСП" Style="{StaticResource MutedTextBlockStyle}" VerticalAlignment="Center"  l10n:UiLocalization.Properties="Text"/></Grid>
                       <TextBlock x:Name="MetricMaterialsText" FontSize="26" FontWeight="SemiBold" />
                       <TextBlock Text="руб." Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
                     </StackPanel>
@@ -305,6 +305,23 @@
                                 RightTapped="ListViewRightTappedSelectItem"
                                 ScrollViewer.VerticalScrollMode="Enabled"
                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListView.ItemContainerStyle>
+                          <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                          </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                          <DataTemplate>
+                            <Grid Padding="0,8" ColumnSpacing="12">
+                              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                              <StackPanel Spacing="4">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding Calculation}" Style="{StaticResource MutedTextBlockStyle}" TextWrapping="Wrap"/>
+                              </StackPanel>
+                              <TextBlock Grid.Column="1" Text="{Binding Total}" FontWeight="SemiBold" VerticalAlignment="Center" MaxWidth="160" TextWrapping="Wrap"/>
+                            </Grid>
+                          </DataTemplate>
+                        </ListView.ItemTemplate>
                         <ListView.ContextFlyout>
                           <MenuFlyout>
                             <MenuFlyoutItem Text="Добавить" Click="AddPayrollClick"  l10n:UiLocalization.Properties="Text"/>

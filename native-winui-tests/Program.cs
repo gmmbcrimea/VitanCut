@@ -17,6 +17,7 @@ ProjectDetailPricingChecks.Run(Check, output);
 WasteAllowanceChecks.Run(Check, output);
 ProjectCatalogPickerChecks.Run(Check, output);
 CatalogBrowserChecks.Run(Check, output);
+PayrollChecks.Run(Check, output);
 await CloudHealthChecks.RunAsync(Check, output);
 var windowSession = new WindowPlacementService(Path.Combine(output, "window-session.json"));
 Check(windowSession.Load() is null, "A missing window session keeps the default placement");

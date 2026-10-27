@@ -97,7 +97,8 @@ public sealed class ProjectPageController
         _products.ItemsSource = null;
         _products.ItemsSource = project.Products;
         _payrolls.ItemsSource = null;
-        _payrolls.ItemsSource = project.Payrolls.Select(payrollLabel).ToList();
+        _payrolls.ItemsSource = project.Payrolls.Select(payroll => PayrollPresentation.Create(payroll, totals.Area)
+            with { Title = payrollLabel(payroll) }).ToList();
         _noProductsPanel.Visibility = project.Products.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _products.Visibility = project.Products.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         _noPayrollsPanel.Visibility = project.Payrolls.Count == 0 ? Visibility.Visible : Visibility.Collapsed;

@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../native-winui/Services/ProjectDetailPricing.cs" Link="Services/ProjectDetailPricing.cs" />
+    <Compile Include="../native-winui/Services/PayrollPresentation.cs" Link="Services/PayrollPresentation.cs" />
     <Compile Include="../native-winui/Services/MaterialSummaryService.cs" Link="Services/MaterialSummaryService.cs" />
     <Compile Include="../native-winui/Services/UiText.cs" Link="Services/UiText.cs" />
     <EmbeddedResource Include="../native-winui/Localization/*.json" Exclude="../native-winui/Localization/source.json" LogicalName="VitanCut.Localization.%(Filename)%(Extension)" />

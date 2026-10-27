@@ -78,6 +78,7 @@ public sealed partial class MainWindow : Window
     private Views.CloudPublishWindow? _activeCloudPublishWindow;
     private int _activeCloudPublishInterval;
     private bool _cloudPublishInProgress;
+    private bool _payrollDialogOpen;
     private bool _shutdownInProgress;
     private bool _shutdownRequested;
     private Project? SelectedProject => ProjectsList.SelectedItem as Project;
@@ -895,12 +896,18 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void AddPayrollClick(object sender, RoutedEventArgs e)
+    private async void AddPayrollClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedProject is not { } project) return;
-        _projectCommands.AddPayroll(project);
-        FillProjectCard();
-        NotificationCenter.Publish(UiText.Get("Зарплата добавлена"),UiText.Get("В проект добавлена новая строка ЗП."));
+        if (_payrollDialogOpen || SelectedProject is not { } project) return;
+        _payrollDialogOpen = true;
+        try
+        {
+            if (!await _projectCommands.AddPayrollAsync(project)) return;
+            FillProjectCard();
+            NotificationCenter.Publish(UiText.Get("Зарплата добавлена"),UiText.Get("В проект добавлена новая строка ЗП."));
+        }
+        catch (Exception error) { await _dialogs.ShowMessageAsync(UiText.Get("Не удалось сохранить"), error.Message); }
+        finally { _payrollDialogOpen = false; }
     }
 
     private async void EditPayrollClick(object sender, RoutedEventArgs e) =>
@@ -908,7 +915,11 @@ public sealed partial class MainWindow : Window
 
     private async Task EditPayrollAsync(int index)
     {
-        if (SelectedProject is { } project && await _projectCommands.EditPayrollAsync(project, index)) FillProjectCard();
+        if (_payrollDialogOpen || SelectedProject is not { } project) return;
+        _payrollDialogOpen = true;
+        try { if (await _projectCommands.EditPayrollAsync(project, index)) FillProjectCard(); }
+        catch (Exception error) { await _dialogs.ShowMessageAsync(UiText.Get("Не удалось сохранить"), error.Message); }
+        finally { _payrollDialogOpen = false; }
     }
 
     private async void DeletePayrollClick(object sender, RoutedEventArgs e) =>
@@ -1046,9 +1057,7 @@ public sealed partial class MainWindow : Window
 
     private static string PayrollLabel(Payroll payroll)
     {
-        var amount = payroll.Mode == "fixed" ? payroll.Amount : payroll.Rate;
-        var mode = payroll.Mode == "fixed" ? "фикс." : "за м²";
-        return $"{payroll.Note} · {amount:0} руб. · {mode}";
+        return string.IsNullOrWhiteSpace(payroll.Note) ? UiText.Get("ЗП") : payroll.Note;
     }
 
     private void RefreshMaterials(MaterialChoice? select = null)

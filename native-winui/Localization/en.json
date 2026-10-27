@@ -45,7 +45,7 @@
   "Скачивание обновления: {0:0}%": "Downloading update: {0:0}%",
   "Сохранить вариант": "Save option",
   "Повернуть такие на этом листе": "Rotate such on this sheet",
-  "Себестоимость материалов": "Cost of materials",
+  "Стоимость ЛДСП": "Laminated chipboard cost",
   "Добавить заказчика": "Add a customer",
   " м²": " m²",
   "GitHub вернул некорректные данные о релизе.": "GitHub returned incorrect release information.",
@@ -789,6 +789,8 @@
   "Название группы": "Group name",
   "Введите название группы": "Enter a group name",
   "Группа уже существует": "The group already exists",
+  "Ставка за м²": "Rate per m²",
+  "Укажите конечную неотрицательную сумму.": "Enter a finite, non-negative amount.",
   "Фоновая проверка облака": "Background cloud check",
   "Не удалось настроить фоновую проверку Supabase. Проверьте доступность Планировщика заданий Windows.": "Could not configure the background Supabase check. Check that Windows Task Scheduler is available."
 }

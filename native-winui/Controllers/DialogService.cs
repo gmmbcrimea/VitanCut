@@ -74,19 +74,32 @@ public sealed class DialogService(Func<XamlRoot?> xamlRoot, CatalogService catal
         return new ProjectEdit(NameOr(nameBox.Text, project.Name), customer, addressBox.Text.Trim());
     }
 
-    public async Task<PayrollEdit?> PromptPayrollAsync(Payroll payroll)
+    public async Task<PayrollEdit?> PromptPayrollAsync(Payroll payroll, bool creating = false)
     {
-        var modeBox = new ComboBox { Header = UiText.Get("Тип начисления"), SelectedIndex = payroll.Mode == "area" ? 1 : 0 };
+        var modeBox = new ComboBox { Header = UiText.Get("Тип начисления"), HorizontalAlignment = HorizontalAlignment.Stretch };
         modeBox.Items.Add(new ComboBoxItem { Content = UiText.Get("Фиксированная сумма"), Tag = "fixed" });
         modeBox.Items.Add(new ComboBoxItem { Content = UiText.Get("За м²"), Tag = "area" });
-        var amountBox = new NumberBox { Header = UiText.Get("Сумма"), Value = payroll.Mode == "fixed" ? payroll.Amount : payroll.Rate };
+        modeBox.SelectedIndex = payroll.Mode == "area" ? 1 : 0;
+        var amountBox = new NumberBox { Header = UiText.Get(payroll.Mode == "area" ? "Ставка за м²" : "Сумма"),
+            Minimum = 0, Value = payroll.Mode == "fixed" ? payroll.Amount : payroll.Rate };
+        modeBox.SelectionChanged += (_, _) => amountBox.Header = UiText.Get(modeBox.SelectedIndex == 1 ? "Ставка за м²" : "Сумма");
         var noteBox = new TextBox { Header = UiText.Get("Комментарий"), Text = payroll.Note };
         var panel = new StackPanel { Spacing = 12, MinWidth = 360 };
         panel.Children.Add(modeBox);
         panel.Children.Add(amountBox);
         panel.Children.Add(noteBox);
+        var errorText = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed,
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["UiDangerBrush"] };
+        panel.Children.Add(errorText);
 
-        var dialog = CreateDialog(UiText.Get("Изменить ЗП"),panel,UiText.Get("Сохранить"),ContentDialogButton.Primary);
+        var dialog = CreateDialog(UiText.Get(creating ? "Добавить ЗП" : "Изменить ЗП"),panel,UiText.Get("Сохранить"),ContentDialogButton.Primary);
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            if (double.IsFinite(amountBox.Value) && amountBox.Value >= 0) return;
+            args.Cancel = true;
+            errorText.Text = UiText.Get("Укажите конечную неотрицательную сумму.");
+            errorText.Visibility = Visibility.Visible;
+        };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return null;
         var mode = modeBox.SelectedItem is ComboBoxItem item ? item.Tag?.ToString() ?? "fixed" : "fixed";
         return new PayrollEdit(

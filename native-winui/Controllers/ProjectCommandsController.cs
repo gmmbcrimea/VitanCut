@@ -50,8 +50,18 @@ public sealed class ProjectCommandsController(
         return true;
     }
 
-    public void AddPayroll(Project project) =>
-        projects.AddPayroll(project, new Payroll { Mode = "fixed", Amount = 0, Note = "Новая строка ЗП" });
+    public async Task<bool> AddPayrollAsync(Project project)
+    {
+        var draft = new Payroll();
+        var edit = await dialogs.PromptPayrollAsync(draft, creating: true);
+        if (edit is null) return false;
+        draft.Mode = edit.Value.Mode;
+        draft.Amount = edit.Value.Amount;
+        draft.Rate = edit.Value.Rate;
+        draft.Note = edit.Value.Note;
+        projects.AddPayroll(project, draft);
+        return true;
+    }
 
     public async Task<bool> EditPayrollAsync(Project project, int index)
     {

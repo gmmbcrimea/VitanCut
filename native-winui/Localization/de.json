@@ -45,7 +45,7 @@
   "Скачивание обновления: {0:0}%": "Update wird heruntergeladen: {0:0} %",
   "Сохранить вариант": "Option speichern",
   "Повернуть такие на этом листе": "Drehen Sie diese auf diesem Blatt",
-  "Себестоимость материалов": "Materialkosten",
+  "Стоимость ЛДСП": "Kosten für beschichtete Spanplatten",
   "Добавить заказчика": "Fügen Sie einen Kunden hinzu",
   " м²": " m²",
   "GitHub вернул некорректные данные о релизе.": "GitHub hat falsche Release-Informationen zurückgegeben.",
@@ -789,6 +789,8 @@
   "Название группы": "Gruppenname",
   "Введите название группы": "Geben Sie einen Gruppennamen ein",
   "Группа уже существует": "Die Gruppe ist bereits vorhanden",
+  "Ставка за м²": "Satz pro m²",
+  "Укажите конечную неотрицательную сумму.": "Geben Sie einen endlichen, nicht negativen Betrag ein.",
   "Фоновая проверка облака": "Cloud-Prüfung im Hintergrund",
   "Не удалось настроить фоновую проверку Supabase. Проверьте доступность Планировщика заданий Windows.": "Die Supabase-Hintergrundprüfung konnte nicht eingerichtet werden. Prüfen Sie die Verfügbarkeit der Windows-Aufgabenplanung."
 }
