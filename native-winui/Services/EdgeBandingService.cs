@@ -35,6 +35,16 @@ public static class EdgeBandingService
         return double.IsFinite(total) ? new(total) : new(0, "Слишком большая длина кромки.");
     }
 
+    public static void ReplaceMaterial(Detail detail, MaterialChoice edge)
+    {
+        if (edge.Material.Unit != "lm") throw new InvalidOperationException("Кромка должна измеряться в погонных метрах.");
+        foreach (var assignment in detail.EdgeBands)
+        {
+            assignment.Type = edge.Type;
+            assignment.MaterialId = edge.Material.Id;
+        }
+    }
+
     public static void Refresh(AppState state, Product product)
     {
         var edges = product.Details.Where(detail => IsEnabled(state, detail)).SelectMany(detail => detail.EdgeBands)

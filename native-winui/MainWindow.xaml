@@ -259,6 +259,11 @@
                                 IsRightTapEnabled="True"
                                 ScrollViewer.VerticalScrollMode="Enabled"
                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListView.ItemContainerStyle>
+                          <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                          </Style>
+                        </ListView.ItemContainerStyle>
                         <ListView.ContextFlyout>
                           <MenuFlyout>
                             <MenuFlyoutItem Text="Добавить" Click="AddProductClick"  l10n:UiLocalization.Properties="Text"/>
@@ -272,11 +277,16 @@
                               <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                               </Grid.ColumnDefinitions>
                               <Image Width="56" Height="56" Stretch="Uniform" Tag="{x:Bind Image}" Loaded="ProductThumbnailLoaded" />
                               <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
                                 <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{x:Bind SizeText}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{x:Bind DimensionsText}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+                              </StackPanel>
+                              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                <TextBlock Text="{x:Bind Qty}" FontWeight="SemiBold" />
+                                <TextBlock Text="шт." Opacity="0.72" l10n:UiLocalization.Properties="Text" />
                               </StackPanel>
                             </Grid>
                           </DataTemplate>
@@ -494,6 +504,7 @@
               <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
                 <Grid>
                   <ListView x:Name="MaterialsList" PreviewKeyDown="MaterialListKeyDown" SelectionMode="Extended" SelectionChanged="MaterialsSelectionChanged" ItemClick="MaterialItemClicked" IsItemClickEnabled="True"
+                            CanDragItems="True" DragItemsStarting="MaterialDragStarting" DragItemsCompleted="MaterialDragCompleted"
                             RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True">
                     <ListView.ItemTemplate>
                       <DataTemplate>
@@ -512,9 +523,12 @@
                   </ListView.ItemContainerStyle>
                   <ListView.ItemTemplate>
                     <DataTemplate>
+                      <Border AllowDrop="True" DragOver="MaterialGroupDragOver" DragLeave="MaterialGroupDragLeave" Drop="MaterialGroupDrop"
+                              BorderThickness="1" CornerRadius="6" BorderBrush="Transparent" Background="Transparent">
                       <Grid>
                       <Expander Header="{Binding Name}" AutomationProperties.Name="{Binding Name}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" Visibility="{Binding GroupVisibility}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                         <ListView ItemsSource="{Binding Items}" Loaded="MaterialGroupListLoaded" PreviewKeyDown="MaterialListKeyDown" SelectionChanged="MaterialGroupSelectionChanged" ItemClick="MaterialItemClicked" IsItemClickEnabled="True"
+                                  CanDragItems="True" DragItemsStarting="MaterialDragStarting" DragItemsCompleted="MaterialDragCompleted"
                                   RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" SelectionMode="Extended">
                           <ListView.ItemTemplate>
                             <DataTemplate>
@@ -524,9 +538,11 @@
                         </ListView>
                       </Expander>
                       <ListView ItemsSource="{Binding Items}" Loaded="MaterialGroupListLoaded" PreviewKeyDown="MaterialListKeyDown" Visibility="{Binding PlainVisibility}" SelectionMode="Extended" ItemTemplate="{StaticResource MaterialChoiceTemplate}"
+                                CanDragItems="True" DragItemsStarting="MaterialDragStarting" DragItemsCompleted="MaterialDragCompleted"
                                 SelectionChanged="MaterialGroupSelectionChanged" ItemClick="MaterialItemClicked" IsItemClickEnabled="True"
                                 RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" />
                       </Grid>
+                      </Border>
                     </DataTemplate>
                   </ListView.ItemTemplate>
                   </ListView>

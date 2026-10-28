@@ -112,7 +112,13 @@ public sealed partial class ProductWindow
                 control.Background = (Brush)Application.Current.Resources[edge is not null ? "AppAccentBrush" : "PanelStrokeBrush"];
             }
         }
-        materials.SelectionChanged += (_, _) => PaintEdges();
+        materials.SelectionChanged += (_, _) =>
+        {
+            if (materials.SelectedItem is not MaterialChoice selected) return;
+            EdgeBandingService.ReplaceMaterial(row.Detail, selected);
+            UpdateSummary();
+            PaintEdges();
+        };
         PaintEdges();
         panel.Children.Add(drawing);
         panel.Children.Add(new TextBlock { Text = valid ? UiText.Format($"{Calculator.Number(length.Value)} × {Calculator.Number(width.Value)} мм") :

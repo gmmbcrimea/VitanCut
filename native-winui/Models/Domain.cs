@@ -116,7 +116,10 @@ public sealed class Product
     public List<Detail> Details { get; set; } = [];
 
     [System.Text.Json.Serialization.JsonIgnore]
-    public string SizeText => $"{Length:0.##} × {Depth:0.##} × {Height:0.##} мм · {Qty:0.##} шт.";
+    public string DimensionsText => $"{Length:0.##} × {Depth:0.##} × {Height:0.##} мм";
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string SizeText => $"{DimensionsText} · {Qty:0.##} шт.";
 
     public override string ToString() => $"{Name} · {Length:0} x {Depth:0} x {Height:0} · {Qty:0} шт.";
 }

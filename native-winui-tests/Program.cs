@@ -10,7 +10,15 @@ if (string.IsNullOrWhiteSpace(testRoot))
 var output = Path.Combine(Path.GetFullPath(testRoot), "VitanCut-checks-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(output);
 var checks = 0;
+var projectRowProduct = new Product { Length = 900, Depth = 500, Height = 720, Qty = 3 };
+Check(projectRowProduct.DimensionsText == "900 × 500 × 720 мм" &&
+    projectRowProduct.SizeText == "900 × 500 × 720 мм · 3 шт." && projectRowProduct.Qty == 3,
+    "Project product row can display quantity separately without changing shared size labels or quantity");
+using (var rowJson = JsonDocument.Parse(JsonSerializer.Serialize(projectRowProduct)))
+    Check(!rowJson.RootElement.TryGetProperty("DimensionsText", out _) && !rowJson.RootElement.TryGetProperty("dimensionsText", out _),
+        "Project row dimensions text is presentation-only and does not change stored data");
 EdgeBandingChecks.Run(Check, output);
+MaterialGroupingChecks.Run(Check, output);
 MaterialPricingChecks.Run(Check, output);
 LocalizationChecks.Run(Check, output);
 ProjectDetailPricingChecks.Run(Check, output);

@@ -81,5 +81,37 @@ internal static class EdgeBandingChecks
         EdgeBandingService.Refresh(state, product);
         check(product.Details.SequenceEqual([manual]), "Deleting source detail removes its band usage without touching manual entries");
         check(!new Material().EdgeBandingEnabled && new Detail().EdgeBands.Count == 0, "Existing materials and details default to no edge banding");
+
+        var replacementSource = new Detail { Type = "ЛДСП", MaterialId = sheet.Id, LengthExpr = "600", WidthExpr = "400", Qty = 2 };
+        var replacementManual = new Detail { Type = otherEdge.Type, MaterialId = otherEdge.Material.Id, LengthExpr = "100" };
+        var replacementProduct = new Product { Qty = 3, Details = [replacementSource, replacementManual] };
+        EdgeBandingService.SetSide(replacementSource, "top", moved);
+        EdgeBandingService.SetSide(replacementSource, "left", moved);
+        EdgeBandingService.Refresh(state, replacementProduct);
+        EdgeBandingService.ReplaceMaterial(replacementSource, otherEdge);
+        EdgeBandingService.Refresh(state, replacementProduct);
+        check(replacementSource.EdgeBands.Select(assignment => assignment.Side).Order().SequenceEqual(new[] { "left", "top" }) &&
+            replacementSource.EdgeBands.All(assignment => assignment.MaterialId == otherEdge.Material.Id && assignment.Type == otherEdge.Type),
+            "Changing edge material keeps the selected sides without requiring them to be selected again");
+        var replacementGenerated = replacementProduct.Details.Single(detail => detail.IsGeneratedEdgeBand);
+        check(replacementGenerated.MaterialId == otherEdge.Material.Id && replacementGenerated.Name == otherEdge.Material.Name &&
+            Calculator.Detail(state, replacementProduct, replacementGenerated).Length == 2000 && replacementProduct.Details.Contains(replacementManual),
+            "Edge replacement immediately regenerates the new material length and removes only obsolete automatic rows");
+        check(Math.Abs(Calculator.Detail(state, replacementProduct, replacementGenerated).Cost -
+            2 * MaterialPricing.UnitCost(otherEdge.Material)) < .000001,
+            "Edge replacement immediately uses the new material price for the existing sides");
+        var replacementId = replacementGenerated.Id;
+        EdgeBandingService.ReplaceMaterial(replacementSource, otherEdge);
+        EdgeBandingService.Refresh(state, replacementProduct);
+        check(replacementProduct.Details.Single(detail => detail.IsGeneratedEdgeBand).Id == replacementId && replacementSource.EdgeBands.Count == 2,
+            "Repeated edge material selection neither duplicates sides nor regenerates stable automatic rows");
+        var emptySource = new Detail();
+        EdgeBandingService.ReplaceMaterial(emptySource, otherEdge);
+        check(emptySource.EdgeBands.Count == 0, "Choosing edge material before choosing sides does not add any sides");
+        var invalidReplacement = false;
+        try { EdgeBandingService.ReplaceMaterial(replacementSource, new MaterialChoice("ЛДСП", sheet)); }
+        catch (InvalidOperationException) { invalidReplacement = true; }
+        check(invalidReplacement && replacementSource.EdgeBands.All(assignment => assignment.MaterialId == otherEdge.Material.Id),
+            "Invalid edge replacement leaves all assigned sides unchanged");
     }
 }

@@ -103,4 +103,24 @@ public sealed class MaterialService(AppState state)
         if (index < 0) return;
         state.CommitMutation(() => materials.RemoveAt(index));
     }
+
+    public bool MoveToGroup(string category, IReadOnlyCollection<string> materialIds, string group)
+    {
+        if (!state.Database.Materials.TryGetValue(category, out var materials))
+            throw new InvalidOperationException("Категория материалов уже удалена.");
+        group = group.Trim();
+        var target = group.Length == 0 ? "" : materials.Select(material => material.Group.Trim())
+            .FirstOrDefault(name => string.Equals(name, group, StringComparison.CurrentCultureIgnoreCase))
+            ?? throw new InvalidOperationException("Группа материалов уже удалена.");
+        var ids = materialIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var selected = materials.Where(material => ids.Contains(material.Id)).ToList();
+        if (selected.Count != ids.Count)
+            throw new InvalidOperationException("Перенос возможен только внутри одной категории материалов.");
+        if (selected.All(material => material.Group == target)) return false;
+        state.CommitMutation(() =>
+        {
+            foreach (var material in selected) material.Group = target;
+        });
+        return true;
+    }
 }
