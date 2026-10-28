@@ -5,6 +5,9 @@ namespace VitanCut.WinUI.Services;
 
 public static class EdgeBandingService
 {
+    public static bool IsEdgeMaterial(MaterialChoice choice) =>
+        string.Equals(choice.Type, "Кромка", StringComparison.CurrentCultureIgnoreCase) && choice.Material.Unit == "lm";
+
     public static bool IsEnabled(AppState state, Detail detail) => !detail.IsGeneratedEdgeBand &&
         state.FindMaterial(detail.Type, detail.MaterialId) is { Unit: "m2", EdgeBandingEnabled: true };
 
@@ -43,6 +46,24 @@ public static class EdgeBandingService
             assignment.Type = edge.Type;
             assignment.MaterialId = edge.Material.Id;
         }
+    }
+
+    public static bool ReplaceGeneratedMaterial(AppState state, Product product, Detail generated, MaterialChoice replacement)
+    {
+        if (!generated.IsGeneratedEdgeBand || !product.Details.Contains(generated))
+            throw new InvalidOperationException("Выберите автоматически сформированную строку кромки.");
+        if (!IsEdgeMaterial(replacement) || state.FindMaterial(replacement.Type, replacement.Material.Id)?.Unit != "lm")
+            throw new InvalidOperationException("Выберите материал категории «Кромка» в погонных метрах.");
+        var assignments = product.Details.SelectMany(detail => detail.EdgeBands)
+            .Where(edge => edge.MaterialId == generated.MaterialId && edge.Type == generated.Type).ToList();
+        if (assignments.Count == 0 || generated.MaterialId == replacement.Material.Id && generated.Type == replacement.Type) return false;
+        foreach (var assignment in assignments)
+        {
+            assignment.Type = replacement.Type;
+            assignment.MaterialId = replacement.Material.Id;
+        }
+        Refresh(state, product);
+        return true;
     }
 
     public static void Refresh(AppState state, Product product)

@@ -18,6 +18,7 @@ using (var rowJson = JsonDocument.Parse(JsonSerializer.Serialize(projectRowProdu
     Check(!rowJson.RootElement.TryGetProperty("DimensionsText", out _) && !rowJson.RootElement.TryGetProperty("dimensionsText", out _),
         "Project row dimensions text is presentation-only and does not change stored data");
 EdgeBandingChecks.Run(Check, output);
+GeneratedEdgeReplacementChecks.Run(Check, output);
 MaterialGroupingChecks.Run(Check, output);
 MaterialPricingChecks.Run(Check, output);
 LocalizationChecks.Run(Check, output);
@@ -26,6 +27,7 @@ WasteAllowanceChecks.Run(Check, output);
 ProjectCatalogPickerChecks.Run(Check, output);
 CatalogBrowserChecks.Run(Check, output);
 PayrollChecks.Run(Check, output);
+ProductUnitCostChecks.Run(Check, output);
 await CloudHealthChecks.RunAsync(Check, output);
 var windowSession = new WindowPlacementService(Path.Combine(output, "window-session.json"));
 Check(windowSession.Load() is null, "A missing window session keeps the default placement");

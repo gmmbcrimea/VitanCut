@@ -51,6 +51,20 @@ public static class Calculator
         return new Totals(area, raw, cost, 0, cost);
     }
 
+    public static double ProductUnitCost(AppState state, Project project, Product product)
+    {
+        var materialCost = 0d;
+        var area = 0d;
+        foreach (var detail in product.Details)
+        {
+            var calc = Detail(state, product, detail);
+            materialCost += calc.Cost;
+            area += calc.Area;
+        }
+        var areaRate = project.Payrolls.Where(row => row.Mode != "fixed").Sum(row => row.Rate);
+        return materialCost + area * areaRate;
+    }
+
     public static Totals Project(AppState state, Project project)
     {
         var area = 0d;

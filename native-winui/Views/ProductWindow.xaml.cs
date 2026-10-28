@@ -773,6 +773,7 @@ public sealed partial class ProductWindow : Window
         {
             nameBox.IsReadOnly = true;
             foreach (var control in grid.Children.OfType<Control>()) control.IsEnabled = false;
+            materialButton.IsEnabled = true;
             if (priceButton is not null) priceButton.IsEnabled = true;
             ToolTipService.SetToolTip(border,UiText.Get("Длина кромки рассчитывается по выбранным граням деталей."));
         }
@@ -1138,20 +1139,23 @@ public sealed partial class ProductWindow : Window
         void Filter()
         {
             var searching = !string.IsNullOrWhiteSpace(search.Text);
-            var choices = App.State.MaterialChoices().GroupBy(choice => choice.Type).OrderBy(group => group.Key)
+            var choices = App.State.MaterialChoices()
+                .Where(choice => !row.Detail.IsGeneratedEdgeBand || EdgeBandingService.IsEdgeMaterial(choice))
+                .GroupBy(choice => choice.Type).OrderBy(group => group.Key)
                 .SelectMany(group => MaterialCatalogOrdering.Sort(group, "name-asc"))
                 .Select(choice => new MaterialPickerOption(choice, choice.Material.Name,
                     $"{UnitLabel(choice.Material.Unit)} · {MaterialPricing.UnitCost(choice.Material):N2} {UiText.Get("руб.")}")).ToArray();
             var matches = choices.Where(option => UiTextSearch.Matches(search.Text, option.Name, option.Choice.Type,
                 option.Choice.Material.Group)).ToArray();
             categories.Children.Clear();
-            var categoryNames = string.IsNullOrWhiteSpace(search.Text)
+            var categoryNames = row.Detail.IsGeneratedEdgeBand ? new[] { "Кромка" }.AsEnumerable() : string.IsNullOrWhiteSpace(search.Text)
                 ? App.MaterialLibrary.GetGroups().Concat(choices.Select(option => option.Choice.Type)).Distinct().OrderBy(type => type)
                 : matches.Select(option => option.Choice.Type).Distinct().OrderBy(type => type);
             foreach (var categoryName in categoryNames)
             {
                 var options = matches.Where(option => option.Choice.Type == categoryName).ToList();
                 var add = new Button { Content = UiText.Get("Добавить"), HorizontalAlignment = HorizontalAlignment.Stretch };
+                if (row.Detail.IsGeneratedEdgeBand) add.Visibility = Visibility.Collapsed;
                 CommandAppearance.Decorate(add);
                 add.Click += async (_, _) =>
                 {
@@ -1234,6 +1238,28 @@ public sealed partial class ProductWindow : Window
     private void SelectRowMaterial(DetailRow row, Button button, MaterialChoice choice)
     {
         var verticalOffset = ProductScrollViewer.VerticalOffset;
+        if (row.Detail.IsGeneratedEdgeBand)
+        {
+            try
+            {
+                if (!EdgeBandingService.ReplaceGeneratedMaterial(App.State, _sourceProduct, row.Detail, choice)) return;
+                UpdateSummary();
+                var replacement = _detailRows.FirstOrDefault(item => item.Detail.IsGeneratedEdgeBand &&
+                    item.Detail.MaterialId == choice.Material.Id && item.Detail.Type == choice.Type);
+                _selectedDetailRow = replacement ?? _selectedDetailRow;
+                UpdateDetailSelectionVisuals();
+                ProductScrollViewer.DispatcherQueue.TryEnqueue(() =>
+                {
+                    replacement?.MaterialButton?.Focus(FocusState.Programmatic);
+                    ProductScrollViewer.ChangeView(null, verticalOffset, null);
+                });
+            }
+            catch (InvalidOperationException error)
+            {
+                NotificationCenter.Publish(UiText.Get("Не удалось сохранить"), UiText.Get(error.Message));
+            }
+            return;
+        }
         row.SelectedMaterial = choice;
         row.CommitMaterial();
         if (button.Content is Grid content && content.Children.OfType<TextBlock>().FirstOrDefault() is { } label)

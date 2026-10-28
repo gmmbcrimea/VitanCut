@@ -1654,6 +1654,16 @@ public sealed partial class MainWindow : Window
         }
     }
     private bool _buildingCut;
+    private void ProjectProductUnitCostLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TextBlock { Tag: Product product } text || SelectedProject is not { } project) return;
+        var cost = Calculator.ProductUnitCost(App.State, project, product);
+        text.Text = UiText.Format($"{Calculator.Number(cost)} руб.");
+        var label = UiText.Get("Цена за единицу") + ": " + text.Text;
+        ToolTipService.SetToolTip(text, label);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(text, label);
+    }
+
     private async void ProductThumbnailLoaded(object sender, RoutedEventArgs e)
     {
         if (sender is Image image)

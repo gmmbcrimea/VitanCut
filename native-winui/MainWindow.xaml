@@ -278,6 +278,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                               </Grid.ColumnDefinitions>
                               <Image Width="56" Height="56" Stretch="Uniform" Tag="{x:Bind Image}" Loaded="ProductThumbnailLoaded" />
                               <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
@@ -288,6 +289,9 @@
                                 <TextBlock Text="{x:Bind Qty}" FontWeight="SemiBold" />
                                 <TextBlock Text="шт." Opacity="0.72" l10n:UiLocalization.Properties="Text" />
                               </StackPanel>
+                              <TextBlock Grid.Column="3" Tag="{x:Bind}" Loaded="ProjectProductUnitCostLoaded"
+                                         VerticalAlignment="Center" HorizontalAlignment="Right" TextAlignment="Right"
+                                         FontWeight="SemiBold" MaxWidth="150" TextTrimming="CharacterEllipsis" />
                             </Grid>
                           </DataTemplate>
                         </ListView.ItemTemplate>

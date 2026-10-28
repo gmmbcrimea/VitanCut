@@ -1,6 +1,6 @@
 # Release validation
 
-Current release: 1.3.6. Materials can be dragged between groups within their category, with destination highlighting. Changing an edge-band material preserves selected sides and immediately recalculates generated rows. Project product rows show quantity on the right and dimensions below the name. Storage formats are unchanged; 734 core checks passed. Automated pointer testing of material drag-and-drop was not completed because the test-window control permission was denied; manual verification remains necessary.
+Current release: 1.3.7. Project product rows show the cost of one unit including area-based payroll, excluding fixed project payroll. Automatic edge rows allow replacing their material using only linear materials from the edge category; assignments are updated throughout the current product and duplicate automatic rows are merged. Manual edge rows and other products are unchanged. Storage formats are unchanged; 757 core checks passed. Automated pointer testing of material drag-and-drop from 1.3.6 remains incomplete because test-window control permission was denied; manual verification remains necessary.
 
 ## Previous Release Context
 

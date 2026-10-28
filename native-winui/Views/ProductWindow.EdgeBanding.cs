@@ -59,8 +59,7 @@ public sealed partial class ProductWindow
         var flyout = new Flyout { ShouldConstrainToRootBounds = true };
         var panel = new StackPanel { Width = 300, Spacing = 12 };
         panel.Children.Add(new TextBlock { Text = row.Detail.Name, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        var choices = App.State.MaterialChoices().Where(choice =>
-            string.Equals(choice.Type, "Кромка", StringComparison.CurrentCultureIgnoreCase) && choice.Material.Unit == "lm").ToList();
+        var choices = App.State.MaterialChoices().Where(EdgeBandingService.IsEdgeMaterial).ToList();
         var materials = new ComboBox { Header = UiText.Get("Материал кромки"), ItemsSource = choices, DisplayMemberPath = "Material.Name",
             HorizontalAlignment = HorizontalAlignment.Stretch, PlaceholderText = UiText.Get("Выберите кромку") };
         var current = row.Detail.EdgeBands.FirstOrDefault();
