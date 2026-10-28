@@ -24,9 +24,12 @@ internal sealed class CursorReveal : IDisposable
     private readonly CompositionPropertySet _light;
     private readonly ExpressionAnimation _position;
     private readonly Dictionary<FrameworkElement, LightMask> _masks = [];
+    private readonly HashSet<ScrollViewer> _scrollViewers = [];
+    private readonly HashSet<ScrollViewer> _scrolling = [];
     private bool _enabled;
     private bool _visible;
     private bool _layoutDirty = true;
+    private bool _refreshQueued;
     private object? _pointerSource;
 
     public CursorReveal(Window window, FrameworkElement root)
@@ -77,6 +80,9 @@ internal sealed class CursorReveal : IDisposable
             _root.SizeChanged -= OnSizeChanged;
             _root.LayoutUpdated -= OnLayoutUpdated;
             _window.Activated -= OnActivated;
+            foreach (var scroll in _scrollViewers) UnwatchScroll(scroll);
+            _scrollViewers.Clear();
+            _scrolling.Clear();
             Hide();
             ClearMasks();
             if (Equals(ElementCompositionPreview.GetElementChildVisual(_root), _host))
@@ -97,17 +103,37 @@ internal sealed class CursorReveal : IDisposable
             _pointerSource = e.OriginalSource;
             _layoutDirty = true;
         }
-        if (_layoutDirty) RefreshMasks();
         // One property drives every light sample. Hover targets never move or reparent the light.
         _light.InsertVector3("Position", new Vector3((float)point.Position.X - Radius, (float)point.Position.Y - Radius, 0));
         _visible = true;
-        _host.Opacity = 1;
+        if (!_layoutDirty && _scrolling.Count == 0) _host.Opacity = 1;
+        if (_layoutDirty) QueueMaskRefresh();
+    }
+
+    private void QueueMaskRefresh()
+    {
+        if (_refreshQueued || !_enabled || !_visible || _scrolling.Count > 0) return;
+        _refreshQueued = true;
+        if (!_root.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            _refreshQueued = false;
+            if (_enabled && _visible && _layoutDirty && _scrolling.Count == 0) RefreshMasks();
+        })) _refreshQueued = false;
     }
 
     private void RefreshMasks()
     {
+        using var measurement = App.UiPerformance.Measure(UiWork.CursorRevealMasks);
         var active = new HashSet<FrameworkElement>();
-        CollectMasks(_root, new Rect(0, 0, _root.ActualWidth, _root.ActualHeight), active);
+        var scrolls = new HashSet<ScrollViewer>();
+        var backdrop = _root.ActualTheme == ElementTheme.Dark ? Color.FromArgb(255, 32, 32, 32) : Microsoft.UI.Colors.White;
+        CollectMasks(_root, new Rect(0, 0, _root.ActualWidth, _root.ActualHeight), backdrop, active, scrolls);
+        foreach (var scroll in _scrollViewers.Where(scroll => !scrolls.Contains(scroll)).ToArray())
+        {
+            UnwatchScroll(scroll);
+            _scrollViewers.Remove(scroll);
+            _scrolling.Remove(scroll);
+        }
         foreach (var surface in _masks.Keys.Where(surface => !active.Contains(surface)).ToArray())
         {
             var mask = _masks[surface];
@@ -116,19 +142,28 @@ internal sealed class CursorReveal : IDisposable
             _masks.Remove(surface);
         }
         _layoutDirty = false;
+        if (_enabled && _visible && _scrolling.Count == 0) _host.Opacity = 1;
     }
 
-    private void CollectMasks(DependencyObject node, Rect viewport, HashSet<FrameworkElement> active)
+    private void CollectMasks(DependencyObject node, Rect viewport, Color backdrop, HashSet<FrameworkElement> active, HashSet<ScrollViewer> scrolls)
     {
         if (node is FrameworkElement { Visibility: Visibility.Collapsed } or UIElement { Opacity: <= 0 } or Canvas or Control { IsEnabled: false }) return;
         if (node is ScrollViewer scroll)
+        {
+            scrolls.Add(scroll);
+            if (_scrollViewers.Add(scroll))
+            {
+                scroll.ViewChanging += OnViewChanging;
+                scroll.ViewChanged += OnViewChanged;
+            }
             viewport = Intersect(viewport, Bounds(scroll));
+        }
         if (node is ScrollContentPresenter presenter)
             viewport = Intersect(viewport, Bounds(presenter));
         if (node is FrameworkElement element && element.Clip is Microsoft.UI.Xaml.Media.RectangleGeometry clip)
             viewport = Intersect(viewport, element.TransformToVisual(_root).TransformBounds(clip.Rect));
         if (viewport.Width <= 0 || viewport.Height <= 0) return;
-        if (node is FrameworkElement { ActualWidth: > 0, ActualHeight: > 0 } surface && TryVisibleSurface(surface, out var radius))
+        if (node is FrameworkElement { ActualWidth: > 0, ActualHeight: > 0 } surface && TryVisibleSurface(surface, backdrop, out var radius))
         {
                 var bounds = Bounds(surface);
                 var visible = Intersect(viewport, bounds);
@@ -142,11 +177,17 @@ internal sealed class CursorReveal : IDisposable
                 }
                 mask.SetBounds(bounds, viewport, radius);
         }
-        for (var index = 0; index < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node); index++)
-            CollectMasks(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, index), viewport, active);
+        // Carry the nearest painted background down once instead of searching
+        // the complete ancestor chain for every border in a large editor.
+        var background = node switch { Border border => border.Background, Panel panel => panel.Background,
+            Control control => control.Background, ContentPresenter content => content.Background, _ => null };
+        if (PaintColor(background) is { A: > 8 } color) backdrop = color;
+        var count = VisualTreeHelper.GetChildrenCount(node);
+        for (var index = 0; index < count; index++)
+            CollectMasks(VisualTreeHelper.GetChild(node, index), viewport, backdrop, active, scrolls);
     }
 
-    private bool TryVisibleSurface(FrameworkElement element, out float radius)
+    private static bool TryVisibleSurface(FrameworkElement element, Color backdrop, out float radius)
     {
         Brush? fill, stroke;
         double width;
@@ -169,12 +210,6 @@ internal sealed class CursorReveal : IDisposable
             default:
                 radius = 0;
                 return false;
-        }
-        var backdrop = _root.ActualTheme == ElementTheme.Dark ? Color.FromArgb(255, 32, 32, 32) : Microsoft.UI.Colors.White;
-        for (var parent = VisualTreeHelper.GetParent(element); parent is not null; parent = VisualTreeHelper.GetParent(parent))
-        {
-            var background = parent switch { Border border => border.Background, Panel panel => panel.Background, Control control => control.Background, ContentPresenter presenter => presenter.Background, _ => null };
-            if (PaintColor(background) is { A: > 8 } color) { backdrop = color; break; }
         }
         var fillColor = PaintColor(fill) ?? Microsoft.UI.Colors.Transparent;
         var borderColor = PaintColor(stroke) ?? Microsoft.UI.Colors.Transparent;
@@ -205,13 +240,41 @@ internal sealed class CursorReveal : IDisposable
         // PointerExited can bubble from children. Only leaving the window extinguishes the light.
         if (!UiLayout.ContainsPoint(point.X, point.Y, _root.ActualWidth, _root.ActualHeight)) Hide();
     }
-    private void OnScrolled(object sender, PointerRoutedEventArgs e) => _layoutDirty = true;
+    private void OnScrolled(object sender, PointerRoutedEventArgs e)
+    {
+        InvalidateScrollMasks();
+        QueueMaskRefresh();
+    }
+    private void OnViewChanging(object? sender, ScrollViewerViewChangingEventArgs e)
+    {
+        if (sender is ScrollViewer scroll) _scrolling.Add(scroll);
+        InvalidateScrollMasks();
+    }
+    private void OnViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (sender is not ScrollViewer scroll) return;
+        if (e.IsIntermediate) _scrolling.Add(scroll);
+        else _scrolling.Remove(scroll);
+        InvalidateScrollMasks();
+        QueueMaskRefresh();
+    }
+    private void InvalidateScrollMasks()
+    {
+        // Scrolling is compositor-driven; root-space masks are stale until the final view arrives.
+        _layoutDirty = true;
+        _host.Opacity = 0;
+    }
+    private void UnwatchScroll(ScrollViewer scroll)
+    {
+        scroll.ViewChanging -= OnViewChanging;
+        scroll.ViewChanged -= OnViewChanged;
+    }
     private void OnKeyDown(object sender, KeyRoutedEventArgs e) => Hide();
     private void OnSizeChanged(object sender, SizeChangedEventArgs e) => _layoutDirty = true;
     private void OnLayoutUpdated(object? sender, object e)
     {
         _layoutDirty = true;
-        if (_enabled && _visible) RefreshMasks();
+        QueueMaskRefresh();
     }
     private void OnActivated(object sender, WindowActivatedEventArgs e)
     {

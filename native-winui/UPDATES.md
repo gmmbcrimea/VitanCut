@@ -1,5 +1,9 @@
 # Release validation
 
+Current release: 1.3.4. Cursor reveal refreshes are coalesced and use inherited background colors in one traversal. Root-space reveal masks are hidden during scrolling and refreshed after the final view change. Diagnostic timing is enabled only in the isolated profiling mode. Formulas, pricing and storage formats are unchanged; 706 core checks passed.
+
+## Previous Release Context
+
 The primary repository contains the 1.3.3 sources, including a create-before-save payroll dialog, informative payroll rows and the renamed laminated-chipboard metric. Payroll calculations and storage formats are unchanged. The cloud health migration was applied to production on 2026-10-27; user tables were not modified. Installer 1.1.4 in the separate installer branch removes its managed background task before uninstalling. Cloud synchronization of empty product groups still requires `supabase/migrations/2026102701_product_groups.sql`; that migration has been tested locally but has not been applied to the production service. Local builds are stored in `release/<version>`; previous builds are retained. `scripts/Build-Release.ps1` publishes a self-contained application and checks that its XAML resource index is present. UI-review isolation is not enabled in production builds.
 
 ## Validate version metadata

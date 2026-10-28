@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace VitanCut.WinUI.Services;
 
-internal enum UiWork { Materials, Catalog, ProductRows, CuttingReport, DetailingReport, ImagePreview, ProductRowData, ProductRowControls, ProductRowLayout }
+internal enum UiWork { Materials, Catalog, ProductRows, CuttingReport, DetailingReport, ImagePreview, ProductRowData, ProductRowControls, ProductRowLayout, ProductSummary, ProductFormulaLabels, CursorRevealMasks }
 internal sealed record UiWorkSample(string Stage, double ElapsedMilliseconds, long? ManagedAllocatedBytes);
 
 internal sealed class UiPerformanceLog(string directory, bool enabled)

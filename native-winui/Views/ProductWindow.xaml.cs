@@ -142,6 +142,7 @@ public sealed partial class ProductWindow : Window
         _catalogEditor = catalogEditor;
 
         InitializeComponent();
+        Closed += (_, _) => App.UiPerformance.Flush();
         Root.GotFocus += (_, _) => CloseInactiveFormulaSuggestions();
         Activated += (_, args) =>
         {
@@ -574,6 +575,7 @@ public sealed partial class ProductWindow : Window
 
     private void UpdateSummary()
     {
+        using var measurement = App.UiPerformance.Measure(UiWork.ProductSummary);
         SaveProductFields();
         SyncEdgeBandRows();
         if (!_catalogEditor) ProjectDetailPricing.Capture(App.State, _sourceProduct);
@@ -850,6 +852,7 @@ public sealed partial class ProductWindow : Window
     private void RefreshFormulaLabels()
     {
         if (_refreshingFormulaText || _insertingReference) return;
+        using var measurement = App.UiPerformance.Measure(UiWork.ProductFormulaLabels);
         _refreshingFormulaText = true;
         try
         {
