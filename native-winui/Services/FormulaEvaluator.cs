@@ -18,6 +18,11 @@ public static class FormulaEvaluator
             ? $"[[detail:{replacement}:{match.Groups["side"].Value}]]"
             : match.Value);
 
+    public static string SwapDimensionReferences(string formula, string detailId) =>
+        Reference.Replace(formula, match => match.Groups["id"].Value.Equals(detailId, StringComparison.OrdinalIgnoreCase)
+            ? $"[[detail:{match.Groups["id"].Value}:{(match.Groups["side"].Value.Equals("length", StringComparison.OrdinalIgnoreCase) ? "width" : "length")}]]"
+            : match.Value);
+
     public static FormulaResult Evaluate(Product product, Detail detail, bool width = false)
     {
         try

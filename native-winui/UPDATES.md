@@ -1,6 +1,6 @@
 # Release validation
 
-Current release: 1.3.4. Cursor reveal refreshes are coalesced and use inherited background colors in one traversal. Root-space reveal masks are hidden during scrolling and refreshed after the final view change. Diagnostic timing is enabled only in the isolated profiling mode. Formulas, pricing and storage formats are unchanged; 706 core checks passed.
+Current release: 1.3.5. Swapping a detail's length and width remaps incoming dimension references throughout the current product, preserving dependent dimensions and chains. Self-references are remapped in the same pass. Storage formats and pricing are unchanged; 717 core checks passed.
 
 ## Previous Release Context
 

@@ -698,7 +698,7 @@ public sealed partial class ProductWindow : Window
         swapDimensions.Click += (_, _) =>
         {
             foreach (var target in _formulaFlyouts.Keys.ToList()) HideFormulaSuggestions(target);
-            if (!DetailDimensions.Swap(row.Detail, row.SelectedMaterial?.Material)) return;
+            if (!DetailDimensions.Swap(_sourceProduct, row.Detail, row.SelectedMaterial?.Material)) return;
             UpdateSummary();
         };
         Grid.SetColumn(swapDimensions, 4);

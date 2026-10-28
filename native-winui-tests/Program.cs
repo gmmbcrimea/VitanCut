@@ -300,22 +300,68 @@ foreach (var viewport in new[] { 640d, 998d, 1200d, 1840d })
 
 var swapMaterial = new Material { Unit = "m2" };
 var swapDetail = new Detail { LengthExpr = "600", WidthExpr = "400", Qty = 3, AllowRotation = false };
-Check(DetailDimensions.Swap(swapDetail, swapMaterial) && swapDetail.LengthExpr == "400" && swapDetail.WidthExpr == "600",
+var swapProduct = new Product { Details = [swapDetail] };
+Check(DetailDimensions.Swap(swapProduct, swapDetail, swapMaterial) && swapDetail.LengthExpr == "400" && swapDetail.WidthExpr == "600",
     "Detail dimension button exchanges numeric expressions");
 Check(swapDetail.Qty == 3 && !swapDetail.AllowRotation,
     "Swapping detail dimensions leaves quantity and rotation permission unchanged");
 swapDetail.LengthExpr = "длина изделия - 32";
 swapDetail.WidthExpr = "=[[detail:stable-reference:length]] / 2";
-Check(DetailDimensions.Swap(swapDetail, swapMaterial) && swapDetail.LengthExpr == "=[[detail:stable-reference:length]] / 2" &&
+Check(DetailDimensions.Swap(swapProduct, swapDetail, swapMaterial) && swapDetail.LengthExpr == "=[[detail:stable-reference:length]] / 2" &&
     swapDetail.WidthExpr == "длина изделия - 32", "Dimension swap preserves full formulas and stable references without evaluating them");
-Check(DetailDimensions.Swap(swapDetail, swapMaterial) && swapDetail.LengthExpr == "длина изделия - 32" &&
+Check(DetailDimensions.Swap(swapProduct, swapDetail, swapMaterial) && swapDetail.LengthExpr == "длина изделия - 32" &&
     swapDetail.WidthExpr == "=[[detail:stable-reference:length]] / 2", "A second dimension swap restores both original expressions");
 foreach (var unit in new[] { "lm", "pc" })
-    Check(!DetailDimensions.Swap(swapDetail, new Material { Unit = unit }) && swapDetail.LengthExpr == "длина изделия - 32",
+    Check(!DetailDimensions.Swap(swapProduct, swapDetail, new Material { Unit = unit }) && swapDetail.LengthExpr == "длина изделия - 32",
         "Dimension swap is unavailable for materials without editable width: " + unit);
 swapDetail.IsGeneratedEdgeBand = true;
-Check(!DetailDimensions.Swap(swapDetail, swapMaterial) && !DetailDimensions.Swap(swapDetail, null),
+Check(!DetailDimensions.Swap(swapProduct, swapDetail, swapMaterial) && !DetailDimensions.Swap(swapProduct, swapDetail, null),
     "Generated edge bands and rows without a material cannot swap dimensions");
+
+var swapSource = new Detail { Id = "swap-source", Name = "Same name", LengthExpr = "200", WidthExpr = "300" };
+var swapDependent = new Detail { Id = "swap-dependent", Name = "Same name",
+    LengthExpr = "=[[detail:swap-source:length]]", WidthExpr = "=[[detail:swap-source:width]]" };
+var swapChain = new Detail { Id = "swap-chain", LengthExpr = "=[[detail:swap-dependent:length]] + 10",
+    WidthExpr = "=sqrt([[detail:swap-source:length]]^2 + [[detail:swap-source:width]]^2)" };
+var linkedSwapProduct = new Product { Details = [swapSource, swapDependent, swapChain] };
+var beforeSwapExpressions = linkedSwapProduct.Details.Select(d => (d.LengthExpr, d.WidthExpr)).ToArray();
+var beforeSwapValues = linkedSwapProduct.Details.Select(d => (FormulaEvaluator.Evaluate(linkedSwapProduct, d).Value,
+    FormulaEvaluator.Evaluate(linkedSwapProduct, d, width: true).Value)).ToArray();
+Check(DetailDimensions.Swap(linkedSwapProduct, swapSource, swapMaterial) && swapSource.LengthExpr == "300" && swapSource.WidthExpr == "200",
+    "Linked dimension swap exchanges the source dimensions without overwriting either value");
+Check(swapDependent.LengthExpr == "=[[detail:swap-source:width]]" && swapDependent.WidthExpr == "=[[detail:swap-source:length]]",
+    "Incoming length and width references follow the original dimension after a swap");
+Check(FormulaEvaluator.Evaluate(linkedSwapProduct, swapDependent).Value == 200 &&
+    FormulaEvaluator.Evaluate(linkedSwapProduct, swapDependent, width: true).Value == 300,
+    "Dependent detail keeps its original 200 by 300 dimensions after source swap");
+Check(linkedSwapProduct.Details.Skip(1).Select(d => (FormulaEvaluator.Evaluate(linkedSwapProduct, d).Value,
+    FormulaEvaluator.Evaluate(linkedSwapProduct, d, width: true).Value)).SequenceEqual(beforeSwapValues.Skip(1)),
+    "Chained and multi-reference formulas retain their values after a dimension swap");
+var swappedPresentation = new FormulaPresentation(linkedSwapProduct);
+Check(swappedPresentation.Display(swapDependent.LengthExpr).Contains("ширина") &&
+    swappedPresentation.Storage(swappedPresentation.Display("[[detail:swap-source:width]]")) == "[[detail:swap-source:width]]",
+    "Editor labels and stored references reflect the new dimension side");
+var restoredSwapProduct = System.Text.Json.JsonSerializer.Deserialize<Product>(System.Text.Json.JsonSerializer.Serialize(linkedSwapProduct))!;
+Check(FormulaEvaluator.Evaluate(restoredSwapProduct, restoredSwapProduct.Details[1]).Value == 200 &&
+    FormulaEvaluator.Evaluate(restoredSwapProduct, restoredSwapProduct.Details[1], width: true).Value == 300,
+    "Remapped dimension references survive serialization and reopening");
+Check(DetailDimensions.Swap(linkedSwapProduct, swapSource, swapMaterial) && linkedSwapProduct.Details
+    .Select(d => (d.LengthExpr, d.WidthExpr)).SequenceEqual(beforeSwapExpressions),
+    "Swapping twice restores all source and dependent expressions exactly");
+swapSource.WidthExpr = "=[[detail:swap-source:length]] + 100";
+Check(DetailDimensions.Swap(linkedSwapProduct, swapSource, swapMaterial) &&
+    FormulaEvaluator.Evaluate(linkedSwapProduct, swapSource).Value == 300 &&
+    FormulaEvaluator.Evaluate(linkedSwapProduct, swapSource, width: true).Value == 200,
+    "A source dimension depending on its other side is remapped without creating a self-cycle");
+Check(FormulaEvaluator.SwapDimensionReferences("=[[DETAIL:SWAP-SOURCE:LENGTH]] + [[detail:other:length]] + [[detail:swap-source:width]]", "swap-source") ==
+    "=[[detail:SWAP-SOURCE:width]] + [[detail:other:length]] + [[detail:swap-source:length]]",
+    "Dimension remapping matches stable IDs case-insensitively and never retargets other details");
+var rejectedSwapExpressions = linkedSwapProduct.Details.Select(d => (d.LengthExpr, d.WidthExpr)).ToArray();
+Check(!DetailDimensions.Swap(linkedSwapProduct, swapSource, new Material { Unit = "lm" }) &&
+    linkedSwapProduct.Details.Select(d => (d.LengthExpr, d.WidthExpr)).SequenceEqual(rejectedSwapExpressions),
+    "A rejected swap leaves all dependent expressions unchanged");
+Check(!DetailDimensions.Swap(linkedSwapProduct, new Detail(), swapMaterial),
+    "A dimension swap cannot rewrite references for a detail outside the current product");
 
 Check(AccentPalette.Options.Select(x => x.Id).Distinct().Count() == AccentPalette.Options.Count, "Accent palette IDs are unique");
 Check(AppUpdateService.TryParseVersion("v1.2.3", out var parsedUpdateVersion) && parsedUpdateVersion == new Version(1, 2, 3), "Update tags accept a v-prefixed semantic version");
