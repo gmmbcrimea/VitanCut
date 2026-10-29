@@ -24,14 +24,6 @@ public sealed partial class ProductWindow
         EdgeBandingService.Refresh(App.State, _sourceProduct);
         foreach (var row in _detailRows.Where(row => row.Detail.IsGeneratedEdgeBand && !_sourceProduct.Details.Contains(row.Detail)).ToList())
         {
-            if (row.Container is { } container) DetailsRowsPanel.Children.Remove(container);
-            foreach (var field in _formulaFields.Where(pair => pair.Value.Detail == row.Detail).Select(pair => pair.Key).ToList())
-            {
-                if (_formulaFlyouts.Remove(field, out var flyout) && flyout.IsOpen) flyout.Hide();
-                _formulaSuggestionLists.Remove(field);
-                _formulaQueries.Remove(field);
-                _formulaFields.Remove(field);
-            }
             _detailRows.Remove(row);
             if (_selectedDetailRow == row) _selectedDetailRow = _detailRows.FirstOrDefault();
         }
@@ -40,9 +32,6 @@ public sealed partial class ProductWindow
         {
             var row = CreateDetailRow(detail, choices);
             _detailRows.Add(row);
-            var view = CreateDetailRowView(row);
-            DetailsRowsPanel.Children.Add(view);
-            ThemeService.ApplyLayout(view, App.Preferences.Current);
         }
         foreach (var row in _detailRows) UpdateEdgeBandButton(row);
         UpdateDetailColumns();
@@ -56,7 +45,8 @@ public sealed partial class ProductWindow
         var length = FormulaEvaluator.Evaluate(_sourceProduct, row.Detail);
         var width = FormulaEvaluator.Evaluate(_sourceProduct, row.Detail, width: true);
         var valid = length.IsValid && width.IsValid && length.Value > 0 && width.Value > 0;
-        var flyout = new Flyout { ShouldConstrainToRootBounds = true };
+        var flyout = new Flyout { ShouldConstrainToRootBounds = true, OverlayInputPassThroughElement = Root };
+        row.EdgeBandFlyout = flyout;
         var panel = new StackPanel { Width = 300, Spacing = 12 };
         panel.Children.Add(new TextBlock { Text = row.Detail.Name, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         var choices = App.State.MaterialChoices().Where(EdgeBandingService.IsEdgeMaterial).ToList();

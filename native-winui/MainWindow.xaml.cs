@@ -142,7 +142,7 @@ public sealed partial class MainWindow : Window
         ConfigureUpdateSurface();
         ConfigureTitleBar();
         AppWindow.Closing += MainWindowClosing;
-        Closed += (_, _) => { App.UiPerformance.Flush(); App.ExitOrRestart(); };
+        Closed += (_, _) => { App.UiPerformance.Trace(UiLifecycle.MainClosed); App.UiPerformance.Flush(); App.ExitOrRestart(); };
         App.Preferences.Apply(this);
         ApplyTitleBarForeground();
         Root.SizeChanged += (_, _) => UpdateResponsiveLayout();
@@ -390,6 +390,7 @@ public sealed partial class MainWindow : Window
 
     private void MainWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
+        App.UiPerformance.Trace(UiLifecycle.MainClosing);
         if (_shutdownRequested) return;
         if (_shutdownInProgress)
         {

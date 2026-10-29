@@ -125,9 +125,18 @@ var disabledProfileFolder = Path.Combine(output, "disabled-profile");
 var disabledProfile = new UiPerformanceLog(disabledProfileFolder, false);
 using (disabledProfile.Measure(UiWork.Materials)) { }
 disabledProfile.Flush();
+disabledProfile.Trace(UiLifecycle.AppStart);
 Check(!Directory.Exists(disabledProfileFolder), "Disabled UI profiler writes no files");
 var profileFolder = Path.Combine(output, "ui-profile");
 var profile = new UiPerformanceLog(profileFolder, true);
+profile.Trace(UiLifecycle.AppStart);
+profile.Trace(UiLifecycle.UiUnhandled, new InvalidOperationException("Private user input must not be logged"));
+var lifecycle = File.ReadAllLines(Path.Combine(profileFolder, "ui-lifecycle.jsonl"));
+Check(lifecycle.Length == 2 && !string.Join("", lifecycle).Contains("Private user input"), "Development lifecycle diagnostics record fixed stages without exception messages or user data");
+using (var entry = JsonDocument.Parse(lifecycle[1]))
+    Check(entry.RootElement.GetProperty("Stage").GetString() == nameof(UiLifecycle.UiUnhandled) &&
+        entry.RootElement.GetProperty("ErrorType").GetString() == typeof(InvalidOperationException).FullName,
+        "Lifecycle diagnostics preserve exception type and operation for unexpected exits");
 var stageQuota = Math.Max(1, 64 / Enum.GetValues<UiWork>().Length);
 var measured = profile.Measure(UiWork.Materials);
 measured.Dispose(); measured.Dispose();
@@ -141,6 +150,10 @@ using (var data = JsonDocument.Parse(File.ReadAllText(Path.Combine(profileFolder
 for (var sample = 0; sample < 70; sample++)
     using (profile.Measure(UiWork.ImagePreview, asynchronous: true)) { }
 profile.Flush();
+using (var counts = JsonDocument.Parse(File.ReadAllText(Path.Combine(profileFolder, "ui-performance-counts.json"))))
+    Check(counts.RootElement.GetProperty(nameof(UiWork.ImagePreview)).GetInt64() == 70 &&
+        counts.RootElement.GetProperty(nameof(UiWork.Materials)).GetInt64() == 1,
+        "UI operation counters preserve total calls while detailed samples are bounded");
 using (var data = JsonDocument.Parse(File.ReadAllText(Path.Combine(profileFolder, "ui-performance.json"))))
 {
     Check(data.RootElement.GetArrayLength() == stageQuota + 1, "UI profiler retains a bounded stage quota without losing another stage");

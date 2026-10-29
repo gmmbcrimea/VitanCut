@@ -15,6 +15,8 @@
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
+    <Button x:Name="BackgroundFocusTarget" Width="1" Height="1" MinWidth="0" MinHeight="0" Padding="0" Opacity="0"
+                    IsTabStop="False" HorizontalAlignment="Left" VerticalAlignment="Top" />
 
     <Grid Padding="24,20,24,12" ColumnSpacing="16">
       <Grid.ColumnDefinitions>
@@ -121,6 +123,7 @@
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid x:Name="DetailsToolbarHeader" ColumnSpacing="12" SizeChanged="DetailsToolbarSizeChanged">
               <Grid.ColumnDefinitions>
@@ -136,11 +139,12 @@
               </Grid>
             </Grid>
 
-            <ScrollViewer x:Name="DetailsTableViewport" Grid.Row="1" Grid.RowSpan="2"
-                          HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled"
-                          SizeChanged="DetailsTableViewportSizeChanged">
+            <Grid x:Name="DetailsTableViewport" Grid.Row="1" Grid.RowSpan="2"
+                  SizeChanged="DetailsTableViewportSizeChanged">
             <Grid x:Name="DetailsTable" RowSpacing="12">
+              <Grid.RenderTransform>
+                <TranslateTransform x:Name="DetailsHorizontalOffset" />
+              </Grid.RenderTransform>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -168,10 +172,22 @@
             </Border>
 
             <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}" BorderThickness="1" Padding="0">
-              <StackPanel x:Name="DetailsRowsPanel" Padding="4" Spacing="4" />
+              <ItemsRepeater x:Name="DetailsRowsPanel" Margin="4" VerticalCacheLength="0.5"
+                             ElementPrepared="DetailElementPrepared" ElementClearing="DetailElementClearing">
+                <ItemsRepeater.Layout>
+                  <StackLayout Spacing="4" />
+                </ItemsRepeater.Layout>
+                <ItemsRepeater.ItemTemplate>
+                  <DataTemplate>
+                    <ContentControl HorizontalContentAlignment="Stretch" IsTabStop="False" />
+                  </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+              </ItemsRepeater>
             </Border>
             </Grid>
-            </ScrollViewer>
+            </Grid>
+            <ScrollBar x:Name="DetailsHorizontalScroll" Grid.Row="3" Orientation="Horizontal" Visibility="Collapsed"
+                       ValueChanged="DetailsHorizontalScrollChanged" SmallChange="40" />
           </Grid>
         </Border>
       </StackPanel>

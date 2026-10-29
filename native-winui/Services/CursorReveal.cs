@@ -31,6 +31,8 @@ internal sealed class CursorReveal : IDisposable
     private bool _layoutDirty = true;
     private bool _refreshQueued;
     private object? _pointerSource;
+    private Point _pointerPosition;
+    private Point _maskPosition;
 
     public CursorReveal(Window window, FrameworkElement root)
     {
@@ -103,6 +105,9 @@ internal sealed class CursorReveal : IDisposable
             _pointerSource = e.OriginalSource;
             _layoutDirty = true;
         }
+        _pointerPosition = point.Position;
+        if (Math.Abs(_pointerPosition.X - _maskPosition.X) > 32 || Math.Abs(_pointerPosition.Y - _maskPosition.Y) > 32)
+            _layoutDirty = true;
         // One property drives every light sample. Hover targets never move or reparent the light.
         _light.InsertVector3("Position", new Vector3((float)point.Position.X - Radius, (float)point.Position.Y - Radius, 0));
         _visible = true;
@@ -127,7 +132,13 @@ internal sealed class CursorReveal : IDisposable
         var active = new HashSet<FrameworkElement>();
         var scrolls = new HashSet<ScrollViewer>();
         var backdrop = _root.ActualTheme == ElementTheme.Dark ? Color.FromArgb(255, 32, 32, 32) : Microsoft.UI.Colors.White;
-        CollectMasks(_root, new Rect(0, 0, _root.ActualWidth, _root.ActualHeight), backdrop, active, scrolls);
+        // Only edges within reach of the light need composition surfaces. The margin
+        // covers pointer travel while a low-priority refresh is waiting in the queue.
+        const double reach = Radius + 64;
+        _maskPosition = _pointerPosition;
+        var lightViewport = Intersect(new Rect(0, 0, _root.ActualWidth, _root.ActualHeight),
+            new Rect(_maskPosition.X - reach, _maskPosition.Y - reach, reach * 2, reach * 2));
+        CollectMasks(_root, lightViewport, backdrop, active, scrolls);
         foreach (var scroll in _scrollViewers.Where(scroll => !scrolls.Contains(scroll)).ToArray())
         {
             UnwatchScroll(scroll);

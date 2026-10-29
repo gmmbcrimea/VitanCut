@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Storage.Pickers;
 using System.Runtime.InteropServices;
+using System.Collections.ObjectModel;
 using VitanCut.WinUI.Models;
 using VitanCut.WinUI.Services;
 using Windows.Graphics;
@@ -29,6 +30,14 @@ public sealed partial class ProductWindow : Window
     private readonly bool _catalogEditor;
     private readonly List<TextBox> _fixedNameBoxes = [];
     private readonly UiRequestGate _imagePreviewRequests = new();
+    private readonly UiRequestGate _materialFocusRequests = new();
+    private readonly UiRequestGate _detailBringRequests = new();
+    private MaterialPickerOption[]? _materialPickerOptions;
+    private Database? _materialPickerDatabase;
+    private long _materialPickerRevision = -1;
+    private string _materialPickerLanguage = "";
+    private string _formulaNamesSignature = "";
+    private long _formulaNamesVersion;
     private readonly List<NumberBox> _fixedValueBoxes = [];
     private readonly Dictionary<TextBox, Flyout> _formulaFlyouts = [];
     private readonly Dictionary<TextBox, ListView> _formulaSuggestionLists = [];
@@ -39,8 +48,16 @@ public sealed partial class ProductWindow : Window
     private sealed record FormulaField(Detail Detail, bool Width, FormulaPresentation Presentation)
     {
         public string Expression => Width ? Detail.WidthExpr : Detail.LengthExpr;
+        public string? DisplayedExpression { get; set; }
+        public string? InputText { get; set; }
+        public long DisplayedNamesVersion { get; set; } = -1;
     }
-    private List<DetailRow> _detailRows = [];
+    private ObservableCollection<DetailRow> _detailRows = [];
+    private sealed record DetailRowView(Border Container, Action<DetailRow> Bind, Action Unbind)
+    {
+        public bool CompactMode { get; set; } = App.Preferences.Current.CompactMode;
+        public bool AnimationsEnabled { get; set; } = App.Preferences.Current.AnimationsEnabled;
+    }
     private DetailRow? _selectedDetailRow;
     private bool _loading = true;
     private bool _insertingReference;
@@ -48,6 +65,22 @@ public sealed partial class ProductWindow : Window
     private bool _updatingStickyDetailActions;
 
     private void ProductScrollViewChanged(object sender, ScrollViewerViewChangedEventArgs e) => UpdateStickyDetailActions();
+
+    private IDisposable? _pendingScrollFrame;
+    private void MeasureScrollFrame(object sender, PointerRoutedEventArgs e)
+    {
+        _detailBringRequests.Begin();
+        if (!App.UiPerformance.Enabled || _pendingScrollFrame is not null) return;
+        _pendingScrollFrame = App.UiPerformance.Measure(UiWork.ProductScrollFrame, asynchronous: true);
+        CompositionTarget.Rendering += CompleteScrollFrame;
+    }
+
+    private void CompleteScrollFrame(object? sender, object e)
+    {
+        CompositionTarget.Rendering -= CompleteScrollFrame;
+        _pendingScrollFrame?.Dispose();
+        _pendingScrollFrame = null;
+    }
 
     private void DetailsToolbarSizeChanged(object sender, SizeChangedEventArgs e) => UpdateStickyDetailActions();
 
@@ -80,6 +113,10 @@ public sealed partial class ProductWindow : Window
         var pin = top < 0;
         var pinned = StickyDetailsActionsSlot.Children.Contains(DetailsActionsPanel);
         if (pin == pinned) { UpdateStickyDetailClip(); return; }
+        var focused = FocusManager.GetFocusedElement(Root.XamlRoot) as Control;
+        var restoreFocus = false;
+        for (DependencyObject? parent = focused; parent is not null; parent = VisualTreeHelper.GetParent(parent))
+            if (ReferenceEquals(parent, DetailsActionsPanel)) { restoreFocus = true; break; }
         _updatingStickyDetailActions = true;
         try
         {
@@ -101,13 +138,26 @@ public sealed partial class ProductWindow : Window
             }
         }
         finally { _updatingStickyDetailActions = false; }
+        if (restoreFocus) focused?.Focus(FocusState.Programmatic);
         UpdateStickyDetailClip();
     }
 
     private void DetailsTableViewportSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        DetailsTable.Width = Math.Max(DetailTableLayout.MinimumWidth + 28, e.NewSize.Width);
+        var contentWidth = Math.Max(DetailTableLayout.MinimumWidth + 28, e.NewSize.Width);
+        DetailsTable.Width = contentWidth;
+        DetailsTable.HorizontalAlignment = HorizontalAlignment.Left;
+        var bounds = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, e.NewSize.Height);
+        if (DetailsTableViewport.Clip is RectangleGeometry clip) clip.Rect = bounds;
+        else DetailsTableViewport.Clip = new RectangleGeometry { Rect = bounds };
+        DetailsHorizontalScroll.Maximum = Math.Max(0, contentWidth - e.NewSize.Width);
+        DetailsHorizontalScroll.ViewportSize = e.NewSize.Width;
+        DetailsHorizontalScroll.LargeChange = e.NewSize.Width;
+        DetailsHorizontalScroll.Visibility = DetailsHorizontalScroll.Maximum > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private void DetailsHorizontalScrollChanged(object sender, RangeBaseValueChangedEventArgs e) =>
+        DetailsHorizontalOffset.X = -e.NewValue;
 
     private void DetailsHeaderSizeChanged(object sender, SizeChangedEventArgs e) => UpdateDetailColumns();
 
@@ -142,8 +192,20 @@ public sealed partial class ProductWindow : Window
         _catalogEditor = catalogEditor;
 
         InitializeComponent();
-        Closed += (_, _) => App.UiPerformance.Flush();
+        App.UiPerformance.Trace(UiLifecycle.ProductOpened);
+        Closed += (_, _) =>
+        {
+            App.UiPerformance.Trace(UiLifecycle.ProductClosed);
+            CompositionTarget.Rendering -= CompleteScrollFrame;
+            _pendingScrollFrame = null;
+            App.UiPerformance.Flush();
+        };
+        Root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler(MeasureScrollFrame), true);
         Root.GotFocus += (_, _) => CloseInactiveFormulaSuggestions();
+        BackgroundFocusTarget.LostFocus += (_, _) => BackgroundFocusTarget.IsTabStop = false;
+        Root.AddHandler(UIElement.TappedEvent, new TappedEventHandler(ProductBackgroundTapped), true);
+        Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) => { _materialFocusRequests.Begin(); _detailBringRequests.Begin(); }), true);
+        Root.KeyDown += (_, _) => { _materialFocusRequests.Begin(); _detailBringRequests.Begin(); };
         Activated += (_, args) =>
         {
             if (args.WindowActivationState == WindowActivationState.Deactivated)
@@ -305,28 +367,24 @@ public sealed partial class ProductWindow : Window
         {
             if (flyout.IsOpen) flyout.Hide();
         }
-        _formulaFlyouts.Clear();
-        _formulaSuggestionLists.Clear();
         _formulaQueries.Clear();
         _formulaFields.Clear();
         using (App.UiPerformance.Measure(UiWork.ProductRowData))
         {
             var materialChoices = App.State.MaterialChoices().ToList();
-            _detailRows = _sourceProduct.Details.Select(detail => CreateDetailRow(detail, materialChoices)).ToList();
+            _detailRows = new ObservableCollection<DetailRow>(_sourceProduct.Details.Select(detail => CreateDetailRow(detail, materialChoices)));
         }
         using (App.UiPerformance.Measure(UiWork.ProductRowControls))
         {
-            DetailsRowsPanel.Children.Clear();
-            foreach (var row in _detailRows)
-                DetailsRowsPanel.Children.Add(CreateDetailRowView(row));
+            DetailsRowsPanel.ItemsSource = _detailRows;
         }
         using (App.UiPerformance.Measure(UiWork.ProductRowLayout))
         {
             _selectedDetailRow = _detailRows.FirstOrDefault(row => row.Detail.Id == selectedId) ?? _detailRows.FirstOrDefault();
             UpdateDetailSelectionVisuals();
             UpdateDetailHeaders();
-            DetailsRowsPanel.UpdateLayout();
-            ThemeService.ApplyLayout(DetailsRowsPanel, App.Preferences.Current);
+            if (DetailsRowsPanel.Layout is StackLayout layout)
+                layout.Spacing = App.Preferences.Current.CompactMode ? UiLayout.CompactGap(4) : 4;
             UpdateDetailColumns();
         }
     }
@@ -360,6 +418,15 @@ public sealed partial class ProductWindow : Window
 
     private void AddDetailClick(object sender, RoutedEventArgs e)
     {
+        using var measurement = App.UiPerformance.Measure(UiWork.ProductRowAppend);
+        if (App.UiPerformance.Enabled)
+        {
+            var frame = App.UiPerformance.Measure(UiWork.ProductRowAppendFrame, asynchronous: true);
+            EventHandler<object>? rendered = null;
+            rendered = (_, _) => { CompositionTarget.Rendering -= rendered; frame.Dispose(); };
+            CompositionTarget.Rendering += rendered;
+        }
+        foreach (var target in _formulaFlyouts.Keys.ToList()) HideFormulaSuggestions(target);
         SaveProductFields();
         var detail = new Detail
         {
@@ -370,27 +437,118 @@ public sealed partial class ProductWindow : Window
             WidthExpr = "глубина изделия"
         };
         _sourceProduct.Details.Add(detail);
-        RefreshDetails(detail);
+        var row = CreateDetailRow(detail, _detailRows.FirstOrDefault()?.MaterialChoices ?? App.State.MaterialChoices().ToList());
+        _detailRows.Add(row);
+        _selectedDetailRow = row;
+        UpdateDetailSelectionVisuals();
+        UpdateDetailHeaders();
+        UpdateDetailColumns();
         UpdateSummary();
         ScrollDetailIntoView(_selectedDetailRow);
     }
 
     private void ScrollDetailIntoView(DetailRow? row)
     {
-        if (row?.Container is not FrameworkElement container) return;
-
-        void BringIntoView()
+        if (row is null) return;
+        var request = _detailBringRequests.Begin();
+        DetailsRowsPanel.DispatcherQueue.TryEnqueue(() =>
         {
-            DetailsTableViewport.UpdateLayout();
-            container.StartBringIntoView(new BringIntoViewOptions
+            if (!_detailBringRequests.IsCurrent(request)) return;
+            var index = _detailRows.IndexOf(row);
+            if (index < 0) return;
+            if (DetailsRowsPanel.GetOrCreateElement(index) is not FrameworkElement container) return;
+            void BringIntoView()
             {
-                AnimationDesired = App.Preferences.Current.AnimationsEnabled,
-                VerticalAlignmentRatio = 0.5
-            });
-        }
+                if (!_detailBringRequests.IsCurrent(request)) return;
+                container.StartBringIntoView(new BringIntoViewOptions
+                {
+                    AnimationDesired = false,
+                    VerticalAlignmentRatio = 0.5
+                });
+                // Virtualized variable-height rows can change the scroll extent after
+                // the initial bring request. Correct only the remaining clipped edge.
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                {
+                    if (!_detailBringRequests.IsCurrent(request) || !container.IsLoaded || _selectedDetailRow != row) return;
+                    var bounds = container.TransformToVisual(ProductScrollViewer).TransformBounds(
+                        new Windows.Foundation.Rect(0, 0, container.ActualWidth, container.ActualHeight));
+                    var overflow = bounds.Bottom - (ProductScrollViewer.ActualHeight - 8);
+                    if (overflow > 1) ProductScrollViewer.ChangeView(null, ProductScrollViewer.VerticalOffset + overflow, null, true);
+                });
+            }
+            if (container.IsLoaded) BringIntoView();
+            else
+            {
+                RoutedEventHandler? loaded = null;
+                loaded = (_, _) => { container.Loaded -= loaded; BringIntoView(); };
+                container.Loaded += loaded;
+            }
+        });
+    }
 
-        container.Loaded += (_, _) => BringIntoView();
-        DetailsTableViewport.DispatcherQueue.TryEnqueue(BringIntoView);
+    private void DetailElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
+    {
+        using var measurement = App.UiPerformance.Measure(UiWork.ProductRowRealize);
+        if (args.Element is not ContentControl host || args.Index < 0 || args.Index >= _detailRows.Count) return;
+        var row = _detailRows[args.Index];
+        if (host.Tag is DetailRowView existing)
+        {
+            using var reuseMeasurement = App.UiPerformance.Measure(UiWork.ProductRowReuse);
+            existing.Unbind();
+            existing.Bind(row);
+            var preferences = App.Preferences.Current;
+            if (existing.CompactMode != preferences.CompactMode || existing.AnimationsEnabled != preferences.AnimationsEnabled)
+            {
+                ThemeService.ApplyLayout(existing.Container, preferences);
+                existing.CompactMode = preferences.CompactMode;
+                existing.AnimationsEnabled = preferences.AnimationsEnabled;
+            }
+        }
+        else
+        {
+            using var createMeasurement = App.UiPerformance.Measure(UiWork.ProductRowCreate);
+            var view = CreateDetailRowView(row);
+            host.Tag = view;
+            host.Content = view.Container;
+            ThemeService.ApplyLayout(view.Container, App.Preferences.Current);
+        }
+        if (row.Container?.Child is Grid grid) ApplyDetailColumns(grid, DetailTableLayout.ColumnWidths(DetailsHeaderGrid.ActualWidth));
+        UpdateDetailSelectionVisual(row);
+    }
+
+    private void DetailElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
+    {
+        if (args.Element is ContentControl { Tag: DetailRowView view }) view.Unbind();
+        // Keep the native control subtree in the recycled template container.
+        // ItemsRepeater supplies that same container when another detail enters view.
+    }
+
+    private void CloseDetailRowFlyouts(DetailRow row)
+    {
+        _materialFocusRequests.Begin();
+        row.MaterialFlyout?.Hide();
+        row.EdgeBandFlyout?.Hide();
+        if (row.Container?.ContextFlyout is { IsOpen: true } menu) menu.Hide();
+        foreach (var field in row.FormulaBoxes) HideFormulaSuggestions(field);
+    }
+
+    private void ReleaseDetailRowView(DetailRow row)
+    {
+        CloseDetailRowFlyouts(row);
+        foreach (var field in row.FormulaBoxes)
+        {
+            if (_formulaSuggestionLists.TryGetValue(field, out var suggestions)) suggestions.ItemsSource = null;
+            _formulaQueries.Remove(field);
+            _formulaFields.Remove(field);
+            field.Tag = null;
+        }
+        row.FormulaBoxes.Clear();
+        row.Container = null;
+        row.MaterialButton = null;
+        row.MaterialFlyout = null;
+        row.EdgeBandFlyout = null;
+        row.CalculationText = null;
+        row.EdgeBandButton = null;
     }
     private async void DeleteDetailClick(object sender, RoutedEventArgs e)
     {
@@ -579,16 +737,24 @@ public sealed partial class ProductWindow : Window
         SaveProductFields();
         SyncEdgeBandRows();
         if (!_catalogEditor) ProjectDetailPricing.Capture(App.State, _sourceProduct);
-        foreach (var row in _detailRows) UpdateDetailRowCalculation(row);
-        var totals = Calculator.Product(App.State, _sourceProduct);
-        SummaryAreaText.Text = UiText.Format($"{Calculator.Number(totals.Area)} м²");
-        SummaryCostText.Text = Calculator.Money(totals.Cost);
+        var area = 0d;
+        var cost = 0d;
+        var quantity = _sourceProduct.Qty <= 0 ? 1 : _sourceProduct.Qty;
+        foreach (var row in _detailRows)
+        {
+            var calc = UpdateDetailRowCalculation(row);
+            area += calc.Area * quantity;
+            cost += calc.Cost * quantity;
+        }
+        SummaryAreaText.Text = UiText.Format($"{Calculator.Number(area)} м²");
+        SummaryCostText.Text = Calculator.Money(cost);
         RefreshFormulaLabels();
     }
 
-    private void UpdateDetailRowCalculation(DetailRow row)
+    private DetailCalc UpdateDetailRowCalculation(DetailRow row)
     {
         var calc = Calculator.Detail(App.State, _sourceProduct, row.Detail);
+        row.CalculationResult = calc;
         var unit = row.SelectedMaterial?.Material.Unit;
         var size = unit == "m2" ? $"{Calculator.Number(calc.Length)} × {Calculator.Number(calc.Width)} мм · "
             : unit == "lm" ? $"{Calculator.Number(calc.Length)} мм · " : "";
@@ -599,10 +765,12 @@ public sealed partial class ProductWindow : Window
             row.CalculationText.Foreground = (Brush)Application.Current.Resources[string.IsNullOrEmpty(calc.Error) ? "AppTextBrush" : "UiDangerBrush"];
             ToolTipService.SetToolTip(row.CalculationText,row.Calculation);
         }
+        return calc;
     }
 
-    private FrameworkElement CreateDetailRowView(DetailRow row)
+    private DetailRowView CreateDetailRowView(DetailRow row)
     {
+        var rebinding = false;
         var border = new Border
         {
             Padding = new Thickness(8),
@@ -611,8 +779,23 @@ public sealed partial class ProductWindow : Window
             Background = new SolidColorBrush(Colors.Transparent),
             Tag = row
         };
+        // Explicit row bounds let reveal skip offscreen subtrees instead of walking every editor control.
+        var rowClip = new RectangleGeometry();
+        border.Clip = rowClip;
+        border.SizeChanged += (_, _) => rowClip.Rect = new Windows.Foundation.Rect(0, 0, border.ActualWidth, border.ActualHeight);
         border.Tapped += DetailRowTapped;
-        border.ContextFlyout = CreateDetailContextMenu(row);
+        border.GotFocus += (_, _) =>
+        {
+            if (border.Tag is DetailRow focusedRow) SelectDetailRow(focusedRow);
+        };
+        border.ContextRequested += (_, args) =>
+        {
+            var menu = border.ContextFlyout ??= CreateDetailContextMenu(row);
+            if (args.TryGetPosition(border, out var point))
+                menu.ShowAt(border, new FlyoutShowOptions { Position = point });
+            else menu.ShowAt(border);
+            args.Handled = true;
+        };
         row.Container = border;
 
         var grid = new Grid { ColumnSpacing = 10 };
@@ -627,7 +810,12 @@ public sealed partial class ProductWindow : Window
 
         var nameBox = new TextBox { Text = row.Detail.Name, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(nameBox,UiText.Get("Название детали"));
-        nameBox.TextChanged += (_, _) => { row.Detail.Name = nameBox.Text; DetailRowChanged(nameBox, EventArgs.Empty); };
+        nameBox.TextChanged += (_, _) =>
+        {
+            if (rebinding || border.Tag is null || row.Detail.Name == nameBox.Text) return;
+            row.Detail.Name = nameBox.Text;
+            DetailRowChanged(nameBox, EventArgs.Empty);
+        };
         var nameCell = new Grid { ColumnSpacing = 6 };
         nameCell.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         nameCell.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -669,13 +857,22 @@ public sealed partial class ProductWindow : Window
         };
         row.MaterialButton = materialButton;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(materialButton,UiText.Get("Материал детали ") + row.Detail.Name);
-        materialButton.Flyout = CreateMaterialFlyout(row, materialButton);
+        materialButton.Click += (_, _) =>
+        {
+            row.MaterialFlyout ??= CreateMaterialFlyout(row, materialButton);
+            row.MaterialFlyout.ShowAt(materialButton);
+        };
         ToolTipService.SetToolTip(materialButton,row.SelectedMaterial?.Material.Name ?? "Выберите материал");
         Grid.SetColumn(materialButton, 1);
         grid.Children.Add(materialButton);
         var qtyBox = new NumberBox { Value = row.Detail.Qty <= 0 ? 1 : row.Detail.Qty, Minimum = 1, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(qtyBox,UiText.Get("Количество деталей ") + row.Detail.Name);
-        qtyBox.ValueChanged += (_, _) => { row.Detail.Qty = qtyBox.Value; DetailRowNumberChanged(qtyBox, null!); };
+        qtyBox.ValueChanged += (_, _) =>
+        {
+            if (rebinding || border.Tag is null || (row.Detail.Qty <= 0 ? 1 : row.Detail.Qty).Equals(qtyBox.Value)) return;
+            row.Detail.Qty = qtyBox.Value;
+            DetailRowNumberChanged(qtyBox, null!);
+        };
         Grid.SetColumn(qtyBox, 2);
         grid.Children.Add(qtyBox);
 
@@ -732,7 +929,7 @@ public sealed partial class ProductWindow : Window
         }
         rotationBox.Toggled += (_, _) =>
         {
-            if (_updatingMaterialView) return;
+            if (_updatingMaterialView || rebinding || border.Tag is null || row.Detail.AllowRotation == rotationBox.IsOn) return;
             row.Detail.AllowRotation = rotationBox.IsOn;
             UpdateRotationIndicator();
             DetailRowChanged(rotationBox, EventArgs.Empty);
@@ -777,7 +974,52 @@ public sealed partial class ProductWindow : Window
             if (priceButton is not null) priceButton.IsEnabled = true;
             ToolTipService.SetToolTip(border,UiText.Get("Длина кромки рассчитывается по выбранным граням деталей."));
         }
-        return border;
+        return new DetailRowView(border, next =>
+        {
+            rebinding = true;
+            var refreshing = _refreshingFormulaText;
+            _refreshingFormulaText = true;
+            try
+            {
+                row = next;
+                border.Tag = row;
+                border.ContextFlyout = null;
+                row.Container = border;
+                row.MaterialButton = materialButton;
+                row.EdgeBandButton = edgeButton;
+                row.CalculationText = calculationText;
+                nameBox.Text = row.Detail.Name;
+                nameBox.IsReadOnly = row.Detail.IsGeneratedEdgeBand;
+                qtyBox.Value = row.Detail.Qty <= 0 ? 1 : row.Detail.Qty;
+                materialName.Text = row.SelectedMaterial?.Material.Name ?? UiText.Get("Выберите материал");
+                materialImage.Source = null;
+                materialImage.Visibility = Visibility.Collapsed;
+                _ = LoadMaterialTextureAsync(materialImage, row.SelectedMaterial?.Material.Texture);
+                foreach (var control in grid.Children.OfType<Control>()) control.IsEnabled = !row.Detail.IsGeneratedEdgeBand;
+                materialButton.IsEnabled = true;
+                if (priceButton is not null) priceButton.IsEnabled = true;
+                BindFormulaBox(lengthBox, row, false);
+                BindFormulaBox(widthBox, row, true);
+                UpdateMaterialRowView(row, updateHeaders: false);
+                calculationText.Text = row.Calculation;
+                calculationText.Foreground = (Brush)Application.Current.Resources[string.IsNullOrEmpty(row.CalculationResult?.Error) ? "AppTextBrush" : "UiDangerBrush"];
+                ToolTipService.SetToolTip(calculationText, row.Calculation);
+                ToolTipService.SetToolTip(border, row.Detail.IsGeneratedEdgeBand ? UiText.Get("Длина кромки рассчитывается по выбранным граням деталей.") : null);
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(materialButton, UiText.Get("Материал детали ") + row.Detail.Name);
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(qtyBox, UiText.Get("Количество деталей ") + row.Detail.Name);
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(rotationBox, UiText.Get("Разрешить поворот детали ") + row.Detail.Name);
+                if (priceButton is not null) Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(priceButton, UiText.Get("Цена детали в проекте") + ": " + row.Detail.Name);
+            }
+            finally { _refreshingFormulaText = refreshing; rebinding = false; }
+        }, () =>
+        {
+            if (border.Tag is null) return;
+            ReleaseDetailRowView(row);
+            border.Tag = null;
+            border.ContextFlyout = null;
+            materialImage.Source = null;
+            _ = LoadMaterialTextureAsync(materialImage, null);
+        });
     }
 
     private async Task EditProjectDetailPriceAsync(DetailRow row)
@@ -824,36 +1066,51 @@ public sealed partial class ProductWindow : Window
 
     private TextBox CreateFormulaBox(DetailRow row, bool width, bool visible)
     {
-        var field = new FormulaField(row.Detail, width, new FormulaPresentation(_sourceProduct));
         var target = new TextBox
         {
-            Text = field.Presentation.Display(field.Expression),
             MinWidth = 0,
             VerticalAlignment = VerticalAlignment.Center,
             Visibility = visible ? Visibility.Visible : Visibility.Collapsed
         };
-        _formulaFields[target] = field;
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(target,(width ? "Ширина или формула: " : "Длина или формула: ") + row.Detail.Name);
-        ToolTipService.SetToolTip(target,target.Text);
+        BindFormulaBox(target, row, width);
         target.TextChanged += (_, _) =>
         {
-            if (_refreshingFormulaText) return;
+            if (_refreshingFormulaText || target.Tag is not DetailRow current || !_formulaFields.TryGetValue(target, out var field)) return;
+            if (field.InputText == target.Text) return;
+            field.InputText = target.Text;
             var expression = field.Presentation.Storage(target.Text);
-            if (width) row.Detail.WidthExpr = expression;
-            else row.Detail.LengthExpr = expression;
+            if (width) current.Detail.WidthExpr = expression;
+            else current.Detail.LengthExpr = expression;
             ToolTipService.SetToolTip(target,target.Text);
             DetailRowChanged(target, EventArgs.Empty);
             UpdateFormulaSuggestions(target);
         };
         target.LostFocus += (_, _) => RefreshFormulaLabels();
-        ConfigureFormulaSuggestions(target, row);
+        target.SelectionChanged += (_, _) => { if (target.FocusState != FocusState.Unfocused) UpdateFormulaSuggestions(target); };
         return target;
+    }
+
+    private void BindFormulaBox(TextBox target, DetailRow row, bool width)
+    {
+        var field = new FormulaField(row.Detail, width, new FormulaPresentation(_sourceProduct));
+        _formulaFields[target] = field;
+        row.FormulaBoxes.Add(target);
+        target.Tag = row;
+        var display = field.Presentation.Display(field.Expression);
+        field.InputText = display;
+        target.Text = display;
+        field.DisplayedExpression = field.Expression;
+        field.DisplayedNamesVersion = _formulaNamesVersion;
+        ToolTipService.SetToolTip(target, display);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(target, (width ? "Ширина или формула: " : "Длина или формула: ") + row.Detail.Name);
     }
 
     private void RefreshFormulaLabels()
     {
         if (_refreshingFormulaText || _insertingReference) return;
         using var measurement = App.UiPerformance.Measure(UiWork.ProductFormulaLabels);
+        var names = string.Join("\0", _sourceProduct.Details.Select(detail => detail.Id + ":" + detail.Name));
+        if (names != _formulaNamesSignature) { _formulaNamesSignature = names; _formulaNamesVersion++; }
         _refreshingFormulaText = true;
         try
         {
@@ -861,9 +1118,13 @@ public sealed partial class ProductWindow : Window
             {
                 if (target.FocusState != FocusState.Unfocused) continue;
                 if (_formulaFlyouts.TryGetValue(target, out var suggestions) && suggestions.IsOpen) continue;
+                if (field.DisplayedExpression == field.Expression && field.DisplayedNamesVersion == _formulaNamesVersion) continue;
                 var display = field.Presentation.Display(field.Expression);
+                field.InputText = display;
                 if (target.Text != display) target.Text = display;
                 ToolTipService.SetToolTip(target,display);
+                field.DisplayedExpression = field.Expression;
+                field.DisplayedNamesVersion = _formulaNamesVersion;
             }
         }
         finally { _refreshingFormulaText = false; }
@@ -874,6 +1135,7 @@ public sealed partial class ProductWindow : Window
         var flyout = new Flyout
         {
             Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
+            OverlayInputPassThroughElement = Root,
             ShowMode = FlyoutShowMode.Transient
         };
         var list = new ListView
@@ -909,8 +1171,6 @@ public sealed partial class ProductWindow : Window
             if (!flyout.IsOpen) _formulaQueries.Remove(target);
             RefreshFormulaLabels();
         };
-        target.Tag = row;
-        target.SelectionChanged += (_, _) => { if (target.FocusState != FocusState.Unfocused) UpdateFormulaSuggestions(target); };
         target.KeyDown += (_, args) =>
         {
             if (!flyout.IsOpen) return;
@@ -956,7 +1216,7 @@ public sealed partial class ProductWindow : Window
 
     private void UpdateFormulaSuggestions(TextBox target)
     {
-        if (_loading || _refreshingFormulaText || _insertingReference || !_formulaFlyouts.TryGetValue(target, out var flyout)) return;
+        if (_loading || _refreshingFormulaText || _insertingReference) return;
         if (!FormulaSuggestionsOwnFocus(target))
         {
             HideFormulaSuggestions(target);
@@ -970,6 +1230,13 @@ public sealed partial class ProductWindow : Window
         {
             HideFormulaSuggestions(target);
             return;
+        }
+
+        if (!_formulaFlyouts.TryGetValue(target, out var flyout))
+        {
+            if (target.Tag is not DetailRow row) return;
+            ConfigureFormulaSuggestions(target, row);
+            flyout = _formulaFlyouts[target];
         }
 
         var query = FormulaText.NormalizeWhitespace(text[queryStart..caret]);
@@ -1059,7 +1326,7 @@ public sealed partial class ProductWindow : Window
             var detailName = string.IsNullOrWhiteSpace(row.Detail.Name)
                 ? UiText.Format($"Деталь {detailIndex}")
                 : row.Detail.Name.Trim();
-            var calc = Calculator.Detail(App.State, _sourceProduct, row.Detail);
+            var calc = row.CalculationResult ?? Calculator.Detail(App.State, _sourceProduct, row.Detail);
 
             yield return new FormulaReference(
                 UiText.Get("Детали"),
@@ -1094,9 +1361,12 @@ public sealed partial class ProductWindow : Window
 
     private Flyout CreateMaterialFlyout(DetailRow row, Button button)
     {
-        var flyout = new Flyout();
+        var flyout = new Flyout { OverlayInputPassThroughElement = Root };
         var panel = new StackPanel { Spacing = 8, Width = 320 };
         var search = new TextBox { PlaceholderText = UiText.Get("Поиск материала"), MaxLength = 200 };
+        var resettingSearch = false;
+        var filterTimer = DispatcherQueue.CreateTimer();
+        filterTimer.Interval = TimeSpan.FromMilliseconds(120);
         var categories = new StackPanel { Spacing = 4 };
         var scroll = new ScrollViewer
         {
@@ -1111,12 +1381,13 @@ public sealed partial class ProductWindow : Window
         {
             var list = new ListView
             {
+                MaxHeight = 240,
                 IsItemClickEnabled = true, SelectionMode = ListViewSelectionMode.Single,
                 ItemTemplate = (DataTemplate)Application.Current.Resources["MaterialPickerTemplate"],
                 ItemsSource = options
             };
-            ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Disabled);
-            ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Disabled);
+            ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Enabled);
+            ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Auto);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list, label);
             list.SelectedItem = options.FirstOrDefault(option => option.Choice == row.SelectedMaterial);
             list.ItemClick += (_, e) => Select((MaterialPickerOption)e.ClickedItem);
@@ -1138,13 +1409,10 @@ public sealed partial class ProductWindow : Window
         }
         void Filter()
         {
+            using var measurement = App.UiPerformance.Measure(UiWork.MaterialPicker);
             var searching = !string.IsNullOrWhiteSpace(search.Text);
-            var choices = App.State.MaterialChoices()
-                .Where(choice => !row.Detail.IsGeneratedEdgeBand || EdgeBandingService.IsEdgeMaterial(choice))
-                .GroupBy(choice => choice.Type).OrderBy(group => group.Key)
-                .SelectMany(group => MaterialCatalogOrdering.Sort(group, "name-asc"))
-                .Select(choice => new MaterialPickerOption(choice, choice.Material.Name,
-                    $"{UnitLabel(choice.Material.Unit)} · {MaterialPricing.UnitCost(choice.Material):N2} {UiText.Get("руб.")}")).ToArray();
+            var choices = MaterialPickerOptions().Where(option => !row.Detail.IsGeneratedEdgeBand ||
+                EdgeBandingService.IsEdgeMaterial(option.Choice)).ToArray();
             var matches = choices.Where(option => UiTextSearch.Matches(search.Text, option.Name, option.Choice.Type,
                 option.Choice.Material.Group)).ToArray();
             categories.Children.Clear();
@@ -1178,6 +1446,7 @@ public sealed partial class ProductWindow : Window
                 var populated = false;
                 expander.Expanding += (_, _) =>
                 {
+                    using var measurement = App.UiPerformance.Measure(UiWork.MaterialPickerExpand);
                     if (populated) return;
                     populated = true;
                     foreach (var materialGroup in options.GroupBy(option => option.Choice.Material.Group.Trim(), StringComparer.CurrentCultureIgnoreCase))
@@ -1209,12 +1478,21 @@ public sealed partial class ProductWindow : Window
         }
         void Select(MaterialPickerOption option)
         {
+            if (!ReferenceEquals(row.MaterialButton, button) || row.Container is null) return;
             flyout.Hide();
             SelectRowMaterial(row, button, option.Choice);
         }
-        search.TextChanged += (_, _) => Filter();
+        filterTimer.Tick += (_, _) => { filterTimer.Stop(); if (flyout.IsOpen) Filter(); };
+        search.TextChanged += (_, _) =>
+        {
+            if (resettingSearch || !flyout.IsOpen) return;
+            filterTimer.Stop();
+            filterTimer.Start();
+        };
         search.KeyDown += (_, e) =>
         {
+            if (filterTimer.IsRunning && e.Key is Windows.System.VirtualKey.Down or Windows.System.VirtualKey.Enter)
+            { filterTimer.Stop(); Filter(); }
             var first = categories.Children.OfType<Expander>().FirstOrDefault();
             if (e.Key == Windows.System.VirtualKey.Down && first is not null)
             {
@@ -1227,7 +1505,16 @@ public sealed partial class ProductWindow : Window
                 matches.Items.OfType<MaterialPickerOption>().FirstOrDefault() is { } option)
             { Select(option); e.Handled = true; }
         };
-        flyout.Opened += (_, _) => { search.Text = string.Empty; Filter(); search.Focus(FocusState.Programmatic); };
+        flyout.Opening += (_, _) =>
+        {
+            filterTimer.Stop();
+            resettingSearch = true;
+            try { search.Text = string.Empty; }
+            finally { resettingSearch = false; }
+            Filter();
+        };
+        flyout.Closed += (_, _) => filterTimer.Stop();
+        flyout.Opened += (_, _) => search.Focus(FocusState.Programmatic);
         panel.Children.Add(search);
         panel.Children.Add(scroll);
         panel.Children.Add(empty);
@@ -1235,8 +1522,23 @@ public sealed partial class ProductWindow : Window
         return flyout;
     }
 
+    private MaterialPickerOption[] MaterialPickerOptions()
+    {
+        if (_materialPickerOptions is not null && ReferenceEquals(_materialPickerDatabase, App.State.Database) &&
+            _materialPickerRevision == App.State.Revision && _materialPickerLanguage == UiText.Language)
+            return _materialPickerOptions;
+        _materialPickerDatabase = App.State.Database;
+        _materialPickerRevision = App.State.Revision;
+        _materialPickerLanguage = UiText.Language;
+        return _materialPickerOptions = App.State.MaterialChoices().GroupBy(choice => choice.Type).OrderBy(group => group.Key)
+            .SelectMany(group => MaterialCatalogOrdering.Sort(group, "name-asc"))
+            .Select(choice => new MaterialPickerOption(choice, choice.Material.Name,
+                $"{UnitLabel(choice.Material.Unit)} · {MaterialPricing.UnitCost(choice.Material):N2} {UiText.Get("руб.")}")).ToArray();
+    }
+
     private void SelectRowMaterial(DetailRow row, Button button, MaterialChoice choice)
     {
+        var focusRequest = _materialFocusRequests.Begin();
         var verticalOffset = ProductScrollViewer.VerticalOffset;
         if (row.Detail.IsGeneratedEdgeBand)
         {
@@ -1250,6 +1552,7 @@ public sealed partial class ProductWindow : Window
                 UpdateDetailSelectionVisuals();
                 ProductScrollViewer.DispatcherQueue.TryEnqueue(() =>
                 {
+                    if (!_materialFocusRequests.IsCurrent(focusRequest)) return;
                     replacement?.MaterialButton?.Focus(FocusState.Programmatic);
                     ProductScrollViewer.ChangeView(null, verticalOffset, null);
                 });
@@ -1270,12 +1573,13 @@ public sealed partial class ProductWindow : Window
         UpdateSummary();
         ProductScrollViewer.DispatcherQueue.TryEnqueue(() =>
         {
+            if (!_materialFocusRequests.IsCurrent(focusRequest)) return;
             button.Focus(FocusState.Programmatic);
             ProductScrollViewer.ChangeView(null, verticalOffset, null);
         });
     }
 
-    private void UpdateMaterialRowView(DetailRow row)
+    private void UpdateMaterialRowView(DetailRow row, bool updateHeaders = true)
     {
         UpdateEdgeBandButton(row);
         if (row.Container?.Child is not Grid grid) return;
@@ -1301,7 +1605,7 @@ public sealed partial class ProductWindow : Window
             finally { _updatingMaterialView = false; }
         }
         ToolTipService.SetToolTip(row.MaterialButton!,material?.Name ?? "Выберите материал");
-        UpdateDetailHeaders();
+        if (updateHeaders) UpdateDetailHeaders();
     }
 
     private static Task LoadMaterialTextureAsync(Image image, string? source) =>
@@ -1344,21 +1648,49 @@ public sealed partial class ProductWindow : Window
     {
         if (sender is Border { Tag: DetailRow row })
         {
-            _selectedDetailRow = row;
-            UpdateDetailSelectionVisuals();
+            SelectDetailRow(row);
         }
+    }
+
+    private void SelectDetailRow(DetailRow row)
+    {
+        if (ReferenceEquals(_selectedDetailRow, row)) return;
+        var previous = _selectedDetailRow;
+        _selectedDetailRow = row;
+        if (previous is not null) UpdateDetailSelectionVisual(previous);
+        UpdateDetailSelectionVisual(row);
+    }
+
+    private void ProductBackgroundTapped(object sender, TappedRoutedEventArgs e)
+    {
+        DetailRow? clickedRow = null;
+        for (var element = e.OriginalSource as DependencyObject; element is not null && element != Root;
+             element = VisualTreeHelper.GetParent(element))
+        {
+            // Leave native input, buttons, popups and scrollbars in charge of their own focus.
+            if (element is Control control && control is not ScrollViewer && control.GetType() != typeof(ContentControl)) return;
+            if (element is Border { Tag: DetailRow row }) clickedRow = row;
+        }
+
+        if (FocusManager.GetFocusedElement(Root.XamlRoot) is TextBox or NumberBox)
+        {
+            BackgroundFocusTarget.IsTabStop = true;
+            BackgroundFocusTarget.Focus(FocusState.Programmatic);
+        }
+        if (clickedRow is not null) SelectDetailRow(clickedRow);
+        e.Handled = true;
     }
 
     private void UpdateDetailSelectionVisuals()
     {
-        foreach (var row in _detailRows)
-        {
-            if (row.Container is null) continue;
-            row.Container.BorderThickness = new Thickness(1);
-            row.Container.BorderBrush = row == _selectedDetailRow
-                ? (Brush)Application.Current.Resources["AppAccentBrush"]
-                : null;
-        }
+        foreach (var row in _detailRows) UpdateDetailSelectionVisual(row);
+    }
+
+    private void UpdateDetailSelectionVisual(DetailRow row)
+    {
+        if (row.Container is null) return;
+        var brush = row == _selectedDetailRow ? (Brush)Application.Current.Resources["AppAccentBrush"] : null;
+        if (!ReferenceEquals(row.Container.BorderBrush, brush)) row.Container.BorderBrush = brush;
     }
 
     private IntPtr MinSizeSubclassProc(IntPtr hwnd, uint message, UIntPtr wParam, IntPtr lParam, UIntPtr subclassId, UIntPtr refData)
@@ -1466,7 +1798,11 @@ public sealed class DetailRow(Detail detail, List<MaterialChoice> materialChoice
     public List<MaterialChoice> MaterialChoices { get; } = materialChoices;
     public MaterialChoice? SelectedMaterial { get; set; } = materialChoices.FirstOrDefault(item => item.Type == detail.Type && item.Material.Id == detail.MaterialId);
     public Button? MaterialButton { get; set; }
+    public Flyout? MaterialFlyout { get; set; }
+    public Flyout? EdgeBandFlyout { get; set; }
+    public List<TextBox> FormulaBoxes { get; } = [];
     public string Calculation { get; set; } = "";
+    public DetailCalc? CalculationResult { get; set; }
     public Border? Container { get; set; }
     public TextBlock? CalculationText { get; set; }
     public Button? EdgeBandButton { get; set; }

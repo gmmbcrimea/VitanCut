@@ -11,6 +11,7 @@ public partial class App : Application
 
     internal static void ExitOrRestart()
     {
+        UiPerformance.Trace(UiLifecycle.AppExitRequested);
         if (RestartRequested && !_restartStarted)
         {
             var start = new System.Diagnostics.ProcessStartInfo
@@ -47,8 +48,16 @@ public partial class App : Application
 
     public App()
     {
+        UiPerformance.Trace(UiLifecycle.AppStart);
+        if (UiPerformance.Enabled)
+        {
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => UiPerformance.Trace(UiLifecycle.ProcessExit);
+            AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+                UiPerformance.Trace(UiLifecycle.ManagedUnhandled, args.ExceptionObject as Exception);
+        }
         UnhandledException += (_, args) =>
         {
+            UiPerformance.Trace(UiLifecycle.UiUnhandled, args.Exception);
             args.Handled = true;
             LogError(args.Exception);
             if (_mainWindow is RecoveryWindow recovery)

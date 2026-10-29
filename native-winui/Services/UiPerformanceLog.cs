@@ -3,14 +3,33 @@ using System.Text.Json;
 
 namespace VitanCut.WinUI.Services;
 
-internal enum UiWork { Materials, Catalog, ProductRows, CuttingReport, DetailingReport, ImagePreview, ProductRowData, ProductRowControls, ProductRowLayout, ProductSummary, ProductFormulaLabels, CursorRevealMasks }
+internal enum UiWork { Materials, Catalog, ProductRows, CuttingReport, DetailingReport, ImagePreview, ProductRowData, ProductRowControls, ProductRowLayout, ProductSummary, ProductFormulaLabels, CursorRevealMasks, MaterialPicker, MaterialPickerExpand, ProductRowAppend, ProductRowRealize, ProductRowAppendFrame, ProductScrollFrame, ProductRowReuse, ProductRowCreate }
 internal sealed record UiWorkSample(string Stage, double ElapsedMilliseconds, long? ManagedAllocatedBytes);
+internal enum UiLifecycle { AppStart, AppExitRequested, ProcessExit, ManagedUnhandled, UiUnhandled, MainClosing, MainClosed, ProductOpened, ProductClosed }
 
 internal sealed class UiPerformanceLog(string directory, bool enabled)
 {
+    public bool Enabled => enabled;
+    public void Trace(UiLifecycle stage, Exception? error = null)
+    {
+        if (!enabled) return;
+        try
+        {
+            lock (_gate)
+            {
+                Directory.CreateDirectory(directory);
+                var entry = new { Time = DateTimeOffset.UtcNow, ProcessId = Environment.ProcessId,
+                    Stage = stage.ToString(), ExitCode = Environment.ExitCode,
+                    ErrorType = error?.GetType().FullName, HResult = error?.HResult };
+                File.AppendAllText(Path.Combine(directory, "ui-lifecycle.jsonl"), JsonSerializer.Serialize(entry) + Environment.NewLine);
+            }
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException) { }
+    }
     private const int Capacity = 64;
     private static readonly int SamplesPerStage = Math.Max(1, Capacity / Enum.GetValues<UiWork>().Length);
     private readonly Queue<UiWorkSample> _samples = new();
+    private readonly Dictionary<string, long> _counts = new();
     private readonly object _gate = new();
 
     public IDisposable Measure(UiWork stage, bool asynchronous = false) =>
@@ -20,6 +39,7 @@ internal sealed class UiPerformanceLog(string directory, bool enabled)
     {
         lock (_gate)
         {
+            _counts[sample.Stage] = _counts.GetValueOrDefault(sample.Stage) + 1;
             if (_samples.Count(item => item.Stage == sample.Stage) == SamplesPerStage)
             {
                 var remaining = _samples.ToArray();
@@ -40,9 +60,14 @@ internal sealed class UiPerformanceLog(string directory, bool enabled)
     {
         if (!enabled) return;
         UiWorkSample[] samples;
-        lock (_gate) samples = _samples.ToArray();
+        Dictionary<string, long> counts;
+        lock (_gate) { samples = _samples.ToArray(); counts = new(_counts); }
         if (samples.Length == 0) return;
-        try { AtomicJsonFile.Write(Path.Combine(directory, "ui-performance.json"), JsonSerializer.Serialize(samples)); }
+        try
+        {
+            AtomicJsonFile.Write(Path.Combine(directory, "ui-performance.json"), JsonSerializer.Serialize(samples));
+            AtomicJsonFile.Write(Path.Combine(directory, "ui-performance-counts.json"), JsonSerializer.Serialize(counts));
+        }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
     }
 
