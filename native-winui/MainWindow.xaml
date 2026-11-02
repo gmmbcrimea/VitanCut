@@ -250,7 +250,7 @@
                     <RowDefinition Height="Auto" />
                   </Grid.RowDefinitions>
                   <TextBlock Text="Изделия" Style="{StaticResource CardTitleTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
-                  <Grid Grid.Row="1" MinHeight="360">
+                  <Grid x:Name="ProductsListViewport" Grid.Row="1" MinHeight="360">
                     <Border Style="{StaticResource ListSurfaceStyle}">
                       <ListView x:Name="ProductsList"
                                 MaxHeight="360"
@@ -312,7 +312,7 @@
                     <RowDefinition Height="Auto" />
                   </Grid.RowDefinitions>
                   <TextBlock Text="ЗП" Style="{StaticResource CardTitleTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
-                  <Grid Grid.Row="1" MinHeight="360">
+                  <Grid x:Name="PayrollListViewport" Grid.Row="1" MinHeight="360">
                     <Border Style="{StaticResource ListSurfaceStyle}">
                       <ListView x:Name="PayrollsList"
                                 MaxHeight="360"

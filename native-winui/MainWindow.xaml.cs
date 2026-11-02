@@ -2072,6 +2072,8 @@ public sealed partial class MainWindow : Window
             var listHeight = UiLayout.WorkListHeight(ProjectPanel.ActualHeight, headerHeight);
             const double listPanelChrome = 88;
             ProjectWorkListsGrid.MaxHeight = (listHeight + listPanelChrome) * (stackLists ? 2 : 1) + (stackLists ? 12 : 0);
+            ProductsListViewport.Height = listHeight;
+            PayrollListViewport.Height = listHeight;
             ProductsList.Height = listHeight;
             PayrollsList.Height = listHeight;
             ProductsList.MaxHeight = listHeight;
