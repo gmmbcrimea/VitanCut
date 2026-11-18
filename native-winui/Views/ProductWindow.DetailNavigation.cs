@@ -6,6 +6,8 @@ namespace VitanCut.WinUI.Views;
 
 public sealed partial class ProductWindow
 {
+    private enum DetailFocus { Name, Material }
+
     private bool FocusEditorAnchor()
     {
         BackgroundFocusTarget.IsTabStop = true;
@@ -18,10 +20,10 @@ public sealed partial class ProductWindow
         row is { Container: { } container, MaterialButton: { IsLoaded: true } button } &&
         ReferenceEquals(container.Tag, row) && button.Focus(FocusState.Programmatic);
 
-    private void RevealDetail(DetailRow row, bool focusMaterial = false)
+    private void RevealDetail(DetailRow row, DetailFocus focus)
     {
         var request = _detailViewRequests.Begin();
-        bool IsCurrent() => Root.XamlRoot is not null && _detailViewRequests.IsCurrent(request) &&
+        bool IsCurrent() => !_editorClosed && Root.XamlRoot is not null && _detailViewRequests.IsCurrent(request) &&
             _detailEditor.Contains(row.Detail);
 
         DispatcherQueue.TryEnqueue(() =>
@@ -29,6 +31,8 @@ public sealed partial class ProductWindow
             if (!IsCurrent()) return;
             var index = _detailRows.IndexOf(row);
             if (index < 0) return;
+            if (focus == DetailFocus.Name && DetailsHorizontalScroll.Value > 0)
+                DetailsHorizontalScroll.Value = 0;
             DetailsRowsPanel.UpdateLayout();
             if (DetailsRowsPanel.GetOrCreateElement(index) is not FrameworkElement host) return;
             void BringAndFocus()
@@ -40,7 +44,7 @@ public sealed partial class ProductWindow
                 if (activeIndex < 0 || DetailsRowsPanel.TryGetElement(activeIndex) is not FrameworkElement currentHost ||
                     !ReferenceEquals(row.Container?.Tag, row)) return;
                 if (!IsDetailVisible(currentHost))
-                    currentHost.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false, VerticalAlignmentRatio = 0.5 });
+                    ProductEditorMotion.BringIntoView(currentHost, 0.5);
 
                 DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
                 {
@@ -49,8 +53,14 @@ public sealed partial class ProductWindow
                     if (currentIndex < 0) return;
                     if (DetailsRowsPanel.TryGetElement(currentIndex) is FrameworkElement { IsLoaded: true } realized &&
                         ReferenceEquals(row.Container?.Tag, row) && !IsDetailVisible(realized))
-                        realized.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false, VerticalAlignmentRatio = 0.5 });
-                    if (!focusMaterial) return;
+                        ProductEditorMotion.BringIntoView(realized, 0.5);
+                    if (focus == DetailFocus.Name)
+                    {
+                        if (ReferenceEquals(row.Container?.Tag, row) && row.NameBox is { IsLoaded: true } nameBox &&
+                            nameBox.Focus(FocusState.Programmatic))
+                            nameBox.SelectAll();
+                        return;
+                    }
                     var focused = TryFocusMaterial(row);
                     TraceMaterial("picker.restore-focus", row.Detail, focused ? "material-field" : "editor-fallback");
                     TraceMaterial("option.post-layout", row.Detail, row.MaterialName is not { } label ? "no-view" :

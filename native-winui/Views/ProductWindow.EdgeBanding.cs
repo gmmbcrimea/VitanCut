@@ -25,13 +25,20 @@ public sealed partial class ProductWindow
         var length = FormulaEvaluator.Evaluate(_sourceProduct, row.Detail);
         var width = FormulaEvaluator.Evaluate(_sourceProduct, row.Detail, width: true);
         var valid = length.IsValid && width.IsValid && length.Value > 0 && width.Value > 0;
-        var flyout = new Flyout { ShouldConstrainToRootBounds = true, OverlayInputPassThroughElement = Root };
+        var flyout = new Flyout
+        {
+            ShouldConstrainToRootBounds = true,
+            OverlayInputPassThroughElement = Root,
+            AreOpenCloseAnimationsEnabled = false
+        };
+        var panel = new StackPanel { Width = 300, Spacing = 12 };
+        flyout.Opened += (_, _) => _motion.ShowPopup(panel);
         row.EdgeBandFlyout = flyout;
         flyout.Closed += (_, _) =>
         {
+            ProductEditorMotion.Reset(panel);
             if (ReferenceEquals(row.EdgeBandFlyout, flyout)) row.EdgeBandFlyout = null;
         };
-        var panel = new StackPanel { Width = 300, Spacing = 12 };
         panel.Children.Add(new TextBlock { Text = row.Detail.Name, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         var choices = App.State.MaterialChoices().Where(EdgeBandingService.IsEdgeMaterial).ToList();
         var materials = new ComboBox { Header = UiText.Get("Материал кромки"), ItemsSource = choices, DisplayMemberPath = "Material.Name",

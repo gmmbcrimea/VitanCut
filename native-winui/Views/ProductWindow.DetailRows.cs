@@ -55,13 +55,7 @@ public sealed partial class ProductWindow
     {
         if (_editorClosed || _saving || _materialPickerOpen || _confirmingDetailDelete) return;
         using var measurement = App.UiPerformance.Measure(UiWork.ProductRowAppend);
-        if (App.UiPerformance.Enabled)
-        {
-            var frame = App.UiPerformance.Measure(UiWork.ProductRowAppendFrame, asynchronous: true);
-            EventHandler<object>? rendered = null;
-            rendered = (_, _) => { CompositionTarget.Rendering -= rendered; frame.Dispose(); };
-            CompositionTarget.Rendering += rendered;
-        }
+        MeasureNextFrame(UiWork.ProductRowAppendFrame);
         foreach (var target in _formulaFlyouts.Keys.ToList()) HideFormulaSuggestions(target);
         var detail = new Detail
         {
@@ -77,7 +71,7 @@ public sealed partial class ProductWindow
         TraceMaterial("detail.add", detail, value: _detailRows.Count);
         SelectDetailRow(row);
         UpdateSummary();
-        RevealDetail(row);
+        RevealDetail(row, DetailFocus.Name);
     }
 
     private void DetailElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
@@ -141,6 +135,7 @@ public sealed partial class ProductWindow
         }
         row.FormulaBoxes.Clear();
         row.Container = null;
+        row.NameBox = null;
         row.MaterialButton = null;
         row.MaterialName = null;
         row.MaterialImage = null;
@@ -270,6 +265,7 @@ public sealed partial class ProductWindow
         {
             if (border.Tag is not DetailRow activeRow) return;
             var menu = border.ContextFlyout ??= CreateDetailContextMenu(activeRow);
+            menu.AreOpenCloseAnimationsEnabled = _motion.AllowsAnimations;
             if (args.TryGetPosition(border, out var point))
                 menu.ShowAt(border, new FlyoutShowOptions { Position = point });
             else menu.ShowAt(border);
@@ -288,6 +284,7 @@ public sealed partial class ProductWindow
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
 
         var nameBox = new TextBox { Text = row.Detail.Name, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
+        row.NameBox = nameBox;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(nameBox,UiText.Get("Название детали"));
         nameBox.TextChanged += (_, _) =>
         {
@@ -494,6 +491,7 @@ public sealed partial class ProductWindow
                 border.Tag = row;
                 border.ContextFlyout = null;
                 row.Container = border;
+                row.NameBox = nameBox;
                 row.MaterialButton = materialButton;
                 row.MaterialName = materialName;
                 row.MaterialImage = materialImage;
@@ -656,6 +654,7 @@ public sealed partial class ProductWindow
     {
         public Detail Detail { get; } = detail;
         public MaterialChoice? SelectedMaterial => editor.MaterialFor(Detail);
+        public TextBox? NameBox { get; set; }
         public Button? MaterialButton { get; set; }
         public TextBlock? MaterialName { get; set; }
         public Image? MaterialImage { get; set; }

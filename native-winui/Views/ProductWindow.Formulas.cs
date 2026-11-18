@@ -110,6 +110,7 @@ public sealed partial class ProductWindow
     {
         var flyout = new Flyout
         {
+            AreOpenCloseAnimationsEnabled = false,
             Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
             OverlayInputPassThroughElement = Root,
             ShowMode = FlyoutShowMode.Transient
@@ -118,6 +119,7 @@ public sealed partial class ProductWindow
         {
             Width = 400, MaxHeight = 320, IsItemClickEnabled = true,
             SelectionMode = ListViewSelectionMode.Single,
+            ItemContainerTransitions = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection(),
             ItemTemplate = (DataTemplate)Application.Current.Resources["FormulaReferenceTemplate"]
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list,UiText.Get("Ссылки на размеры"));

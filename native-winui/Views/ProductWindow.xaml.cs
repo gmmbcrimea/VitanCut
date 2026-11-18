@@ -24,6 +24,7 @@ public sealed partial class ProductWindow : Window
     private readonly Project _project;
     private readonly Product _sourceProduct;
     private readonly ProductDetailEditor _detailEditor;
+    private readonly ProductEditorMotion _motion = new();
     private readonly bool _isNew;
     private readonly CatalogService? _catalog;
     private readonly bool _catalogEditor;
@@ -38,20 +39,26 @@ public sealed partial class ProductWindow : Window
 
     private void ProductScrollViewChanged(object sender, ScrollViewerViewChangedEventArgs e) => UpdateStickyDetailActions();
 
-    private IDisposable? _pendingScrollFrame;
+    private readonly Dictionary<UiWork, IDisposable> _frameMeasurements = [];
+
     private void MeasureScrollFrame(object sender, PointerRoutedEventArgs e)
     {
         if (!_materialPickerOpen) _detailViewRequests.Begin();
-        if (!App.UiPerformance.Enabled || _pendingScrollFrame is not null) return;
-        _pendingScrollFrame = App.UiPerformance.Measure(UiWork.ProductScrollFrame, asynchronous: true);
-        CompositionTarget.Rendering += CompleteScrollFrame;
+        MeasureNextFrame(UiWork.ProductScrollFrame);
     }
 
-    private void CompleteScrollFrame(object? sender, object e)
+    private void MeasureNextFrame(UiWork stage)
     {
-        CompositionTarget.Rendering -= CompleteScrollFrame;
-        _pendingScrollFrame?.Dispose();
-        _pendingScrollFrame = null;
+        if (!App.UiPerformance.Enabled || _frameMeasurements.ContainsKey(stage)) return;
+        if (_frameMeasurements.Count == 0) CompositionTarget.Rendering += CompleteFrame;
+        _frameMeasurements.Add(stage, App.UiPerformance.Measure(stage, asynchronous: true));
+    }
+
+    private void CompleteFrame(object? sender, object e)
+    {
+        CompositionTarget.Rendering -= CompleteFrame;
+        foreach (var measurement in _frameMeasurements.Values) measurement.Dispose();
+        _frameMeasurements.Clear();
     }
 
     private void DetailsToolbarSizeChanged(object sender, SizeChangedEventArgs e) => UpdateStickyDetailActions();
@@ -174,8 +181,8 @@ public sealed partial class ProductWindow : Window
             _detailViewRequests.Begin();
             TraceMaterial("editor.close");
             App.UiPerformance.Trace(UiLifecycle.ProductClosed);
-            CompositionTarget.Rendering -= CompleteScrollFrame;
-            _pendingScrollFrame = null;
+            CompositionTarget.Rendering -= CompleteFrame;
+            _frameMeasurements.Clear();
             App.UiPerformance.Flush();
         };
         Root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler(MeasureScrollFrame), true);

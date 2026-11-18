@@ -41,7 +41,7 @@ public sealed partial class ProductWindow
         TraceMaterial("picker.filter", detail, "all", browse.MatchCount);
 
         DetailRow? appliedRow = null;
-        var pane = new MaterialPickerPane(browse, choice =>
+        var pane = new MaterialPickerPane(browse, _motion, choice =>
         {
             var applied = ApplyRowMaterial(detail, choice, out var error);
             if (error is null) appliedRow = applied;
@@ -111,7 +111,7 @@ public sealed partial class ProductWindow
                 }.ShowAsync();
                 NotificationCenter.Publish(UiText.Get("Готово"), UiText.Get("Материал сохранён"));
             }
-            if (!_editorClosed) RevealDetail(appliedRow ?? row, focusMaterial: true);
+            if (!_editorClosed) RevealDetail(appliedRow ?? row, DetailFocus.Material);
         }
         finally
         {

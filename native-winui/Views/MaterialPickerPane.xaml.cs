@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using VitanCut.WinUI.Models;
 using VitanCut.WinUI.Services;
 using VirtualKey = Windows.System.VirtualKey;
@@ -13,6 +14,7 @@ namespace VitanCut.WinUI.Views;
 public sealed partial class MaterialPickerPane : UserControl
 {
     private readonly MaterialPickerBrowse _browse;
+    private readonly ProductEditorMotion _motion;
     private readonly Func<MaterialChoice, string?> _apply;
     private readonly Action<string, string?, int?> _trace;
     private readonly DispatcherQueueTimer _filter;
@@ -27,13 +29,15 @@ public sealed partial class MaterialPickerPane : UserControl
     internal double RequiredHeight => MaterialPickerLayout.ContentHeight(_browse.Rows.Count,
         Math.Max(0, ActualHeight - Results.ActualHeight) + 2);
 
-    internal MaterialPickerPane(MaterialPickerBrowse browse, Func<MaterialChoice, string?> apply,
+    internal MaterialPickerPane(MaterialPickerBrowse browse, ProductEditorMotion motion, Func<MaterialChoice, string?> apply,
         Action<string, string?, int?> trace)
     {
         _browse = browse;
+        _motion = motion;
         _apply = apply;
         _trace = trace;
         InitializeComponent();
+        OptionsList.ItemContainerTransitions = new TransitionCollection();
 
         var rowStyle = new Style(typeof(ListViewItem));
         rowStyle.Setters.Add(new Setter(HeightProperty, MaterialPickerLayout.RowHeight));
@@ -96,17 +100,22 @@ public sealed partial class MaterialPickerPane : UserControl
         }), true);
         Loaded += (_, _) =>
         {
+            if (_stopped) return;
             SizeDemandChanged?.Invoke();
-            if (!_stopped) SearchBox.Focus(FocusState.Programmatic);
+            SearchBox.Focus(FocusState.Programmatic);
+            _motion.ShowPopup(this);
         };
         EmptyText.Visibility = _browse.MatchCount == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     internal void Stop()
     {
+        if (_stopped) return;
         _stopped = true;
         _filter.Stop();
         _scrollRequests.Begin();
+        ProductEditorMotion.Reset(this);
+        ProductEditorMotion.Reset(OptionsList);
     }
 
     private void EndPointer()
@@ -182,7 +191,11 @@ public sealed partial class MaterialPickerPane : UserControl
                     var expanded = _browse.Toggle(row);
                     _trace(expanded ? "picker.expand" : "picker.collapse", RowKind(row), _browse.Rows.Count);
                     SizeDemandChanged?.Invoke();
-                    if (expanded) ScrollTo(row);
+                    if (expanded)
+                    {
+                        _motion.ExpandList(OptionsList);
+                        ScrollTo(row, instant: true);
+                    }
                     else _scrollRequests.Begin();
                 }
                 break;
@@ -201,7 +214,7 @@ public sealed partial class MaterialPickerPane : UserControl
         }
     }
 
-    private void ScrollTo(MaterialPickerRow row, bool focus = false)
+    private void ScrollTo(MaterialPickerRow row, bool focus = false, bool instant = false)
     {
         var request = _scrollRequests.Begin();
         DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
@@ -209,7 +222,9 @@ public sealed partial class MaterialPickerPane : UserControl
             if (_stopped || !_scrollRequests.IsCurrent(request) || !_browse.Rows.Contains(row)) return;
             if (focus || MaterialPickerLayout.ContentHeight(_browse.Rows.Count, 0) > OptionsList.ActualHeight)
             {
-                OptionsList.ScrollIntoView(row, ScrollIntoViewAlignment.Leading);
+                if (instant && OptionsList.ContainerFromItem(row) is UIElement element)
+                    ProductEditorMotion.BringIntoView(element, 0);
+                else OptionsList.ScrollIntoView(row, ScrollIntoViewAlignment.Leading);
                 _trace("picker.align-header", RowKind(row), _browse.Rows.IndexOf(row));
             }
             if (!focus) return;
