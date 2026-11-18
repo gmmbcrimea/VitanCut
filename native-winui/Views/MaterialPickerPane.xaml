@@ -3,18 +3,19 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:l10n="using:VitanCut.WinUI.Services">
-  <Grid Padding="12" RowSpacing="8" TabFocusNavigation="Cycle">
+  <Grid x:Name="PaneLayout" Padding="12" RowSpacing="8" TabFocusNavigation="Cycle">
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
-    <TextBlock Text="Выберите материал" FontWeight="SemiBold" l10n:UiLocalization.Properties="Text" />
-    <TextBox x:Name="SearchBox" Grid.Row="1" PlaceholderText="Поиск материала" MaxLength="200"
-             l10n:UiLocalization.Properties="PlaceholderText" />
-    <Grid x:Name="Results" Grid.Row="2">
-      <ListView x:Name="OptionsList" IsItemClickEnabled="True" SelectionMode="None"
+    <StackPanel x:Name="HeaderPanel" Spacing="8">
+      <TextBlock Text="Выберите материал" FontWeight="SemiBold" l10n:UiLocalization.Properties="Text" />
+      <TextBox x:Name="SearchBox" PlaceholderText="Поиск материала" MaxLength="200"
+               l10n:UiLocalization.Properties="PlaceholderText" />
+    </StackPanel>
+    <Grid Grid.Row="1">
+      <ListView x:Name="OptionsList" IsItemClickEnabled="True" SelectionMode="None" Padding="0"
                 ScrollViewer.HorizontalScrollMode="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                 ScrollViewer.VerticalScrollBarVisibility="Auto">
         <ListView.ItemTemplate>
@@ -43,7 +44,7 @@
       <TextBlock x:Name="EmptyText" Text="Материалы не найдены" Visibility="Collapsed"
                  IsHitTestVisible="False" l10n:UiLocalization.Properties="Text" />
     </Grid>
-    <StackPanel x:Name="Footer" Grid.Row="3" Spacing="6">
+    <StackPanel x:Name="Footer" Grid.Row="2" Spacing="6">
       <TextBlock x:Name="ErrorText" Visibility="Collapsed" TextWrapping="Wrap" Foreground="{StaticResource UiDangerBrush}"
                  AutomationProperties.LiveSetting="Polite" />
       <Button x:Name="CancelButton" Content="Отмена" HorizontalAlignment="Right" l10n:UiLocalization.Properties="Content" />

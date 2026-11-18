@@ -7,16 +7,20 @@ internal static class ProductDetailEditorChecks
 {
     internal static void Run(Action<bool, string> check, string output)
     {
-        var initial = MaterialPickerLayout.Place(1400, 1100, 100, 100, 200);
-        check(initial == (356d, 816d, 108d, 108d), "Material picker opens at twice its previous height when room permits");
-        var expanded = MaterialPickerLayout.Place(1400, 1100, 100, 100, 980);
-        check(expanded.Height == 980 && expanded.Top == 108,
+        const double chrome = 114;
+        var initial = MaterialPickerLayout.Place(1400, 1100, 100, 100, MaterialPickerLayout.RequiredHeight(3, chrome));
+        check(initial == (356d, 258d, 108d, 108d), "Material picker opens at the exact height of its collapsed categories");
+        var expanded = MaterialPickerLayout.Place(1400, 1100, 100, 100, MaterialPickerLayout.RequiredHeight(8, chrome));
+        check(expanded.Height == 498 && expanded.Top == 108,
             "Material picker grows to fit an expanded group without moving if it still fits");
+        var narrowed = MaterialPickerLayout.Place(1400, 1100, 100, 100, MaterialPickerLayout.RequiredHeight(1, chrome));
+        check(narrowed.Height == 162 && MaterialPickerLayout.RequiredHeight(0, chrome) == 162 &&
+            narrowed.Height < initial.Height, "Short or empty searches shrink the picker to a single row plus its controls");
         var limited = MaterialPickerLayout.Place(1000, 700, 980, 685, 3000);
         check(limited.Height == 684 && limited.Top == 8 && limited.Left + limited.Width == 972,
             "Material picker remains within both window edges when the results require scrolling");
         var oppositeCorner = MaterialPickerLayout.Place(1400, 1100, 1250, 1040, 200);
-        check(oppositeCorner.Left == 886 && oppositeCorner.Top == 216,
+        check(oppositeCorner.Left == 886 && oppositeCorner.Top == 832,
             "Material picker opens above and to the left of a click near the bottom right");
         var differentCursor = MaterialPickerLayout.Place(1400, 1100, 300, 140, 200);
         check(differentCursor.Left == 308 && differentCursor.Top == 148,

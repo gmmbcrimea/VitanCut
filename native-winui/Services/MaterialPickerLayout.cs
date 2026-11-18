@@ -2,7 +2,6 @@ namespace VitanCut.WinUI.Services;
 
 internal static class MaterialPickerLayout
 {
-    internal const double DefaultHeight = 816;
     internal const double RowHeight = 48;
     private const double Width = 356;
     private const double Margin = 8;
@@ -10,11 +9,17 @@ internal static class MaterialPickerLayout
     internal static double ContentHeight(int rowCount, double chromeHeight) =>
         Math.Max(0, chromeHeight) + rowCount * RowHeight;
 
+    internal static double RequiredHeight(int rowCount, double chromeHeight) =>
+        Math.Ceiling(ContentHeight(Math.Max(1, rowCount), chromeHeight));
+
+    internal static double AvailableWidth(double windowWidth) =>
+        Math.Min(Width, Math.Max(0, windowWidth - 2 * Margin));
+
     internal static (double Width, double Height, double Left, double Top) Place(
         double windowWidth, double windowHeight, double x, double y, double desiredHeight)
     {
-        var width = Math.Min(Width, Math.Max(0, windowWidth - 2 * Margin));
-        var height = Math.Min(Math.Max(DefaultHeight, desiredHeight), Math.Max(0, windowHeight - 2 * Margin));
+        var width = AvailableWidth(windowWidth);
+        var height = Math.Clamp(desiredHeight, 0, Math.Max(0, windowHeight - 2 * Margin));
         return (width, height, Anchor(x, width, windowWidth), Anchor(y, height, windowHeight));
     }
 

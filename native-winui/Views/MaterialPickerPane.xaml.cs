@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using VitanCut.WinUI.Models;
 using VitanCut.WinUI.Services;
+using Windows.Foundation;
 using VirtualKey = Windows.System.VirtualKey;
 
 namespace VitanCut.WinUI.Views;
@@ -26,8 +27,17 @@ public sealed partial class MaterialPickerPane : UserControl
     internal event Action? SizeDemandChanged;
     internal event Action<string, string?>? CloseRequested;
 
-    internal double RequiredHeight => MaterialPickerLayout.ContentHeight(_browse.Rows.Count,
-        Math.Max(0, ActualHeight - Results.ActualHeight) + 2);
+    internal double MeasureRequiredHeight(double surfaceWidth, Thickness border)
+    {
+        var padding = PaneLayout.Padding;
+        var available = new Size(Math.Max(0, surfaceWidth - border.Left - border.Right - padding.Left - padding.Right),
+            double.PositiveInfinity);
+        HeaderPanel.Measure(available);
+        Footer.Measure(available);
+        var chrome = HeaderPanel.DesiredSize.Height + Footer.DesiredSize.Height +
+            padding.Top + padding.Bottom + border.Top + border.Bottom + 2 * PaneLayout.RowSpacing;
+        return MaterialPickerLayout.RequiredHeight(_browse.Rows.Count, chrome);
+    }
 
     internal MaterialPickerPane(MaterialPickerBrowse browse, ProductEditorMotion motion, Func<MaterialChoice, string?> apply,
         Action<string, string?, int?> trace)
@@ -42,6 +52,7 @@ public sealed partial class MaterialPickerPane : UserControl
         var rowStyle = new Style(typeof(ListViewItem));
         rowStyle.Setters.Add(new Setter(HeightProperty, MaterialPickerLayout.RowHeight));
         rowStyle.Setters.Add(new Setter(MinHeightProperty, 0d));
+        rowStyle.Setters.Add(new Setter(MarginProperty, new Thickness(0)));
         rowStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
         rowStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
         rowStyle.Setters.Add(new Setter(Control.VerticalContentAlignmentProperty, VerticalAlignment.Stretch));
@@ -90,7 +101,6 @@ public sealed partial class MaterialPickerPane : UserControl
             EndPointer();
         }), true);
         OptionsList.AddHandler(PointerCaptureLostEvent, new PointerEventHandler((_, _) => EndPointer()), true);
-        Footer.SizeChanged += (_, _) => SizeDemandChanged?.Invoke();
         CancelButton.Click += (_, _) => Finish("cancel-button");
         AddHandler(KeyDownEvent, new KeyEventHandler((_, args) =>
         {
@@ -103,7 +113,6 @@ public sealed partial class MaterialPickerPane : UserControl
             if (_stopped) return;
             SizeDemandChanged?.Invoke();
             SearchBox.Focus(FocusState.Programmatic);
-            _motion.ShowPopup(this);
         };
         EmptyText.Visibility = _browse.MatchCount == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -114,7 +123,6 @@ public sealed partial class MaterialPickerPane : UserControl
         _stopped = true;
         _filter.Stop();
         _scrollRequests.Begin();
-        ProductEditorMotion.Reset(this);
         ProductEditorMotion.Reset(OptionsList);
     }
 
@@ -191,11 +199,7 @@ public sealed partial class MaterialPickerPane : UserControl
                     var expanded = _browse.Toggle(row);
                     _trace(expanded ? "picker.expand" : "picker.collapse", RowKind(row), _browse.Rows.Count);
                     SizeDemandChanged?.Invoke();
-                    if (expanded)
-                    {
-                        _motion.ExpandList(OptionsList);
-                        ScrollTo(row, instant: true);
-                    }
+                    if (expanded) ScrollTo(row, expansion: true);
                     else _scrollRequests.Begin();
                 }
                 break;
@@ -208,13 +212,14 @@ public sealed partial class MaterialPickerPane : UserControl
                     _trace("option.rejected", null, null);
                     ErrorText.Text = error;
                     ErrorText.Visibility = Visibility.Visible;
+                    SizeDemandChanged?.Invoke();
                 }
                 else Finish("applied");
                 break;
         }
     }
 
-    private void ScrollTo(MaterialPickerRow row, bool focus = false, bool instant = false)
+    private void ScrollTo(MaterialPickerRow row, bool focus = false, bool expansion = false)
     {
         var request = _scrollRequests.Begin();
         DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
@@ -222,11 +227,12 @@ public sealed partial class MaterialPickerPane : UserControl
             if (_stopped || !_scrollRequests.IsCurrent(request) || !_browse.Rows.Contains(row)) return;
             if (focus || MaterialPickerLayout.ContentHeight(_browse.Rows.Count, 0) > OptionsList.ActualHeight)
             {
-                if (instant && OptionsList.ContainerFromItem(row) is UIElement element)
+                if (expansion && OptionsList.ContainerFromItem(row) is UIElement element)
                     ProductEditorMotion.BringIntoView(element, 0);
                 else OptionsList.ScrollIntoView(row, ScrollIntoViewAlignment.Leading);
                 _trace("picker.align-header", RowKind(row), _browse.Rows.IndexOf(row));
             }
+            if (expansion) _motion.ExpandList(OptionsList);
             if (!focus) return;
             OptionsList.UpdateLayout();
             if (OptionsList.ContainerFromItem(row) is Control container) container.Focus(FocusState.Keyboard);

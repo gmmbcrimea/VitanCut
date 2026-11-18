@@ -66,13 +66,20 @@ public sealed partial class ProductWindow
         void Place()
         {
             if (closed.Task.IsCompleted) return;
-            var bounds = MaterialPickerLayout.Place(Root.ActualWidth, Root.ActualHeight, position.X, position.Y, pane.RequiredHeight);
+            var windowWidth = Root.ActualWidth;
+            var desiredHeight = pane.MeasureRequiredHeight(MaterialPickerLayout.AvailableWidth(windowWidth), surface.BorderThickness);
+            var bounds = MaterialPickerLayout.Place(windowWidth, Root.ActualHeight, position.X, position.Y, desiredHeight);
             surface.Width = bounds.Width;
             surface.Height = bounds.Height;
             surface.Margin = new Thickness(bounds.Left, bounds.Top, 0, 0);
         }
         void Resize(object sender, SizeChangedEventArgs args) => Place();
         void CloseWithEditor(object sender, WindowEventArgs args) => Finish("editor-closed", null);
+        void ShowSurface(object sender, RoutedEventArgs args)
+        {
+            surface.Loaded -= ShowSurface;
+            if (!closed.Task.IsCompleted) _motion.ShowMaterialPicker(surface);
+        }
 
         _materialPickerOpen = true;
         try
@@ -84,6 +91,7 @@ public sealed partial class ProductWindow
                 pane.SizeDemandChanged += Place;
                 Root.SizeChanged += Resize;
                 Closed += CloseWithEditor;
+                surface.Loaded += ShowSurface;
                 ThemeService.SetCursorRevealSuppressed(this, true);
                 Place();
                 Root.Children.Add(scrim);
@@ -93,6 +101,8 @@ public sealed partial class ProductWindow
             finally
             {
                 pane.Stop();
+                surface.Loaded -= ShowSurface;
+                ProductEditorMotion.Reset(surface);
                 pane.CloseRequested -= Finish;
                 pane.SizeDemandChanged -= Place;
                 Closed -= CloseWithEditor;
