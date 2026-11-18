@@ -30,6 +30,8 @@ PayrollChecks.Run(Check, output);
 ProductUnitCostChecks.Run(Check, output);
 await CloudHealthChecks.RunAsync(Check, output);
 MaterialPickerJournalChecks.Run(Check, output);
+ProductDetailEditorChecks.Run(Check, output);
+MaterialPickerBrowseChecks.Run(Check);
 var windowSession = new WindowPlacementService(Path.Combine(output, "window-session.json"));
 Check(windowSession.Load() is null, "A missing window session keeps the default placement");
 var normalWindow = new WindowSessionState(-1500, 80, -400, 780, false);

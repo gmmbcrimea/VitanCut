@@ -22,6 +22,7 @@
     <Compile Include="../native-winui/Services/UiReviewPaths.cs" Link="Services/UiReviewPaths.cs" />
     <Compile Include="../native-winui/Services/UiPerformanceLog.cs" Link="Services/UiPerformanceLog.cs" />
     <Compile Include="../native-winui/Services/MaterialPickerJournal.cs" Link="Services/MaterialPickerJournal.cs" />
+    <Compile Include="../native-winui/Services/ProductDetailEditor.cs" Link="Services/ProductDetailEditor.cs" />
     <Compile Include="../native-winui/Models/Domain.cs" Link="Models/Domain.cs" />
     <Compile Include="../native-winui/Models/AccentPalette.cs" Link="Models/AccentPalette.cs" />
     <Compile Include="../native-winui/Services/AppState.cs" Link="Services/AppState.cs" />
@@ -64,6 +65,8 @@
     <Compile Include="../native-winui/Services/ProductValidation.cs" Link="Services/ProductValidation.cs" />
     <Compile Include="../native-winui/Services/CutColors.cs" Link="Services/CutColors.cs" />
     <Compile Include="../native-winui/Services/DetailTableLayout.cs" Link="Services/DetailTableLayout.cs" />
+    <Compile Include="../native-winui/Services/MaterialPickerLayout.cs" Link="Services/MaterialPickerLayout.cs" />
+    <Compile Include="../native-winui/Services/MaterialPickerBrowse.cs" Link="Services/MaterialPickerBrowse.cs" />
     <Compile Include="../native-winui/Services/DetailDimensions.cs" Link="Services/DetailDimensions.cs" />
     <Compile Include="../native-winui/Services/ReportFileName.cs" Link="Services/ReportFileName.cs" />
     <Compile Include="../native-winui/Services/DetailRotation.cs" Link="Services/DetailRotation.cs" />

@@ -5,10 +5,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Storage.Pickers;
 using System.Runtime.InteropServices;
-using System.Collections.ObjectModel;
 using VitanCut.WinUI.Models;
 using VitanCut.WinUI.Services;
 using Windows.Graphics;
@@ -25,52 +23,17 @@ public sealed partial class ProductWindow : Window
     private readonly WindowSubclassProc _minSizeSubclassProc;
     private readonly Project _project;
     private readonly Product _sourceProduct;
+    private readonly ProductDetailEditor _detailEditor;
     private readonly bool _isNew;
     private readonly CatalogService? _catalog;
     private readonly bool _catalogEditor;
     private readonly List<TextBox> _fixedNameBoxes = [];
     private readonly UiRequestGate _imagePreviewRequests = new();
-    private readonly UiRequestGate _materialFocusRequests = new();
-    private readonly UiRequestGate _detailBringRequests = new();
-    private MaterialPickerOption[]? _materialPickerOptions;
-    private Database? _materialPickerDatabase;
-    private long _materialPickerRevision = -1;
-    private string _materialPickerLanguage = "";
-    private string _formulaNamesSignature = "";
-    private long _formulaNamesVersion;
+    private readonly UiRequestGate _detailViewRequests = new();
     private readonly List<NumberBox> _fixedValueBoxes = [];
-    private readonly Dictionary<TextBox, Flyout> _formulaFlyouts = [];
-    private readonly Dictionary<TextBox, ListView> _formulaSuggestionLists = [];
-    private readonly Dictionary<TextBox, FormulaQuery> _formulaQueries = [];
-    private sealed record FormulaQuery(string Text, int Start, int Caret);
-    private readonly Dictionary<TextBox, FormulaField> _formulaFields = [];
-    private bool _refreshingFormulaText;
-    private sealed record FormulaField(Detail Detail, bool Width, FormulaPresentation Presentation)
-    {
-        public string Expression => Width ? Detail.WidthExpr : Detail.LengthExpr;
-        public string? DisplayedExpression { get; set; }
-        public string? InputText { get; set; }
-        public long DisplayedNamesVersion { get; set; } = -1;
-    }
-    private ObservableCollection<DetailRow> _detailRows = [];
-    private sealed record DetailRowView(Border Container, Action<DetailRow> Bind, Action Unbind)
-    {
-        public bool CompactMode { get; set; } = App.Preferences.Current.CompactMode;
-        public bool AnimationsEnabled { get; set; } = App.Preferences.Current.AnimationsEnabled;
-    }
-    private DetailRow? _selectedDetailRow;
     private bool _loading = true;
-    private bool _insertingReference;
-    private bool _updatingMaterialView;
-    private bool _materialPickerOpen;
-    private Action<MaterialPickerOption>? _chooseMaterial;
-    private static int _nextMaterialTraceEditor;
-    private readonly int _materialTraceEditor = Interlocked.Increment(ref _nextMaterialTraceEditor);
-    private Detail? _materialTraceTarget;
-
-    private void TraceMaterial(string action, Detail? detail = null, string? outcome = null, int? value = null) =>
-        App.MaterialPickerTrace.Record(_materialTraceEditor, action,
-            detail is null ? null : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(detail), outcome, value);
+    private bool _saving;
+    private bool _editorClosed;
     private bool _updatingStickyDetailActions;
 
     private void ProductScrollViewChanged(object sender, ScrollViewerViewChangedEventArgs e) => UpdateStickyDetailActions();
@@ -78,7 +41,7 @@ public sealed partial class ProductWindow : Window
     private IDisposable? _pendingScrollFrame;
     private void MeasureScrollFrame(object sender, PointerRoutedEventArgs e)
     {
-        _detailBringRequests.Begin();
+        if (!_materialPickerOpen) _detailViewRequests.Begin();
         if (!App.UiPerformance.Enabled || _pendingScrollFrame is not null) return;
         _pendingScrollFrame = App.UiPerformance.Measure(UiWork.ProductScrollFrame, asynchronous: true);
         CompositionTarget.Rendering += CompleteScrollFrame;
@@ -197,14 +160,18 @@ public sealed partial class ProductWindow : Window
         _project = project;
         _isNew = product is null;
         _sourceProduct = CloneProduct(product ?? new Product());
+        _detailEditor = new ProductDetailEditor(App.State, _sourceProduct);
         _catalog = catalog;
         _catalogEditor = catalogEditor;
 
         InitializeComponent();
+        DetailsRowsPanel.ItemsSource = _detailRows;
         App.UiPerformance.Trace(UiLifecycle.ProductOpened);
         TraceMaterial("editor.open", outcome: _catalogEditor ? "catalog" : "project", value: _sourceProduct.Details.Count);
         Closed += (_, _) =>
         {
+            _editorClosed = true;
+            _detailViewRequests.Begin();
             TraceMaterial("editor.close");
             App.UiPerformance.Trace(UiLifecycle.ProductClosed);
             CompositionTarget.Rendering -= CompleteScrollFrame;
@@ -225,13 +192,13 @@ public sealed partial class ProductWindow : Window
         };
         BackgroundFocusTarget.LostFocus += (_, _) => BackgroundFocusTarget.IsTabStop = false;
         Root.AddHandler(UIElement.TappedEvent, new TappedEventHandler(ProductBackgroundTapped), true);
-        Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) => { _materialFocusRequests.Begin(); _detailBringRequests.Begin(); }), true);
         Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, args) =>
         {
+            _detailViewRequests.Begin();
             if (_materialPickerOpen) TraceMaterial("editor.pointer-press-during-picker", _materialTraceTarget,
                 args.OriginalSource?.GetType().Name);
         }), true);
-        Root.KeyDown += (_, _) => { _materialFocusRequests.Begin(); _detailBringRequests.Begin(); };
+        Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler((_, _) => _detailViewRequests.Begin()), true);
         Activated += (_, args) =>
         {
             if (args.WindowActivationState == WindowActivationState.Deactivated)
@@ -246,9 +213,8 @@ public sealed partial class ProductWindow : Window
         BuildFixedSizeRows();
         LoadCatalogProducts();
         FillProduct();
-        RefreshDetails();
         UpdateResponsiveLayout();
-        UpdateSummary();
+        UpdateSummary(reconcileRows: true);
     }
 
     private void ConfigureMinimumWindowSize()
@@ -382,46 +348,6 @@ public sealed partial class ProductWindow : Window
             ProductImageStatusText.Text = loaded ? (path.StartsWith("data:") ? "Изображение изделия" : Path.GetFileName(path)) : UiText.Get("Изображение не выбрано или недоступно");
         }, () => _imagePreviewRequests.IsCurrent(request) && _sourceProduct.Image == path);
     }
-    private void RefreshDetails(Detail? select = null)
-    {
-        EdgeBandingService.Refresh(App.State, _sourceProduct);
-        if (_catalogEditor) ProjectDetailPricing.Clear(_sourceProduct);
-        else ProjectDetailPricing.Capture(App.State, _sourceProduct);
-        using var measurement = App.UiPerformance.Measure(UiWork.ProductRows);
-        var selectedId = select?.Id ?? _selectedDetailRow?.Detail.Id;
-        foreach (var flyout in _formulaFlyouts.Values)
-        {
-            if (flyout.IsOpen) flyout.Hide();
-        }
-        _formulaQueries.Clear();
-        _formulaFields.Clear();
-        using (App.UiPerformance.Measure(UiWork.ProductRowData))
-        {
-            var materialChoices = App.State.MaterialChoices().ToList();
-            _detailRows = new ObservableCollection<DetailRow>(_sourceProduct.Details.Select(detail => CreateDetailRow(detail, materialChoices)));
-        }
-        using (App.UiPerformance.Measure(UiWork.ProductRowControls))
-        {
-            DetailsRowsPanel.ItemsSource = _detailRows;
-        }
-        using (App.UiPerformance.Measure(UiWork.ProductRowLayout))
-        {
-            _selectedDetailRow = _detailRows.FirstOrDefault(row => row.Detail.Id == selectedId) ?? _detailRows.FirstOrDefault();
-            UpdateDetailSelectionVisuals();
-            UpdateDetailHeaders();
-            if (DetailsRowsPanel.Layout is StackLayout layout)
-                layout.Spacing = App.Preferences.Current.CompactMode ? UiLayout.CompactGap(4) : 4;
-            UpdateDetailColumns();
-        }
-    }
-
-    private DetailRow CreateDetailRow(Detail detail, List<MaterialChoice> materialChoices)
-    {
-        var row = new DetailRow(detail, materialChoices);
-        UpdateDetailRowCalculation(row);
-        return row;
-    }
-
     private void UseCatalogProductClick(object sender, RoutedEventArgs e)
     {
         if (CatalogProductBox.SelectedItem is not Product product) return;
@@ -438,177 +364,13 @@ public sealed partial class ProductWindow : Window
         _sourceProduct.Details = copy.Details;
         _sourceProduct.SourceCatalogProductId = product.Id;
         FillProduct();
-        RefreshDetails();
-        UpdateSummary();
-    }
-
-    private void AddDetailClick(object sender, RoutedEventArgs e)
-    {
-        using var measurement = App.UiPerformance.Measure(UiWork.ProductRowAppend);
-        if (App.UiPerformance.Enabled)
-        {
-            var frame = App.UiPerformance.Measure(UiWork.ProductRowAppendFrame, asynchronous: true);
-            EventHandler<object>? rendered = null;
-            rendered = (_, _) => { CompositionTarget.Rendering -= rendered; frame.Dispose(); };
-            CompositionTarget.Rendering += rendered;
-        }
-        foreach (var target in _formulaFlyouts.Keys.ToList()) HideFormulaSuggestions(target);
-        SaveProductFields();
-        var detail = new Detail
-        {
-            Name = "Новая деталь",
-            Type = "",
-            MaterialId = "",
-            LengthExpr = "длина изделия",
-            WidthExpr = "глубина изделия"
-        };
-        _sourceProduct.Details.Add(detail);
-        var row = CreateDetailRow(detail, _detailRows.FirstOrDefault()?.MaterialChoices ?? App.State.MaterialChoices().ToList());
-        _detailRows.Add(row);
-        TraceMaterial("detail.add", detail, value: _detailRows.Count);
-        _selectedDetailRow = row;
-        UpdateDetailSelectionVisuals();
-        UpdateDetailHeaders();
-        UpdateDetailColumns();
-        UpdateSummary();
-        ScrollDetailIntoView(_selectedDetailRow);
-    }
-
-    private void ScrollDetailIntoView(DetailRow? row)
-    {
-        if (row is null) return;
-        var request = _detailBringRequests.Begin();
-        DetailsRowsPanel.DispatcherQueue.TryEnqueue(() =>
-        {
-            if (!_detailBringRequests.IsCurrent(request)) return;
-            var index = _detailRows.IndexOf(row);
-            if (index < 0) return;
-            if (DetailsRowsPanel.GetOrCreateElement(index) is not FrameworkElement container) return;
-            void BringIntoView()
-            {
-                if (!_detailBringRequests.IsCurrent(request)) return;
-                container.StartBringIntoView(new BringIntoViewOptions
-                {
-                    AnimationDesired = false,
-                    VerticalAlignmentRatio = 0.5
-                });
-                // Virtualized variable-height rows can change the scroll extent after
-                // the initial bring request. Correct only the remaining clipped edge.
-                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-                {
-                    if (!_detailBringRequests.IsCurrent(request) || !container.IsLoaded || _selectedDetailRow != row) return;
-                    var bounds = container.TransformToVisual(ProductScrollViewer).TransformBounds(
-                        new Windows.Foundation.Rect(0, 0, container.ActualWidth, container.ActualHeight));
-                    var overflow = bounds.Bottom - (ProductScrollViewer.ActualHeight - 8);
-                    if (overflow > 1) ProductScrollViewer.ChangeView(null, ProductScrollViewer.VerticalOffset + overflow, null, true);
-                });
-            }
-            if (container.IsLoaded) BringIntoView();
-            else
-            {
-                RoutedEventHandler? loaded = null;
-                loaded = (_, _) => { container.Loaded -= loaded; BringIntoView(); };
-                container.Loaded += loaded;
-            }
-        });
-    }
-
-    private void DetailElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
-    {
-        using var measurement = App.UiPerformance.Measure(UiWork.ProductRowRealize);
-        if (args.Element is not ContentControl host || args.Index < 0 || args.Index >= _detailRows.Count) return;
-        var row = _detailRows[args.Index];
-        if (ReferenceEquals(row.Detail, _materialTraceTarget)) TraceMaterial("target.view-prepared", row.Detail, value: args.Index);
-        if (host.Tag is DetailRowView existing)
-        {
-            if (!ReferenceEquals(existing.Container.Tag, row))
-            {
-                using var reuseMeasurement = App.UiPerformance.Measure(UiWork.ProductRowReuse);
-                existing.Unbind();
-                existing.Bind(row);
-            }
-            var preferences = App.Preferences.Current;
-            if (existing.CompactMode != preferences.CompactMode || existing.AnimationsEnabled != preferences.AnimationsEnabled)
-            {
-                ThemeService.ApplyLayout(existing.Container, preferences);
-                existing.CompactMode = preferences.CompactMode;
-                existing.AnimationsEnabled = preferences.AnimationsEnabled;
-            }
-        }
-        else
-        {
-            using var createMeasurement = App.UiPerformance.Measure(UiWork.ProductRowCreate);
-            var view = CreateDetailRowView(row);
-            host.Tag = view;
-            host.Content = view.Container;
-            ThemeService.ApplyLayout(view.Container, App.Preferences.Current);
-        }
-        if (row.Container?.Child is Grid grid) ApplyDetailColumns(grid, DetailTableLayout.ColumnWidths(DetailsHeaderGrid.ActualWidth));
-        UpdateDetailSelectionVisual(row);
-    }
-
-    private void DetailElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
-    {
-        if (args.Element is ContentControl { Tag: DetailRowView view }) view.Unbind();
-        // Keep the native control subtree in the recycled template container.
-        // ItemsRepeater supplies that same container when another detail enters view.
-    }
-
-    private void CloseDetailRowFlyouts(DetailRow row)
-    {
-        _materialFocusRequests.Begin();
-        row.EdgeBandFlyout?.Hide();
-        if (row.Container?.ContextFlyout is { IsOpen: true } menu) menu.Hide();
-        foreach (var field in row.FormulaBoxes) HideFormulaSuggestions(field);
-    }
-
-    private void ReleaseDetailRowView(DetailRow row)
-    {
-        if (ReferenceEquals(row.Detail, _materialTraceTarget)) TraceMaterial("target.view-released", row.Detail);
-        CloseDetailRowFlyouts(row);
-        foreach (var field in row.FormulaBoxes)
-        {
-            if (_formulaSuggestionLists.TryGetValue(field, out var suggestions)) suggestions.ItemsSource = null;
-            _formulaQueries.Remove(field);
-            _formulaFields.Remove(field);
-            field.Tag = null;
-        }
-        row.FormulaBoxes.Clear();
-        row.Container = null;
-        row.MaterialButton = null;
-        row.EdgeBandFlyout = null;
-        row.CalculationText = null;
-        row.EdgeBandButton = null;
-    }
-    private async void DeleteDetailClick(object sender, RoutedEventArgs e)
-    {
-        if (_selectedDetailRow is not { } row) return;
-        if (!await ConfirmDeleteAsync(UiText.Get("Удалить деталь?"),row.Detail.Name)) return;
-        if (row.Detail.IsGeneratedEdgeBand) EdgeBandingService.RemoveMaterial(_sourceProduct, row.Detail.MaterialId);
-        _sourceProduct.Details.Remove(row.Detail);
-        TraceMaterial("detail.delete", row.Detail);
-        RefreshDetails();
-        UpdateSummary();
-        NotificationCenter.Publish(UiText.Get("Деталь удалена"),UiText.Format($"Деталь «{row.Detail.Name}» удалена из изделия."));
-    }
-
-    private void DetailRowChanged(object sender, object e)
-    {
-        if (_loading) return;
-        UpdateSummary();
-        RefreshOpenFormulaSuggestions();
-    }
-
-    private void DetailRowNumberChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
-    {
-        if (_loading) return;
-        UpdateSummary();
+        UpdateSummary(reconcileRows: true);
     }
 
     private void ProductFieldChanged(object sender, object e)
     {
         if (_loading) return;
-        CommitDetailRows();
+        NormalizeDetailInputs();
         UpdateSummary();
         RefreshOpenFormulaSuggestions();
     }
@@ -616,7 +378,7 @@ public sealed partial class ProductWindow : Window
     private void ProductNumberChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
     {
         if (_loading) return;
-        CommitDetailRows();
+        NormalizeDetailInputs();
         UpdateSummary();
         RefreshOpenFormulaSuggestions();
     }
@@ -626,9 +388,8 @@ public sealed partial class ProductWindow : Window
         if (_loading) return;
         UpdateLegHeightVisibility();
         if (HasLegsBox.IsChecked == true) EnsureLegDetail();
-        CommitDetailRows();
-        RefreshDetails();
-        UpdateSummary();
+        NormalizeDetailInputs();
+        UpdateSummary(reconcileRows: true);
         RefreshOpenFormulaSuggestions();
     }
 
@@ -684,28 +445,28 @@ public sealed partial class ProductWindow : Window
     }
     private async void SaveClick(object sender, RoutedEventArgs e)
     {
-        TraceMaterial("product.save-request", value: _sourceProduct.Details.Count);
-        SaveProductFields();
-        if (ProductValidation.Error(App.State, _sourceProduct) is { } error)
-        {
-            TraceMaterial("product.save-blocked", outcome: "validation");
-            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Проверьте изделие"), Content = error, CloseButtonText = UiText.Get("Понятно") }.ShowAsync();
-            return;
-        }
+        if (_editorClosed || _saving || _materialPickerOpen || _confirmingDetailDelete || Root.XamlRoot is not { } root) return;
+        _saving = true;
         try
         {
+            TraceMaterial("product.save-request", value: _sourceProduct.Details.Count);
+            SaveProductFields();
+            if (ProductValidation.Error(App.State, _sourceProduct) is { } error)
+            {
+                TraceMaterial("product.save-blocked", outcome: "validation");
+                await new ContentDialog { XamlRoot = root, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Проверьте изделие"), Content = error, CloseButtonText = UiText.Get("Понятно") }.ShowAsync();
+                return;
+            }
 
-        var savedProduct = CloneProduct(_sourceProduct);
-        DetailOrdering.SortForSave(savedProduct);
-        if (_isNew && !_catalogEditor && _catalog is not null)
-        {
-            var exists = _catalog.GetProducts(_project.Counterparty)
-                .Any(product => string.Equals(product.Name, _sourceProduct.Name, StringComparison.CurrentCultureIgnoreCase));
-            if (!exists)
+            var savedProduct = CloneProduct(_sourceProduct);
+            DetailOrdering.SortForSave(savedProduct);
+            if (_isNew && !_catalogEditor && _catalog is not null &&
+                !_catalog.GetProducts(_project.Counterparty)
+                    .Any(product => string.Equals(product.Name, savedProduct.Name, StringComparison.CurrentCultureIgnoreCase)))
             {
                 var decision = new ContentDialog
                 {
-                    XamlRoot = Root.XamlRoot,
+                    XamlRoot = root,
                     RequestedTheme = Root.ActualTheme,
                     Title = UiText.Get("Добавить в каталог?"),
                     Content = UiText.Get("Изделие с таким названием отсутствует в каталоге этого заказчика."),
@@ -715,22 +476,23 @@ public sealed partial class ProductWindow : Window
                     DefaultButton = ContentDialogButton.Primary
                 };
                 var result = await decision.ShowAsync();
-                if (result == ContentDialogResult.None) return;
+                if (result == ContentDialogResult.None || _editorClosed || Root.XamlRoot != root) return;
                 if (result == ContentDialogResult.Primary)
                     _catalog.SaveProduct(_project.Counterparty, null, CloneProduct(savedProduct));
             }
-        }
 
-        ProductSaved?.Invoke(savedProduct, _isNew);
-        TraceMaterial("product.save-dispatched", outcome: ProductSaved is null ? "no-handler" : "handler-returned",
-            value: savedProduct.Details.Count(detail => !string.IsNullOrEmpty(detail.MaterialId)));
-        Close();
+            ProductSaved?.Invoke(savedProduct, _isNew);
+            TraceMaterial("product.save-dispatched", outcome: ProductSaved is null ? "no-handler" : "handler-returned",
+                value: savedProduct.Details.Count(detail => !string.IsNullOrEmpty(detail.MaterialId)));
+            Close();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             TraceMaterial("product.save-error", outcome: ex.GetType().Name, value: ex.HResult);
-            await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Не удалось сохранить"), Content = ex.Message, CloseButtonText = UiText.Get("Закрыть") }.ShowAsync();
+            if (!_editorClosed && Root.XamlRoot == root)
+                await new ContentDialog { XamlRoot = root, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Не удалось сохранить"), Content = ex.Message, CloseButtonText = UiText.Get("Закрыть") }.ShowAsync();
         }
+        finally { _saving = false; }
     }
     private void CancelClick(object sender, RoutedEventArgs e)
     {
@@ -751,1211 +513,6 @@ public sealed partial class ProductWindow : Window
             Name = box.Text.Trim(),
             Value = _fixedValueBoxes[index].Value
         }).ToList();
-    }
-
-    private void CommitDetailRows()
-    {
-        SaveProductFields();
-        foreach (var row in _detailRows)
-        {
-            row.CommitMaterial();
-            row.Detail.Name = Empty(row.Detail.Name, "Новая деталь");
-            row.Detail.LengthExpr = Empty(row.Detail.LengthExpr, "0");
-            row.Detail.WidthExpr = Empty(row.Detail.WidthExpr, "0");
-            row.Detail.Qty = row.Detail.Qty <= 0 ? 1 : row.Detail.Qty;
-            UpdateDetailRowCalculation(row);
-        }
-    }
-
-    private void UpdateSummary()
-    {
-        using var measurement = App.UiPerformance.Measure(UiWork.ProductSummary);
-        SaveProductFields();
-        SyncEdgeBandRows();
-        if (!_catalogEditor) ProjectDetailPricing.Capture(App.State, _sourceProduct);
-        var area = 0d;
-        var cost = 0d;
-        var quantity = _sourceProduct.Qty <= 0 ? 1 : _sourceProduct.Qty;
-        foreach (var row in _detailRows)
-        {
-            var calc = UpdateDetailRowCalculation(row);
-            area += calc.Area * quantity;
-            cost += calc.Cost * quantity;
-        }
-        SummaryAreaText.Text = UiText.Format($"{Calculator.Number(area)} м²");
-        SummaryCostText.Text = Calculator.Money(cost);
-        RefreshFormulaLabels();
-    }
-
-    private DetailCalc UpdateDetailRowCalculation(DetailRow row)
-    {
-        var calc = Calculator.Detail(App.State, _sourceProduct, row.Detail);
-        row.CalculationResult = calc;
-        var unit = row.SelectedMaterial?.Material.Unit;
-        var size = unit == "m2" ? $"{Calculator.Number(calc.Length)} × {Calculator.Number(calc.Width)} мм · "
-            : unit == "lm" ? $"{Calculator.Number(calc.Length)} мм · " : "";
-        row.Calculation = string.IsNullOrEmpty(calc.Error) ? size + Calculator.Money(calc.Cost) : calc.Error;
-        if (row.CalculationText is not null)
-        {
-            row.CalculationText.Text = row.Calculation;
-            row.CalculationText.Foreground = (Brush)Application.Current.Resources[string.IsNullOrEmpty(calc.Error) ? "AppTextBrush" : "UiDangerBrush"];
-            ToolTipService.SetToolTip(row.CalculationText,row.Calculation);
-        }
-        return calc;
-    }
-
-    private DetailRowView CreateDetailRowView(DetailRow row)
-    {
-        var rebinding = false;
-        var border = new Border
-        {
-            Padding = new Thickness(8),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Background = new SolidColorBrush(Colors.Transparent),
-            Tag = row
-        };
-        // Explicit row bounds let reveal skip offscreen subtrees instead of walking every editor control.
-        var rowClip = new RectangleGeometry();
-        border.Clip = rowClip;
-        border.SizeChanged += (_, _) => rowClip.Rect = new Windows.Foundation.Rect(0, 0, border.ActualWidth, border.ActualHeight);
-        border.Tapped += DetailRowTapped;
-        border.GotFocus += (_, _) =>
-        {
-            if (border.Tag is DetailRow focusedRow) SelectDetailRow(focusedRow);
-        };
-        border.ContextRequested += (_, args) =>
-        {
-            var menu = border.ContextFlyout ??= CreateDetailContextMenu(row);
-            if (args.TryGetPosition(border, out var point))
-                menu.ShowAt(border, new FlyoutShowOptions { Position = point });
-            else menu.ShowAt(border);
-            args.Handled = true;
-        };
-        row.Container = border;
-
-        var grid = new Grid { ColumnSpacing = 10 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(56) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
-
-        var nameBox = new TextBox { Text = row.Detail.Name, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(nameBox,UiText.Get("Название детали"));
-        nameBox.TextChanged += (_, _) =>
-        {
-            if (rebinding || border.Tag is null || row.Detail.Name == nameBox.Text) return;
-            row.Detail.Name = nameBox.Text;
-            DetailRowChanged(nameBox, EventArgs.Empty);
-        };
-        var nameCell = new Grid { ColumnSpacing = 6 };
-        nameCell.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        nameCell.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        nameCell.Children.Add(nameBox);
-        var edgeButton = new Button { Content = UiText.Get("Кромка"), VerticalAlignment = VerticalAlignment.Center };
-        row.EdgeBandButton = edgeButton;
-        edgeButton.AddHandler(UIElement.PointerPressedEvent,
-            new PointerEventHandler((_, args) => row.EdgeBandPointer = args.GetCurrentPoint(Root).Position), true);
-        edgeButton.KeyDown += (_, _) => row.EdgeBandPointer = null;
-        edgeButton.Click += (_, _) => OpenEdgeBanding(row, edgeButton);
-        Grid.SetColumn(edgeButton, 1);
-        nameCell.Children.Add(edgeButton);
-        grid.Children.Add(nameCell);
-        UpdateEdgeBandButton(row);
-
-        var materialContent = new Grid { ColumnSpacing = 8 };
-        materialContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });
-        materialContent.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var materialImage = new Image
-        {
-            Width = 25,
-            Height = 25,
-            Stretch = Stretch.UniformToFill,
-            VerticalAlignment = VerticalAlignment.Center,
-            Visibility = Visibility.Collapsed
-        };
-        materialContent.Children.Add(materialImage);
-        var materialName = new TextBlock { Text = row.SelectedMaterial?.Material.Name ?? "Выберите материал", TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
-        Grid.SetColumn(materialName, 1);
-        materialContent.Children.Add(materialName);
-        _ = LoadMaterialTextureAsync(materialImage, row.SelectedMaterial?.Material.Texture);
-        var materialButton = new Button
-        {
-            Content = materialContent,
-            MinWidth = 0,
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left
-        };
-        row.MaterialButton = materialButton;
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(materialButton,UiText.Get("Материал детали ") + row.Detail.Name);
-        Windows.Foundation.Point? materialPointer = null;
-        materialButton.AddHandler(UIElement.PointerPressedEvent,
-            new PointerEventHandler((_, args) =>
-            {
-                materialPointer = args.GetCurrentPoint(Root).Position;
-                TraceMaterial("material-field.press", (border.Tag as DetailRow)?.Detail);
-            }), true);
-        materialButton.KeyDown += (_, _) => materialPointer = null;
-        materialButton.Click += async (_, _) =>
-        {
-            if (border.Tag is not DetailRow currentRow) return;
-            var position = materialPointer ?? materialButton.TransformToVisual(Root)
-                .TransformPoint(new Windows.Foundation.Point(0, materialButton.ActualHeight));
-            materialPointer = null;
-            _detailBringRequests.Begin();
-            _materialFocusRequests.Begin();
-            await PickRowMaterialAsync(currentRow, position);
-        };
-        ToolTipService.SetToolTip(materialButton,row.SelectedMaterial?.Material.Name ?? "Выберите материал");
-        Grid.SetColumn(materialButton, 1);
-        grid.Children.Add(materialButton);
-        var qtyBox = new NumberBox { Value = row.Detail.Qty <= 0 ? 1 : row.Detail.Qty, Minimum = 1, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(qtyBox,UiText.Get("Количество деталей ") + row.Detail.Name);
-        qtyBox.ValueChanged += (_, _) =>
-        {
-            if (rebinding || border.Tag is null || (row.Detail.Qty <= 0 ? 1 : row.Detail.Qty).Equals(qtyBox.Value)) return;
-            row.Detail.Qty = qtyBox.Value;
-            DetailRowNumberChanged(qtyBox, null!);
-        };
-        Grid.SetColumn(qtyBox, 2);
-        grid.Children.Add(qtyBox);
-
-        var isSheetMaterial = row.SelectedMaterial?.Material.Unit == "m2";
-        var isLinearMaterial = row.SelectedMaterial?.Material.Unit == "lm";
-        var lengthBox = CreateFormulaBox(row, false, isSheetMaterial || isLinearMaterial);
-        Grid.SetColumn(lengthBox, 3);
-        grid.Children.Add(lengthBox);
-
-        var swapDimensions = new Button
-        {
-            Content = new FontIcon { Glyph = "\uE8AB", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 16 },
-            Width = 32, Height = 32, MinWidth = 0, MinHeight = 0, Padding = new Thickness(0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Visibility = isSheetMaterial ? Visibility.Visible : Visibility.Collapsed
-        };
-        var swapLabel = UiText.Get("Поменять местами длину и ширину");
-        ToolTipService.SetToolTip(swapDimensions, swapLabel);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(swapDimensions, swapLabel);
-        swapDimensions.Click += (_, _) =>
-        {
-            foreach (var target in _formulaFlyouts.Keys.ToList()) HideFormulaSuggestions(target);
-            if (!DetailDimensions.Swap(_sourceProduct, row.Detail, row.SelectedMaterial?.Material)) return;
-            UpdateSummary();
-        };
-        Grid.SetColumn(swapDimensions, 4);
-        grid.Children.Add(swapDimensions);
-
-        var widthBox = CreateFormulaBox(row, true, isSheetMaterial);
-        Grid.SetColumn(widthBox, 5);
-        grid.Children.Add(widthBox);
-
-        var rotationBox = new ToggleSwitch
-        {
-            IsOn = DetailRotation.CanRotate(row.Detail, row.SelectedMaterial?.Material),
-            IsEnabled = isSheetMaterial,
-            OnContent = "",
-            OffContent = "",
-            MinWidth = 40,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Center,
-            Visibility = isSheetMaterial ? Visibility.Visible : Visibility.Collapsed
-        };
-        var rotationCell = new Grid { Visibility = isSheetMaterial ? Visibility.Visible : Visibility.Collapsed, ColumnSpacing = 2 };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(rotationBox,UiText.Get("Разрешить поворот детали ") + row.Detail.Name);
-        rotationCell.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
-        rotationCell.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
-        var rotationLock = new FontIcon { Glyph = "\uE72E", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
-        Grid.SetColumn(rotationLock, 1);
-        void UpdateRotationIndicator()
-        {
-            rotationLock.Visibility = DetailRotation.IsLocked(row.Detail, row.SelectedMaterial?.Material) ? Visibility.Visible : Visibility.Collapsed;
-            ToolTipService.SetToolTip(rotationCell,DetailRotation.Reason(row.Detail, row.SelectedMaterial?.Material));
-        }
-        rotationBox.Toggled += (_, _) =>
-        {
-            if (_updatingMaterialView || rebinding || border.Tag is null || row.Detail.AllowRotation == rotationBox.IsOn) return;
-            row.Detail.AllowRotation = rotationBox.IsOn;
-            UpdateRotationIndicator();
-            DetailRowChanged(rotationBox, EventArgs.Empty);
-        };
-        UpdateRotationIndicator();
-        rotationCell.Children.Add(rotationBox);
-        rotationCell.Children.Add(rotationLock);
-        Grid.SetColumn(rotationCell, 6);
-        grid.Children.Add(rotationCell);
-
-        var calculationText = new TextBlock
-        {
-            Text = row.Calculation,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = TextWrapping.Wrap
-        };
-        row.CalculationText = calculationText;
-        FrameworkElement calculationCell = calculationText;
-        Button? priceButton = null;
-        if (!_catalogEditor)
-        {
-            priceButton = new Button
-            {
-                Content = calculationText, MinWidth = 0, MinHeight = 0, Padding = new Thickness(4),
-                BorderThickness = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                HorizontalContentAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center
-            };
-            priceButton.Click += async (_, _) => await EditProjectDetailPriceAsync(row);
-            ToolTipService.SetToolTip(priceButton, UiText.Get("Цена детали в проекте"));
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(priceButton, UiText.Get("Цена детали в проекте") + ": " + row.Detail.Name);
-            calculationCell = priceButton;
-        }
-        Grid.SetColumn(calculationCell, 7);
-        grid.Children.Add(calculationCell);
-
-        border.Child = grid;
-        if (row.Detail.IsGeneratedEdgeBand)
-        {
-            nameBox.IsReadOnly = true;
-            foreach (var control in grid.Children.OfType<Control>()) control.IsEnabled = false;
-            materialButton.IsEnabled = true;
-            if (priceButton is not null) priceButton.IsEnabled = true;
-            ToolTipService.SetToolTip(border,UiText.Get("Длина кромки рассчитывается по выбранным граням деталей."));
-        }
-        return new DetailRowView(border, next =>
-        {
-            rebinding = true;
-            var refreshing = _refreshingFormulaText;
-            _refreshingFormulaText = true;
-            try
-            {
-                row = next;
-                border.Tag = row;
-                border.ContextFlyout = null;
-                row.Container = border;
-                row.MaterialButton = materialButton;
-                row.EdgeBandButton = edgeButton;
-                row.CalculationText = calculationText;
-                nameBox.Text = row.Detail.Name;
-                nameBox.IsReadOnly = row.Detail.IsGeneratedEdgeBand;
-                qtyBox.Value = row.Detail.Qty <= 0 ? 1 : row.Detail.Qty;
-                materialName.Text = row.SelectedMaterial?.Material.Name ?? UiText.Get("Выберите материал");
-                materialImage.Source = null;
-                materialImage.Visibility = Visibility.Collapsed;
-                _ = LoadMaterialTextureAsync(materialImage, row.SelectedMaterial?.Material.Texture);
-                foreach (var control in grid.Children.OfType<Control>()) control.IsEnabled = !row.Detail.IsGeneratedEdgeBand;
-                materialButton.IsEnabled = true;
-                if (priceButton is not null) priceButton.IsEnabled = true;
-                BindFormulaBox(lengthBox, row, false);
-                BindFormulaBox(widthBox, row, true);
-                UpdateMaterialRowView(row, updateHeaders: false);
-                calculationText.Text = row.Calculation;
-                calculationText.Foreground = (Brush)Application.Current.Resources[string.IsNullOrEmpty(row.CalculationResult?.Error) ? "AppTextBrush" : "UiDangerBrush"];
-                ToolTipService.SetToolTip(calculationText, row.Calculation);
-                ToolTipService.SetToolTip(border, row.Detail.IsGeneratedEdgeBand ? UiText.Get("Длина кромки рассчитывается по выбранным граням деталей.") : null);
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(materialButton, UiText.Get("Материал детали ") + row.Detail.Name);
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(qtyBox, UiText.Get("Количество деталей ") + row.Detail.Name);
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(rotationBox, UiText.Get("Разрешить поворот детали ") + row.Detail.Name);
-                if (priceButton is not null) Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(priceButton, UiText.Get("Цена детали в проекте") + ": " + row.Detail.Name);
-            }
-            finally { _refreshingFormulaText = refreshing; rebinding = false; }
-        }, () =>
-        {
-            if (border.Tag is null) return;
-            ReleaseDetailRowView(row);
-            border.Tag = null;
-            border.ContextFlyout = null;
-            materialImage.Source = null;
-            _ = LoadMaterialTextureAsync(materialImage, null);
-        });
-    }
-
-    private async Task EditProjectDetailPriceAsync(DetailRow row)
-    {
-        var material = App.State.FindMaterial(row.Detail.Type, row.Detail.MaterialId);
-        if (_catalogEditor || material is null) return;
-        var editorPrice = ProjectDetailPricing.Editor(row.Detail, material);
-        var priceHeader = editorPrice.Mode == "sheet" ? "Цена за лист" : editorPrice.Mode == "roll" ? "Цена за бухту" :
-            material.Unit == "m2" ? "Цена за м²" : material.Unit == "lm" ? "Цена за погонный метр" : "Цена за единицу";
-        var price = new NumberBox { Header = UiText.Get(priceHeader) + (editorPrice.Mode == "unit" ? "" :
-                $" · {Calculator.Number(editorPrice.Quantity, 3)} {UnitLabel(material.Unit)}"),
-            Value = editorPrice.Amount, Minimum = 0, MinWidth = 280 };
-        var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed,
-            Foreground = (Brush)Application.Current.Resources["UiDangerBrush"] };
-        var content = new StackPanel { Spacing = 12 };
-        content.Children.Add(new TextBlock { Text = row.Detail.Name, TextWrapping = TextWrapping.Wrap });
-        content.Children.Add(price);
-        var wasteAllowance = new NumberBox { Header = UiText.Get("Допуск на обрезки, %"),
-            Value = ProjectDetailPricing.AllowancePercent(row.Detail, material), Minimum = 0,
-            Visibility = material.Unit is "m2" or "lm" ? Visibility.Visible : Visibility.Collapsed };
-        content.Children.Add(wasteAllowance);
-        content.Children.Add(error);
-        var dialog = new ContentDialog
-        {
-            XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Цена детали в проекте"), Content = content,
-            MinWidth = Math.Min(540, Root.XamlRoot.Size.Width - 48),
-            PrimaryButtonText = UiText.Get("Сохранить"), SecondaryButtonText = UiText.Get("Цена каталога"),
-            CloseButtonText = UiText.Get("Отмена"), DefaultButton = ContentDialogButton.Primary
-        };
-        dialog.PrimaryButtonClick += (_, args) =>
-        {
-            try { ProjectDetailPricing.SetEnteredPrice(row.Detail, material, NumberBoxInput.Read(price), NumberBoxInput.Read(wasteAllowance)); }
-            catch (InvalidOperationException exception)
-            { args.Cancel = true; error.Text = UiText.Get(exception.Message); error.Visibility = Visibility.Visible; }
-        };
-        var result = await dialog.ShowAsync();
-        if (result == ContentDialogResult.Secondary)
-        {
-            if (MaterialPricing.Error(material).Length > 0) return;
-            ProjectDetailPricing.UseCatalogPrice(row.Detail, material);
-        }
-        if (result != ContentDialogResult.None) UpdateSummary();
-    }
-
-    private TextBox CreateFormulaBox(DetailRow row, bool width, bool visible)
-    {
-        var target = new TextBox
-        {
-            MinWidth = 0,
-            VerticalAlignment = VerticalAlignment.Center,
-            Visibility = visible ? Visibility.Visible : Visibility.Collapsed
-        };
-        BindFormulaBox(target, row, width);
-        target.TextChanged += (_, _) =>
-        {
-            if (_refreshingFormulaText || target.Tag is not DetailRow current || !_formulaFields.TryGetValue(target, out var field)) return;
-            if (field.InputText == target.Text) return;
-            field.InputText = target.Text;
-            var expression = field.Presentation.Storage(target.Text);
-            if (width) current.Detail.WidthExpr = expression;
-            else current.Detail.LengthExpr = expression;
-            ToolTipService.SetToolTip(target,target.Text);
-            DetailRowChanged(target, EventArgs.Empty);
-            UpdateFormulaSuggestions(target);
-        };
-        target.LostFocus += (_, _) => RefreshFormulaLabels();
-        target.SelectionChanged += (_, _) => { if (target.FocusState != FocusState.Unfocused) UpdateFormulaSuggestions(target); };
-        return target;
-    }
-
-    private void BindFormulaBox(TextBox target, DetailRow row, bool width)
-    {
-        var field = new FormulaField(row.Detail, width, new FormulaPresentation(_sourceProduct));
-        _formulaFields[target] = field;
-        row.FormulaBoxes.Add(target);
-        target.Tag = row;
-        var display = field.Presentation.Display(field.Expression);
-        field.InputText = display;
-        target.Text = display;
-        field.DisplayedExpression = field.Expression;
-        field.DisplayedNamesVersion = _formulaNamesVersion;
-        ToolTipService.SetToolTip(target, display);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(target, (width ? "Ширина или формула: " : "Длина или формула: ") + row.Detail.Name);
-    }
-
-    private void RefreshFormulaLabels()
-    {
-        if (_refreshingFormulaText || _insertingReference) return;
-        using var measurement = App.UiPerformance.Measure(UiWork.ProductFormulaLabels);
-        var names = string.Join("\0", _sourceProduct.Details.Select(detail => detail.Id + ":" + detail.Name));
-        if (names != _formulaNamesSignature) { _formulaNamesSignature = names; _formulaNamesVersion++; }
-        _refreshingFormulaText = true;
-        try
-        {
-            foreach (var (target, field) in _formulaFields)
-            {
-                if (target.FocusState != FocusState.Unfocused) continue;
-                if (_formulaFlyouts.TryGetValue(target, out var suggestions) && suggestions.IsOpen) continue;
-                if (field.DisplayedExpression == field.Expression && field.DisplayedNamesVersion == _formulaNamesVersion) continue;
-                var display = field.Presentation.Display(field.Expression);
-                field.InputText = display;
-                if (target.Text != display) target.Text = display;
-                ToolTipService.SetToolTip(target,display);
-                field.DisplayedExpression = field.Expression;
-                field.DisplayedNamesVersion = _formulaNamesVersion;
-            }
-        }
-        finally { _refreshingFormulaText = false; }
-    }
-
-    private void ConfigureFormulaSuggestions(TextBox target, DetailRow row)
-    {
-        var flyout = new Flyout
-        {
-            Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft,
-            OverlayInputPassThroughElement = Root,
-            ShowMode = FlyoutShowMode.Transient
-        };
-        var list = new ListView
-        {
-            Width = 400, MaxHeight = 320, IsItemClickEnabled = true,
-            SelectionMode = ListViewSelectionMode.Single,
-            ItemTemplate = (DataTemplate)Application.Current.Resources["FormulaReferenceTemplate"]
-        };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list,UiText.Get("Ссылки на размеры"));
-        flyout.Content = list;
-        _formulaSuggestionLists[target] = list;
-        _formulaFlyouts[target] = flyout;
-        target.PreviewKeyDown += (_, args) =>
-        {
-            if (args.Key == Windows.System.VirtualKey.Tab) HideFormulaSuggestions(target);
-        };
-        list.PreviewKeyDown += (_, args) =>
-        {
-            if (args.Key == Windows.System.VirtualKey.Tab) ReturnToFormula(target);
-        };
-        target.LostFocus += (_, _) => target.DispatcherQueue.TryEnqueue(CloseInactiveFormulaSuggestions);
-        list.LostFocus += (_, _) => target.DispatcherQueue.TryEnqueue(CloseInactiveFormulaSuggestions);
-        list.ItemClick += (_, args) => InsertFormulaSuggestion(target, (FormulaReference)args.ClickedItem);
-        list.KeyDown += (_, args) =>
-        {
-            if (args.Key == Windows.System.VirtualKey.Enter && list.SelectedItem is FormulaReference reference)
-            { InsertFormulaSuggestion(target, reference); args.Handled = true; }
-            else if (args.Key == Windows.System.VirtualKey.Escape)
-            { ReturnToFormula(target); args.Handled = true; }
-        };
-        flyout.Closed += (_, _) =>
-        {
-            if (!flyout.IsOpen) _formulaQueries.Remove(target);
-            RefreshFormulaLabels();
-        };
-        target.KeyDown += (_, args) =>
-        {
-            if (!flyout.IsOpen) return;
-            if (args.Key == Windows.System.VirtualKey.Escape)
-            { ReturnToFormula(target); args.Handled = true; }
-            else if (args.Key == Windows.System.VirtualKey.Down && list.Items.Count > 0)
-            { list.Focus(FocusState.Keyboard); args.Handled = true; }
-        };
-    }
-
-    private void ReturnToFormula(TextBox target)
-    {
-        if (!_formulaFlyouts.TryGetValue(target, out var flyout)) return;
-        var caret = _formulaQueries.TryGetValue(target, out var query) ? query.Caret : target.SelectionStart;
-        _insertingReference = true;
-        try
-        {
-            HideFormulaSuggestions(target);
-            target.Focus(FocusState.Programmatic);
-            target.SelectionStart = Math.Clamp(caret, 0, target.Text.Length);
-            target.SelectionLength = 0;
-        }
-        finally { _insertingReference = false; }
-    }
-
-    private void InsertFormulaSuggestion(TextBox target, FormulaReference reference)
-    {
-        if (!_formulaFlyouts.TryGetValue(target, out var suggestions) || !suggestions.IsOpen || !FormulaSuggestionsOwnFocus(target) ||
-            !_formulaQueries.TryGetValue(target, out var query) || target.Text != query.Text ||
-            !_formulaFields.TryGetValue(target, out var field)) return;
-        _insertingReference = true;
-        try
-        {
-            var edit = FormulaSuggestionInsertion.Apply(query.Text, query.Start, query.Caret, field.Presentation.Display(reference.Expression));
-            target.Text = edit.Text;
-            HideFormulaSuggestions(target);
-            target.Focus(FocusState.Programmatic);
-            target.SelectionStart = edit.Caret;
-            target.SelectionLength = 0;
-        }
-        finally { _insertingReference = false; }
-    }
-
-    private void UpdateFormulaSuggestions(TextBox target)
-    {
-        if (_loading || _refreshingFormulaText || _insertingReference) return;
-        if (!FormulaSuggestionsOwnFocus(target))
-        {
-            HideFormulaSuggestions(target);
-            return;
-        }
-
-        var text = target.Text;
-        var caret = Math.Clamp(target.SelectionStart, 0, text.Length);
-        var queryStart = FormulaEditing.QueryStart(text, caret);
-        if (queryStart < 0)
-        {
-            HideFormulaSuggestions(target);
-            return;
-        }
-
-        if (!_formulaFlyouts.TryGetValue(target, out var flyout))
-        {
-            if (target.Tag is not DetailRow row) return;
-            ConfigureFormulaSuggestions(target, row);
-            flyout = _formulaFlyouts[target];
-        }
-
-        var query = FormulaText.NormalizeWhitespace(text[queryStart..caret]);
-        var currentRow = target.Tag as DetailRow;
-        var references = FormulaReferences(currentRow)
-            .Where(reference => UiTextSearch.Matches(query,
-                FormulaText.NormalizeWhitespace(reference.Label), FormulaText.NormalizeWhitespace(reference.Expression), reference.Section))
-            .ToList();
-        if (references.Count == 0)
-        {
-            HideFormulaSuggestions(target);
-            return;
-        }
-
-        var list = _formulaSuggestionLists[target];
-        var selected = (list.SelectedItem as FormulaReference)?.Expression;
-        if (list.ItemsSource is not IEnumerable<FormulaReference> previous || !previous.SequenceEqual(references))
-            list.ItemsSource = references;
-        list.SelectedItem = references.FirstOrDefault(reference => reference.Expression == selected) ?? references[0];
-        _formulaQueries[target] = new FormulaQuery(text, queryStart, caret);
-        foreach (var other in _formulaFlyouts.Keys.Where(other => other != target).ToList()) HideFormulaSuggestions(other);
-        if (!flyout.IsOpen) flyout.ShowAt(target);
-    }
-
-    private void HideFormulaSuggestions(TextBox target)
-    {
-        _formulaQueries.Remove(target);
-        if (_formulaFlyouts.TryGetValue(target, out var flyout) && flyout.IsOpen) flyout.Hide();
-    }
-
-    private bool FormulaSuggestionsOwnFocus(TextBox target)
-    {
-        if (target.XamlRoot is null) return false;
-        var focused = FocusManager.GetFocusedElement(target.XamlRoot) as DependencyObject;
-        _formulaSuggestionLists.TryGetValue(target, out var list);
-        while (focused is not null)
-        {
-            if (focused == target || focused == list) return true;
-            focused = VisualTreeHelper.GetParent(focused);
-        }
-        return false;
-    }
-
-    private void CloseInactiveFormulaSuggestions()
-    {
-        if (_insertingReference) return;
-        foreach (var (target, flyout) in _formulaFlyouts)
-            if (flyout.IsOpen && !FormulaSuggestionsOwnFocus(target)) HideFormulaSuggestions(target);
-        RefreshFormulaLabels();
-    }
-
-    private void RefreshOpenFormulaSuggestions()
-    {
-        foreach (var (target, flyout) in _formulaFlyouts)
-        {
-            if (flyout.IsOpen) UpdateFormulaSuggestions(target);
-        }
-    }
-
-    private IEnumerable<FormulaReference> FormulaReferences(DetailRow? currentRow)
-    {
-        yield return new FormulaReference(UiText.Get("Изделие"), UiText.Get("Длина"), "длина изделия", UiText.Format($"{Calculator.Number(ProductLengthBox.Value, 0)} мм"));
-        yield return new FormulaReference(UiText.Get("Изделие"), UiText.Get("Глубина"), "глубина изделия", UiText.Format($"{Calculator.Number(ProductDepthBox.Value, 0)} мм"));
-        yield return new FormulaReference(UiText.Get("Изделие"), UiText.Get("Высота"), "высота изделия", UiText.Format($"{Calculator.Number(ProductHeightBox.Value, 0)} мм"));
-        if (HasLegsBox.IsChecked == true)
-            yield return new FormulaReference(UiText.Get("Изделие"), UiText.Get("Ножка"), "высота ножки", UiText.Format($"{Calculator.Number(LegHeightBox.Value, 0)} мм"));
-
-        for (var index = 0; index < _fixedNameBoxes.Count; index++)
-        {
-            var name = _fixedNameBoxes[index].Text.Trim();
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            yield return new FormulaReference(UiText.Get("Фиксированные размеры"), name, name, UiText.Format($"{Calculator.Number(_fixedValueBoxes[index].Value, 0)} мм"));
-        }
-
-        foreach (var reference in DetailFormulaReferences(currentRow))
-        {
-            yield return reference;
-        }
-    }
-
-    private IEnumerable<FormulaReference> DetailFormulaReferences(DetailRow? currentRow)
-    {
-        foreach (var row in _detailRows.Where(row => row != currentRow))
-        {
-            if (row.SelectedMaterial?.Material.Unit is not ("m2" or "lm")) continue;
-            var detailIndex = _detailRows.IndexOf(row) + 1;
-            var detailName = string.IsNullOrWhiteSpace(row.Detail.Name)
-                ? UiText.Format($"Деталь {detailIndex}")
-                : row.Detail.Name.Trim();
-            var calc = row.CalculationResult ?? Calculator.Detail(App.State, _sourceProduct, row.Detail);
-
-            yield return new FormulaReference(
-                UiText.Get("Детали"),
-                UiText.Format($"{detailName} · длина"),
-                $"[[detail:{row.Detail.Id}:length]]",
-                UiText.Format($"{Calculator.Number(calc.Length, 0)} мм"));
-
-            if (row.SelectedMaterial?.Material.Unit == "m2")
-            {
-                yield return new FormulaReference(
-                    UiText.Get("Детали"),
-                    UiText.Format($"{detailName} · ширина"),
-                    $"[[detail:{row.Detail.Id}:width]]",
-                    UiText.Format($"{Calculator.Number(calc.Width, 0)} мм"));
-            }
-        }
-    }
-
-    private void UpdateDetailHeaders()
-    {
-        var hasLinear = _detailRows.Any(row => row.SelectedMaterial?.Material.Unit is "m2" or "lm");
-        var hasSheet = _detailRows.Any(row => row.SelectedMaterial?.Material.Unit == "m2");
-        DetailLengthHeader.Visibility = hasLinear ? Visibility.Visible : Visibility.Collapsed;
-        DetailWidthHeader.Visibility = hasSheet ? Visibility.Visible : Visibility.Collapsed;
-        DetailRotationHeader.Visibility = hasSheet ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    public sealed record MaterialPickerOption(MaterialChoice Choice, string Name, string Caption)
-    {
-        public override string ToString() => $"{Name}, {Caption}";
-    }
-
-    private void MaterialOptionClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { DataContext: MaterialPickerOption option })
-        {
-            TraceMaterial("option.click", _materialTraceTarget, "missing-data-context");
-            return;
-        }
-        TraceMaterial("option.click", _materialTraceTarget, _chooseMaterial is null ? "missing-handler" : "dispatch");
-        _chooseMaterial?.Invoke(option);
-    }
-
-    private async Task PickRowMaterialAsync(DetailRow row, Windows.Foundation.Point position)
-    {
-        if (_materialPickerOpen || Root.XamlRoot is not { } root)
-        {
-            TraceMaterial("picker.open-blocked", row.Detail, _materialPickerOpen ? "already-open" : "no-root");
-            return;
-        }
-        _materialTraceTarget = row.Detail;
-        TraceMaterial("picker.open", row.Detail, row.Detail.IsGeneratedEdgeBand ? "generated-edge" : "detail");
-        var scrollOffset = ProductScrollViewer.VerticalOffset;
-        var closed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        void Finish(string reason, bool editorStillOpen = true)
-        {
-            if (closed.TrySetResult(editorStillOpen)) TraceMaterial("picker.close-request", row.Detail, reason);
-        }
-        DetailRow? appliedRow = null;
-        string? categoryToCreate = null;
-        var panel = new Grid { RowSpacing = 8, Padding = new Thickness(12), TabFocusNavigation = KeyboardNavigationMode.Cycle };
-        for (var i = 0; i < 4; i++)
-            panel.RowDefinitions.Add(new RowDefinition { Height = i == 2 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
-        var search = new TextBox { PlaceholderText = UiText.Get("Поиск материала"), MaxLength = 200 };
-        var filterTimer = DispatcherQueue.CreateTimer();
-        filterTimer.Interval = TimeSpan.FromMilliseconds(120);
-        var categories = new StackPanel { Spacing = 4 };
-        var scroll = new ScrollViewer
-        {
-            Content = categories,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-        };
-        var empty = new TextBlock { Text = UiText.Get("Материалы не найдены"), Visibility = Visibility.Collapsed };
-        var errorText = new TextBlock
-        {
-            Foreground = (Brush)Application.Current.Resources["UiDangerBrush"], TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed
-        };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(errorText, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        var scrollRequests = new UiRequestGate();
-        void AlignExpandedHeader(Expander expander)
-        {
-            var request = scrollRequests.Begin();
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                if (!scrollRequests.IsCurrent(request) || closed.Task.IsCompleted || !expander.IsLoaded || !expander.IsExpanded)
-                    return;
-                categories.UpdateLayout();
-                var top = Math.Max(0, expander.TransformToVisual(categories).TransformPoint(default).Y);
-                var contentHeight = categories.ActualHeight - categories.Padding.Bottom;
-                // Even the final group needs enough space below it to reach the top.
-                var bottom = Math.Max(0, Math.Ceiling(top + scroll.ViewportHeight - contentHeight));
-                categories.Padding = new Thickness(0, 0, 0, bottom);
-                categories.UpdateLayout();
-                scroll.ChangeView(null, top, null, disableAnimation: true);
-                TraceMaterial("picker.align-header", row.Detail, value: (int)Math.Round(top));
-            });
-        }
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search,UiText.Get("Поиск материала по названию и категории"));
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(scroll,UiText.Get("Категории материалов"));
-        ListView CreateOptionsList(IReadOnlyList<MaterialPickerOption> options, string label)
-        {
-            var list = new ListView
-            {
-                MaxHeight = 240,
-                IsItemClickEnabled = false, SelectionMode = ListViewSelectionMode.None,
-                ItemTemplate = (DataTemplate)Root.Resources["MaterialPickerTemplate"],
-                ItemsSource = options
-            };
-            ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Enabled);
-            ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Auto);
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list, label);
-            // Keep the visible option alive from pointer press through Button.Click.
-            list.AddHandler(UIElement.PointerPressedEvent,
-                new PointerEventHandler((_, _) => filterTimer.Stop()), true);
-            return list;
-        }
-        static ListView? FirstExpandedList(StackPanel content)
-        {
-            foreach (var child in content.Children)
-            {
-                if (child is ListView list && list.Items.Count > 0) return list;
-                if (child is Expander { IsExpanded: true, Content: ListView nested } && nested.Items.Count > 0) return nested;
-            }
-            return null;
-        }
-        void Filter()
-        {
-            scrollRequests.Begin();
-            categories.Padding = new Thickness(0);
-            scroll.ChangeView(null, 0, null, disableAnimation: true);
-            using var measurement = App.UiPerformance.Measure(UiWork.MaterialPicker);
-            var searching = !string.IsNullOrWhiteSpace(search.Text);
-            var choices = MaterialPickerOptions().Where(option => !row.Detail.IsGeneratedEdgeBand ||
-                EdgeBandingService.IsEdgeMaterial(option.Choice)).ToArray();
-            var matches = choices.Where(option => UiTextSearch.Matches(search.Text, option.Name, option.Choice.Type,
-                option.Choice.Material.Group)).ToArray();
-            TraceMaterial("picker.filter", row.Detail, searching ? "search" : "all", matches.Length);
-            categories.Children.Clear();
-            var categoryNames = row.Detail.IsGeneratedEdgeBand ? new[] { "Кромка" }.AsEnumerable() : string.IsNullOrWhiteSpace(search.Text)
-                ? App.MaterialLibrary.GetGroups().Concat(choices.Select(option => option.Choice.Type)).Distinct().OrderBy(type => type)
-                : matches.Select(option => option.Choice.Type).Distinct().OrderBy(type => type);
-            foreach (var categoryName in categoryNames)
-            {
-                var options = matches.Where(option => option.Choice.Type == categoryName).ToList();
-                var add = new Button { Content = UiText.Get("Добавить"), HorizontalAlignment = HorizontalAlignment.Stretch };
-                if (row.Detail.IsGeneratedEdgeBand) add.Visibility = Visibility.Collapsed;
-                CommandAppearance.Decorate(add);
-                add.Click += (_, _) =>
-                {
-                    categoryToCreate = categoryName;
-                    Finish("create-material");
-                };
-                var categoryContent = new StackPanel { Spacing = 4 };
-                categoryContent.Children.Add(add);
-                var expander = new Expander
-                {
-                    Header = categoryName, Content = categoryContent,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Stretch
-                };
-                var populated = false;
-                expander.Expanding += (_, _) =>
-                {
-                    if (!searching) TraceMaterial("picker.expand", row.Detail, "category", options.Count);
-                    using var measurement = App.UiPerformance.Measure(UiWork.MaterialPickerExpand);
-                    if (!searching) AlignExpandedHeader(expander);
-                    if (populated) return;
-                    populated = true;
-                    foreach (var materialGroup in options.GroupBy(option => option.Choice.Material.Group.Trim(), StringComparer.CurrentCultureIgnoreCase))
-                    {
-                        var groupOptions = materialGroup.ToList();
-                        if (materialGroup.Key.Length == 0)
-                        {
-                            categoryContent.Children.Insert(categoryContent.Children.Count - 1, CreateOptionsList(groupOptions, categoryName));
-                            continue;
-                        }
-                        var groupExpander = new Expander
-                        {
-                            Header = materialGroup.Key, HorizontalAlignment = HorizontalAlignment.Stretch,
-                            HorizontalContentAlignment = HorizontalAlignment.Stretch
-                        };
-                        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(groupExpander, materialGroup.Key);
-                        groupExpander.Expanding += (_, _) =>
-                        {
-                            if (!searching) TraceMaterial("picker.expand", row.Detail, "group", groupOptions.Count);
-                            groupExpander.Content ??= CreateOptionsList(groupOptions, $"{categoryName}: {materialGroup.Key}");
-                            if (!searching) AlignExpandedHeader(groupExpander);
-                        };
-                        categoryContent.Children.Insert(categoryContent.Children.Count - 1, groupExpander);
-                        groupExpander.IsExpanded = searching;
-                    }
-                };
-                categories.Children.Add(expander);
-                expander.IsExpanded = searching;
-            }
-            empty.Visibility = matches.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        }
-        void Select(MaterialPickerOption option)
-        {
-            if (closed.Task.IsCompleted)
-            {
-                TraceMaterial("option.select-ignored", row.Detail, "already-closing");
-                return;
-            }
-            filterTimer.Stop();
-            scrollRequests.Begin();
-            appliedRow = ApplyRowMaterial(row.Detail, option.Choice, out var error);
-            if (error is not null)
-            {
-                TraceMaterial("option.rejected", row.Detail);
-                errorText.Text = error;
-                errorText.Visibility = Visibility.Visible;
-                return;
-            }
-            Finish("applied");
-        }
-        filterTimer.Tick += (_, _) => { filterTimer.Stop(); Filter(); };
-        search.TextChanged += (_, _) =>
-        {
-            TraceMaterial("picker.search-edited", row.Detail, string.IsNullOrEmpty(search.Text) ? "empty" : "nonempty");
-            filterTimer.Stop();
-            filterTimer.Start();
-        };
-        search.KeyDown += (_, e) =>
-        {
-            if (filterTimer.IsRunning && e.Key is Windows.System.VirtualKey.Down or Windows.System.VirtualKey.Enter)
-            { filterTimer.Stop(); Filter(); }
-            var first = categories.Children.OfType<Expander>().FirstOrDefault();
-            if (e.Key == Windows.System.VirtualKey.Down && first is not null)
-            {
-                if (first.IsExpanded && first.Content is StackPanel content && FirstExpandedList(content) is { } list) list.Focus(FocusState.Keyboard);
-                else first.Focus(FocusState.Keyboard);
-                e.Handled = true;
-            }
-            else if (e.Key == Windows.System.VirtualKey.Enter && !string.IsNullOrWhiteSpace(search.Text) && first?.Content is StackPanel group &&
-                FirstExpandedList(group) is { } matches &&
-                matches.Items.OfType<MaterialPickerOption>().FirstOrDefault() is { } option)
-            {
-                TraceMaterial("option.search-enter", row.Detail);
-                Select(option);
-                e.Handled = true;
-            }
-        };
-        var title = new TextBlock
-        {
-            Text = UiText.Get("Выберите материал"),
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-        };
-        var cancel = new Button { Content = UiText.Get("Отмена"), HorizontalAlignment = HorizontalAlignment.Right };
-        cancel.Click += (_, _) => Finish("cancel-button");
-        panel.KeyDown += (_, e) =>
-        {
-            if (e.Key != Windows.System.VirtualKey.Escape) return;
-            e.Handled = true;
-            Finish("escape");
-        };
-        var results = new Grid();
-        results.Children.Add(scroll);
-        results.Children.Add(empty);
-        var footer = new StackPanel { Spacing = 6 };
-        footer.Children.Add(errorText);
-        footer.Children.Add(cancel);
-        foreach (var (element, index) in new (FrameworkElement, int)[] { (title, 0), (search, 1), (results, 2), (footer, 3) })
-        {
-            Grid.SetRow(element, index);
-            panel.Children.Add(element);
-        }
-        var surface = new Border
-        {
-            Child = panel, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1),
-            Background = (Brush)Application.Current.Resources["SoftPanelBrush"],
-            BorderBrush = (Brush)Application.Current.Resources["PanelStrokeBrush"],
-            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top
-        };
-        var scrim = new Grid { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(82, 0, 0, 0)) };
-        void TracePointer(string action, PointerRoutedEventArgs args)
-        {
-            var target = "backdrop";
-            for (var node = args.OriginalSource as DependencyObject; node is not null && node != scrim;
-                node = VisualTreeHelper.GetParent(node))
-            {
-                if (node is Button { DataContext: MaterialPickerOption }) { target = "option-button"; break; }
-                if (node is Expander) { target = "category-or-group"; break; }
-                if (node is TextBox) { target = "search"; break; }
-                if (node == surface) { target = "panel"; break; }
-            }
-            TraceMaterial(action, row.Detail, target);
-        }
-        scrim.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, e) => TracePointer("picker.pointer-press", e)), true);
-        scrim.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler((_, e) => TracePointer("picker.pointer-release", e)), true);
-        scrim.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler((_, e) => TracePointer("picker.pointer-capture-lost", e)), true);
-        scroll.ViewChanged += (_, e) =>
-        {
-            if (!e.IsIntermediate) TraceMaterial("picker.view-settled", row.Detail, value: (int)Math.Round(scroll.VerticalOffset));
-        };
-        scrim.Children.Add(surface);
-        Grid.SetRowSpan(scrim, Root.RowDefinitions.Count);
-        void Place()
-        {
-            const double margin = 8;
-            surface.Width = Math.Min(356, Math.Max(0, Root.ActualWidth - 2 * margin));
-            surface.Height = Math.Min(408, Math.Max(0, Root.ActualHeight - 2 * margin));
-            surface.Margin = new Thickness(
-                Math.Clamp(position.X + margin, margin, Math.Max(margin, Root.ActualWidth - surface.Width - margin)),
-                Math.Clamp(position.Y + margin, margin, Math.Max(margin, Root.ActualHeight - surface.Height - margin)), 0, 0);
-        }
-        void Resize(object sender, SizeChangedEventArgs e)
-        {
-            Place();
-            TraceMaterial("picker.reposition", row.Detail, "window-resized");
-        }
-        void CloseWithEditor(object sender, WindowEventArgs e) => Finish("editor-closed", false);
-        _materialPickerOpen = true;
-        _chooseMaterial = Select;
-        try
-        {
-            ThemeService.SetCursorRevealSuppressed(this, true);
-            Filter();
-            Place();
-            Root.Children.Add(scrim);
-            Root.SizeChanged += Resize;
-            Closed += CloseWithEditor;
-            scrim.Loaded += (_, _) => search.Focus(FocusState.Programmatic);
-            var editorStillOpen = false;
-            try
-            {
-                editorStillOpen = await closed.Task;
-                // Move focus before removing the focused picker subtree; otherwise WinUI
-                // can fall back to the first input and scroll the editor to the top.
-                if (editorStillOpen) RestoreMaterialFocus(appliedRow ?? row, scrollOffset);
-            }
-            finally
-            {
-                TraceMaterial("picker.removed", row.Detail);
-                filterTimer.Stop();
-                Closed -= CloseWithEditor;
-                Root.SizeChanged -= Resize;
-                Root.Children.Remove(scrim);
-            }
-            if (!editorStillOpen) return;
-            if (categoryToCreate is not null)
-            {
-                var selected = await MaterialCreateDialog.ShowAsync(this, root, categoryToCreate);
-                if (selected is not null)
-                {
-                    foreach (var materialChoices in _detailRows.Select(detailRow => detailRow.MaterialChoices).Distinct())
-                        materialChoices.Add(selected);
-                    appliedRow = ApplyRowMaterial(row.Detail, selected, out var error);
-                    if (error is not null) await new ContentDialog
-                    {
-                        XamlRoot = root, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Не удалось сохранить"),
-                        Content = error, CloseButtonText = UiText.Get("Закрыть")
-                    }.ShowAsync();
-                    NotificationCenter.Publish(UiText.Get("Готово"), UiText.Get("Материал сохранён"));
-                }
-            }
-            var focusRequest = _materialFocusRequests.Begin();
-            ProductScrollViewer.DispatcherQueue.TryEnqueue(() =>
-            {
-                if (_materialFocusRequests.IsCurrent(focusRequest))
-                    RestoreMaterialFocus(appliedRow ?? row, scrollOffset);
-                if (appliedRow is { } applied)
-                {
-                    var label = (applied.MaterialButton?.Content as Grid)?.Children.OfType<TextBlock>().FirstOrDefault();
-                    TraceMaterial("option.post-layout", applied.Detail, label is null ? "no-view" :
-                        label.Text == applied.SelectedMaterial?.Material.Name ? "label-matches" : "label-mismatch");
-                }
-            });
-        }
-        finally
-        {
-            filterTimer.Stop();
-            _chooseMaterial = null;
-            _materialPickerOpen = false;
-            if (Root.XamlRoot is not null) ThemeService.SetCursorRevealSuppressed(this, false);
-        }
-    }
-
-    private MaterialPickerOption[] MaterialPickerOptions()
-    {
-        if (_materialPickerOptions is not null && ReferenceEquals(_materialPickerDatabase, App.State.Database) &&
-            _materialPickerRevision == App.State.Revision && _materialPickerLanguage == UiText.Language)
-            return _materialPickerOptions;
-        _materialPickerDatabase = App.State.Database;
-        _materialPickerRevision = App.State.Revision;
-        _materialPickerLanguage = UiText.Language;
-        return _materialPickerOptions = App.State.MaterialChoices().GroupBy(choice => choice.Type).OrderBy(group => group.Key)
-            .SelectMany(group => MaterialCatalogOrdering.Sort(group, "name-asc"))
-            .Select(choice => new MaterialPickerOption(choice, choice.Material.Name,
-                $"{UnitLabel(choice.Material.Unit)} · {MaterialPricing.UnitCost(choice.Material):N2} {UiText.Get("руб.")}")).ToArray();
-    }
-
-    private DetailRow? ApplyRowMaterial(Detail detail, MaterialChoice choice, out string? error)
-    {
-        error = null;
-        TraceMaterial("option.apply-start", detail, string.IsNullOrEmpty(detail.MaterialId) ? "was-empty" : "had-material");
-        var row = _detailRows.FirstOrDefault(candidate => ReferenceEquals(candidate.Detail, detail));
-        if (row is null || !_sourceProduct.Details.Contains(detail))
-        {
-            TraceMaterial("option.apply-blocked", detail, "detail-missing");
-            error = UiText.Get("Деталь больше не доступна. Откройте список материалов заново.");
-            return null;
-        }
-        if (App.State.FindMaterial(choice.Type, choice.Material.Id) is not { } currentMaterial)
-        {
-            TraceMaterial("option.apply-blocked", detail, "material-missing");
-            error = UiText.Get("Материал недоступен. Откройте список материалов заново.");
-            return null;
-        }
-        choice = new MaterialChoice(choice.Type, currentMaterial);
-        if (row.Detail.IsGeneratedEdgeBand)
-        {
-            try
-            {
-                if (!EdgeBandingService.ReplaceGeneratedMaterial(App.State, _sourceProduct, row.Detail, choice))
-                {
-                    TraceMaterial("option.apply-no-change", detail, "generated-edge");
-                    return row;
-                }
-                UpdateSummary();
-                var replacement = _detailRows.FirstOrDefault(item => item.Detail.IsGeneratedEdgeBand &&
-                    item.Detail.MaterialId == choice.Material.Id && item.Detail.Type == choice.Type);
-                _selectedDetailRow = replacement ?? _selectedDetailRow;
-                UpdateDetailSelectionVisuals();
-                TraceMaterial("option.apply-end", replacement?.Detail ?? detail, replacement is null ? "replacement-view-missing" : "generated-edge");
-                return replacement;
-            }
-            catch (InvalidOperationException failure)
-            {
-                TraceMaterial("option.apply-error", detail, failure.GetType().Name, failure.HResult);
-                error = UiText.Get(failure.Message);
-                return null;
-            }
-        }
-        row.SelectedMaterial = choice;
-        row.CommitMaterial();
-        TraceMaterial("option.model-committed", detail, detail.MaterialId == choice.Material.Id && detail.Type == choice.Type ? "matches" : "mismatch");
-        var materialContent = row.MaterialButton?.Content as Grid;
-        if (materialContent?.Children.OfType<TextBlock>().FirstOrDefault() is { } label)
-            label.Text = choice.Material.Name;
-        if (materialContent?.Children.OfType<Image>().FirstOrDefault() is { } image)
-            _ = LoadMaterialTextureAsync(image, choice.Material.Texture);
-        UpdateMaterialRowView(row);
-        UpdateSummary();
-        TraceMaterial("option.apply-end", detail, row.MaterialButton is null ? "no-view" : "view-updated");
-        return row;
-    }
-
-    private void RestoreMaterialFocus(DetailRow? row, double verticalOffset)
-    {
-        if (Root.XamlRoot is null) return;
-        var focused = row?.MaterialButton is { IsLoaded: true } button && button.Focus(FocusState.Programmatic);
-        if (!focused)
-        {
-            BackgroundFocusTarget.IsTabStop = true;
-            var fallbackFocused = BackgroundFocusTarget.Focus(FocusState.Programmatic);
-            if (!fallbackFocused) BackgroundFocusTarget.IsTabStop = false;
-            TraceMaterial("picker.restore-focus", row?.Detail, fallbackFocused ? "editor-fallback" : "focus-failed");
-        }
-        else TraceMaterial("picker.restore-focus", row?.Detail, "material-field");
-        ProductScrollViewer.ChangeView(null, verticalOffset, null, disableAnimation: true);
-    }
-
-    private void UpdateMaterialRowView(DetailRow row, bool updateHeaders = true)
-    {
-        UpdateEdgeBandButton(row);
-        if (row.Container?.Child is not Grid grid) return;
-        var material = row.SelectedMaterial?.Material;
-        var sheet = material?.Unit == "m2";
-        foreach (var child in grid.Children.OfType<FrameworkElement>())
-        {
-            var column = Grid.GetColumn(child);
-            if (column == 3) child.Visibility = sheet || material?.Unit == "lm" ? Visibility.Visible : Visibility.Collapsed;
-            if (column is 4 or 5 or 6) child.Visibility = sheet ? Visibility.Visible : Visibility.Collapsed;
-            if (column != 6 || child is not Grid rotation) continue;
-            _updatingMaterialView = true;
-            try
-            {
-                var toggle = rotation.Children.OfType<ToggleSwitch>().First();
-                toggle.IsEnabled = sheet;
-                toggle.IsOn = DetailRotation.CanRotate(row.Detail, material);
-                toggle.Visibility = sheet ? Visibility.Visible : Visibility.Collapsed;
-                rotation.Children.OfType<FontIcon>().First().Visibility = DetailRotation.IsLocked(row.Detail, material)
-                    ? Visibility.Visible : Visibility.Collapsed;
-                ToolTipService.SetToolTip(rotation,DetailRotation.Reason(row.Detail, material));
-            }
-            finally { _updatingMaterialView = false; }
-        }
-        ToolTipService.SetToolTip(row.MaterialButton!,material?.Name ?? "Выберите материал");
-        if (updateHeaders) UpdateDetailHeaders();
-    }
-
-    private static Task LoadMaterialTextureAsync(Image image, string? source) =>
-        ImagePreviewService.SetVisibleAsync(image, source ?? "");
-
-    private static string UnitLabel(string unit) => unit switch
-    {
-        "m2" => UiText.Get("м²"),
-        "lm" => UiText.Get("пог. м"),
-        _ => UiText.Get("шт.")
-    };
-    private MenuFlyout CreateDetailContextMenu(DetailRow row)
-    {
-        var flyout = new MenuFlyout();
-        var add = new MenuFlyoutItem { Text = UiText.Get("Добавить") };
-        add.Click += AddDetailClick;
-        var edit = new MenuFlyoutItem { Text = UiText.Get("Изменить") };
-        edit.Click += (_, _) =>
-        {
-            _selectedDetailRow = row;
-            UpdateDetailSelectionVisuals();
-        };
-        var delete = new MenuFlyoutItem { Text = UiText.Get("Удалить") };
-        delete.Click += async (_, _) =>
-        {
-            _selectedDetailRow = row;
-            if (!await ConfirmDeleteAsync(UiText.Get("Удалить деталь?"),row.Detail.Name)) return;
-            if (row.Detail.IsGeneratedEdgeBand) EdgeBandingService.RemoveMaterial(_sourceProduct, row.Detail.MaterialId);
-            _sourceProduct.Details.Remove(row.Detail);
-            RefreshDetails();
-            UpdateSummary();
-        };
-        flyout.Items.Add(add);
-        flyout.Items.Add(edit);
-        flyout.Items.Add(delete);
-        return flyout;
-    }
-
-    private void DetailRowTapped(object sender, TappedRoutedEventArgs e)
-    {
-        if (sender is Border { Tag: DetailRow row })
-        {
-            SelectDetailRow(row);
-        }
-    }
-
-    private void SelectDetailRow(DetailRow row)
-    {
-        if (ReferenceEquals(_selectedDetailRow, row)) return;
-        var previous = _selectedDetailRow;
-        _selectedDetailRow = row;
-        if (previous is not null) UpdateDetailSelectionVisual(previous);
-        UpdateDetailSelectionVisual(row);
-    }
-
-    private void ProductBackgroundTapped(object sender, TappedRoutedEventArgs e)
-    {
-        if (_materialPickerOpen) return;
-        DetailRow? clickedRow = null;
-        var element = e.OriginalSource as DependencyObject;
-        for (; element is not null && element != Root; element = VisualTreeHelper.GetParent(element))
-        {
-            // Leave native input, buttons, popups and scrollbars in charge of their own focus.
-            if (element is Control control && control is not ScrollViewer && control.GetType() != typeof(ContentControl)) return;
-            if (element is Border { Tag: DetailRow row }) clickedRow = row;
-        }
-        // Popup input can route here even though it is outside the editor's visual tree.
-        if (element != Root) return;
-
-        if (FocusManager.GetFocusedElement(Root.XamlRoot) is TextBox or NumberBox)
-        {
-            BackgroundFocusTarget.IsTabStop = true;
-            BackgroundFocusTarget.Focus(FocusState.Programmatic);
-        }
-        if (clickedRow is not null) SelectDetailRow(clickedRow);
-        e.Handled = true;
-    }
-
-    private void UpdateDetailSelectionVisuals()
-    {
-        foreach (var row in _detailRows) UpdateDetailSelectionVisual(row);
-    }
-
-    private void UpdateDetailSelectionVisual(DetailRow row)
-    {
-        if (row.Container is null) return;
-        var brush = row == _selectedDetailRow ? (Brush)Application.Current.Resources["AppAccentBrush"] : null;
-        if (!ReferenceEquals(row.Container.BorderBrush, brush)) row.Container.BorderBrush = brush;
     }
 
     private IntPtr MinSizeSubclassProc(IntPtr hwnd, uint message, UIntPtr wParam, IntPtr lParam, UIntPtr subclassId, UIntPtr refData)
@@ -2024,11 +581,6 @@ public sealed partial class ProductWindow : Window
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
-    public sealed record FormulaReference(string Section, string Label, string Expression, string Value)
-    {
-        public override string ToString() => $"{Section}: {Label}, {Value}";
-    }
-
     private delegate IntPtr WindowSubclassProc(IntPtr hwnd, uint message, UIntPtr wParam, IntPtr lParam, UIntPtr subclassId, UIntPtr refData);
 
     [DllImport("Comctl32.dll", SetLastError = true)]
@@ -2055,27 +607,4 @@ public sealed partial class ProductWindow : Window
     }
 
     private static string Empty(string value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-}
-
-public sealed class DetailRow(Detail detail, List<MaterialChoice> materialChoices)
-{
-    public Detail Detail { get; } = detail;
-    public List<MaterialChoice> MaterialChoices { get; } = materialChoices;
-    public MaterialChoice? SelectedMaterial { get; set; } = materialChoices.FirstOrDefault(item => item.Type == detail.Type && item.Material.Id == detail.MaterialId);
-    public Button? MaterialButton { get; set; }
-    public Flyout? EdgeBandFlyout { get; set; }
-    public List<TextBox> FormulaBoxes { get; } = [];
-    public string Calculation { get; set; } = "";
-    public DetailCalc? CalculationResult { get; set; }
-    public Border? Container { get; set; }
-    public TextBlock? CalculationText { get; set; }
-    public Button? EdgeBandButton { get; set; }
-    public Windows.Foundation.Point? EdgeBandPointer { get; set; }
-
-    public void CommitMaterial()
-    {
-        if (SelectedMaterial is null) return;
-        Detail.Type = SelectedMaterial.Type;
-        Detail.MaterialId = SelectedMaterial.Material.Id;
-    }
 }

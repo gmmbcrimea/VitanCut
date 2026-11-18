@@ -18,35 +18,19 @@ public sealed partial class ProductWindow
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button,UiText.Get("Кромка: ") + row.Detail.Name);
     }
 
-    private void SyncEdgeBandRows()
-    {
-        if (!_sourceProduct.Details.Any(detail => detail.IsGeneratedEdgeBand || detail.EdgeBands.Count > 0)) return;
-        EdgeBandingService.Refresh(App.State, _sourceProduct);
-        foreach (var row in _detailRows.Where(row => row.Detail.IsGeneratedEdgeBand && !_sourceProduct.Details.Contains(row.Detail)).ToList())
-        {
-            _detailRows.Remove(row);
-            if (_selectedDetailRow == row) _selectedDetailRow = _detailRows.FirstOrDefault();
-        }
-        var choices = App.State.MaterialChoices().ToList();
-        foreach (var detail in _sourceProduct.Details.Where(detail => detail.IsGeneratedEdgeBand && _detailRows.All(row => row.Detail != detail)))
-        {
-            var row = CreateDetailRow(detail, choices);
-            _detailRows.Add(row);
-        }
-        foreach (var row in _detailRows) UpdateEdgeBandButton(row);
-        UpdateDetailColumns();
-        UpdateDetailSelectionVisuals();
-        UpdateDetailHeaders();
-    }
-
     private void OpenEdgeBanding(DetailRow row, Button anchor)
     {
+        if (!_detailEditor.Contains(row.Detail)) return;
         SaveProductFields();
         var length = FormulaEvaluator.Evaluate(_sourceProduct, row.Detail);
         var width = FormulaEvaluator.Evaluate(_sourceProduct, row.Detail, width: true);
         var valid = length.IsValid && width.IsValid && length.Value > 0 && width.Value > 0;
         var flyout = new Flyout { ShouldConstrainToRootBounds = true, OverlayInputPassThroughElement = Root };
         row.EdgeBandFlyout = flyout;
+        flyout.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(row.EdgeBandFlyout, flyout)) row.EdgeBandFlyout = null;
+        };
         var panel = new StackPanel { Width = 300, Spacing = 12 };
         panel.Children.Add(new TextBlock { Text = row.Detail.Name, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         var choices = App.State.MaterialChoices().Where(EdgeBandingService.IsEdgeMaterial).ToList();
@@ -83,7 +67,7 @@ public sealed partial class ProductWindow
             ToolTipService.SetToolTip(edgeButton,label + " · " + Calculator.Number(horizontal ? length.Value : width.Value) + UiText.Get(" мм"));
             edgeButton.Click += (_, _) =>
             {
-                if (materials.SelectedItem is not MaterialChoice selected) return;
+                if (!_detailEditor.Contains(row.Detail) || materials.SelectedItem is not MaterialChoice selected) return;
                 EdgeBandingService.SetSide(row.Detail, side, edgeButton.IsChecked == true ? selected : null);
                 UpdateSummary();
                 PaintEdges();
@@ -103,7 +87,7 @@ public sealed partial class ProductWindow
         }
         materials.SelectionChanged += (_, _) =>
         {
-            if (materials.SelectedItem is not MaterialChoice selected) return;
+            if (!_detailEditor.Contains(row.Detail) || materials.SelectedItem is not MaterialChoice selected) return;
             EdgeBandingService.ReplaceMaterial(row.Detail, selected);
             UpdateSummary();
             PaintEdges();
