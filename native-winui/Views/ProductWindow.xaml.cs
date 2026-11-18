@@ -1391,6 +1391,24 @@ public sealed partial class ProductWindow : Window
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
         var empty = new TextBlock { Text = UiText.Get("Материалы не найдены"), Visibility = Visibility.Collapsed };
+        var scrollRequests = new UiRequestGate();
+        void AlignExpandedHeader(Expander expander)
+        {
+            var request = scrollRequests.Begin();
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (!scrollRequests.IsCurrent(request) || closed.Task.IsCompleted || !expander.IsLoaded || !expander.IsExpanded)
+                    return;
+                categories.UpdateLayout();
+                var top = Math.Max(0, expander.TransformToVisual(categories).TransformPoint(default).Y);
+                var contentHeight = categories.ActualHeight - categories.Padding.Bottom;
+                // Even the final group needs enough space below it to reach the top.
+                var bottom = Math.Max(0, Math.Ceiling(top + scroll.ViewportHeight - contentHeight));
+                categories.Padding = new Thickness(0, 0, 0, bottom);
+                categories.UpdateLayout();
+                scroll.ChangeView(null, top, null, disableAnimation: true);
+            });
+        }
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search,UiText.Get("Поиск материала по названию и категории"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(scroll,UiText.Get("Категории материалов"));
         ListView CreateOptionsList(IReadOnlyList<MaterialPickerOption> options, string label)
@@ -1431,6 +1449,9 @@ public sealed partial class ProductWindow : Window
         }
         void Filter()
         {
+            scrollRequests.Begin();
+            categories.Padding = new Thickness(0);
+            scroll.ChangeView(null, 0, null, disableAnimation: true);
             using var measurement = App.UiPerformance.Measure(UiWork.MaterialPicker);
             var searching = !string.IsNullOrWhiteSpace(search.Text);
             var choices = MaterialPickerOptions().Where(option => !row.Detail.IsGeneratedEdgeBand ||
@@ -1464,6 +1485,7 @@ public sealed partial class ProductWindow : Window
                 expander.Expanding += (_, _) =>
                 {
                     using var measurement = App.UiPerformance.Measure(UiWork.MaterialPickerExpand);
+                    if (!searching) AlignExpandedHeader(expander);
                     if (populated) return;
                     populated = true;
                     foreach (var materialGroup in options.GroupBy(option => option.Choice.Material.Group.Trim(), StringComparer.CurrentCultureIgnoreCase))
@@ -1483,6 +1505,7 @@ public sealed partial class ProductWindow : Window
                         groupExpander.Expanding += (_, _) =>
                         {
                             groupExpander.Content ??= CreateOptionsList(groupOptions, $"{categoryName}: {materialGroup.Key}");
+                            if (!searching) AlignExpandedHeader(groupExpander);
                         };
                         categoryContent.Children.Insert(categoryContent.Children.Count - 1, groupExpander);
                         groupExpander.IsExpanded = searching;
@@ -1568,6 +1591,7 @@ public sealed partial class ProductWindow : Window
         _materialPickerOpen = true;
         try
         {
+            ThemeService.SetCursorRevealSuppressed(this, true);
             Filter();
             Place();
             Root.Children.Add(scrim);
@@ -1601,6 +1625,7 @@ public sealed partial class ProductWindow : Window
         {
             filterTimer.Stop();
             _materialPickerOpen = false;
+            if (Root.XamlRoot is not null) ThemeService.SetCursorRevealSuppressed(this, false);
         }
     }
 

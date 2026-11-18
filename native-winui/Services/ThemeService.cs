@@ -53,10 +53,17 @@ public static class ThemeService
         registration.ApplyReveal(window, preferences);
     }
 
+    internal static void SetCursorRevealSuppressed(Window window, bool suppressed)
+    {
+        if (Registrations.TryGetValue(window, out var registration))
+            registration.SetCursorRevealSuppressed(window, suppressed);
+    }
+
     private sealed class Registration
     {
         private readonly UISettings _system = new();
         private CursorReveal? _reveal;
+        private bool _revealSuppressed;
         private bool _layoutInitialized;
         private bool _compactMode;
         private bool _animationsEnabled;
@@ -72,11 +79,18 @@ public static class ThemeService
 
         public void ApplyReveal(Window window, AppPreferences preferences)
         {
-            var enabled = preferences.CursorRevealEnabled && _system.AdvancedEffectsEnabled && !new AccessibilitySettings().HighContrast;
+            var enabled = !_revealSuppressed && preferences.CursorRevealEnabled && _system.AdvancedEffectsEnabled && !new AccessibilitySettings().HighContrast;
             if (_reveal is null && enabled && window.Content is FrameworkElement { XamlRoot: not null } root)
                 _reveal = new CursorReveal(window, root);
             _reveal?.Update(enabled);
         }
+
+        public void SetCursorRevealSuppressed(Window window, bool suppressed)
+        {
+            _revealSuppressed = suppressed;
+            ApplyReveal(window, App.Preferences.Current);
+        }
+
         public Registration(Window window)
         {
             void Refresh() => window.DispatcherQueue.TryEnqueue(() => Apply(window, App.Preferences.Current));
