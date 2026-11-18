@@ -21,6 +21,7 @@
     <Compile Include="../native-winui/Services/FormulaSuggestionInsertion.cs" Link="Services/FormulaSuggestionInsertion.cs" />
     <Compile Include="../native-winui/Services/UiReviewPaths.cs" Link="Services/UiReviewPaths.cs" />
     <Compile Include="../native-winui/Services/UiPerformanceLog.cs" Link="Services/UiPerformanceLog.cs" />
+    <Compile Include="../native-winui/Services/MaterialPickerJournal.cs" Link="Services/MaterialPickerJournal.cs" />
     <Compile Include="../native-winui/Models/Domain.cs" Link="Models/Domain.cs" />
     <Compile Include="../native-winui/Models/AccentPalette.cs" Link="Models/AccentPalette.cs" />
     <Compile Include="../native-winui/Services/AppState.cs" Link="Services/AppState.cs" />

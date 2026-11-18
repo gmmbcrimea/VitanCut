@@ -64,6 +64,13 @@ public sealed partial class ProductWindow : Window
     private bool _updatingMaterialView;
     private bool _materialPickerOpen;
     private Action<MaterialPickerOption>? _chooseMaterial;
+    private static int _nextMaterialTraceEditor;
+    private readonly int _materialTraceEditor = Interlocked.Increment(ref _nextMaterialTraceEditor);
+    private Detail? _materialTraceTarget;
+
+    private void TraceMaterial(string action, Detail? detail = null, string? outcome = null, int? value = null) =>
+        App.MaterialPickerTrace.Record(_materialTraceEditor, action,
+            detail is null ? null : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(detail), outcome, value);
     private bool _updatingStickyDetailActions;
 
     private void ProductScrollViewChanged(object sender, ScrollViewerViewChangedEventArgs e) => UpdateStickyDetailActions();
@@ -195,18 +202,35 @@ public sealed partial class ProductWindow : Window
 
         InitializeComponent();
         App.UiPerformance.Trace(UiLifecycle.ProductOpened);
+        TraceMaterial("editor.open", outcome: _catalogEditor ? "catalog" : "project", value: _sourceProduct.Details.Count);
         Closed += (_, _) =>
         {
+            TraceMaterial("editor.close");
             App.UiPerformance.Trace(UiLifecycle.ProductClosed);
             CompositionTarget.Rendering -= CompleteScrollFrame;
             _pendingScrollFrame = null;
             App.UiPerformance.Flush();
         };
         Root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler(MeasureScrollFrame), true);
-        Root.GotFocus += (_, _) => CloseInactiveFormulaSuggestions();
+        Root.GotFocus += (_, args) =>
+        {
+            if (_materialPickerOpen || ReferenceEquals(args.OriginalSource, ProductNameBox) && _materialTraceTarget is not null)
+            {
+                var target = args.OriginalSource;
+                var kind = ReferenceEquals(target, ProductNameBox) ? "product-name" :
+                    ReferenceEquals(target, BackgroundFocusTarget) ? "editor-fallback" : target?.GetType().Name;
+                TraceMaterial("editor.focus", _materialTraceTarget, kind);
+            }
+            CloseInactiveFormulaSuggestions();
+        };
         BackgroundFocusTarget.LostFocus += (_, _) => BackgroundFocusTarget.IsTabStop = false;
         Root.AddHandler(UIElement.TappedEvent, new TappedEventHandler(ProductBackgroundTapped), true);
         Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, _) => { _materialFocusRequests.Begin(); _detailBringRequests.Begin(); }), true);
+        Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, args) =>
+        {
+            if (_materialPickerOpen) TraceMaterial("editor.pointer-press-during-picker", _materialTraceTarget,
+                args.OriginalSource?.GetType().Name);
+        }), true);
         Root.KeyDown += (_, _) => { _materialFocusRequests.Begin(); _detailBringRequests.Begin(); };
         Activated += (_, args) =>
         {
@@ -441,6 +465,7 @@ public sealed partial class ProductWindow : Window
         _sourceProduct.Details.Add(detail);
         var row = CreateDetailRow(detail, _detailRows.FirstOrDefault()?.MaterialChoices ?? App.State.MaterialChoices().ToList());
         _detailRows.Add(row);
+        TraceMaterial("detail.add", detail, value: _detailRows.Count);
         _selectedDetailRow = row;
         UpdateDetailSelectionVisuals();
         UpdateDetailHeaders();
@@ -493,6 +518,7 @@ public sealed partial class ProductWindow : Window
         using var measurement = App.UiPerformance.Measure(UiWork.ProductRowRealize);
         if (args.Element is not ContentControl host || args.Index < 0 || args.Index >= _detailRows.Count) return;
         var row = _detailRows[args.Index];
+        if (ReferenceEquals(row.Detail, _materialTraceTarget)) TraceMaterial("target.view-prepared", row.Detail, value: args.Index);
         if (host.Tag is DetailRowView existing)
         {
             if (!ReferenceEquals(existing.Container.Tag, row))
@@ -538,6 +564,7 @@ public sealed partial class ProductWindow : Window
 
     private void ReleaseDetailRowView(DetailRow row)
     {
+        if (ReferenceEquals(row.Detail, _materialTraceTarget)) TraceMaterial("target.view-released", row.Detail);
         CloseDetailRowFlyouts(row);
         foreach (var field in row.FormulaBoxes)
         {
@@ -559,6 +586,7 @@ public sealed partial class ProductWindow : Window
         if (!await ConfirmDeleteAsync(UiText.Get("Удалить деталь?"),row.Detail.Name)) return;
         if (row.Detail.IsGeneratedEdgeBand) EdgeBandingService.RemoveMaterial(_sourceProduct, row.Detail.MaterialId);
         _sourceProduct.Details.Remove(row.Detail);
+        TraceMaterial("detail.delete", row.Detail);
         RefreshDetails();
         UpdateSummary();
         NotificationCenter.Publish(UiText.Get("Деталь удалена"),UiText.Format($"Деталь «{row.Detail.Name}» удалена из изделия."));
@@ -656,9 +684,11 @@ public sealed partial class ProductWindow : Window
     }
     private async void SaveClick(object sender, RoutedEventArgs e)
     {
+        TraceMaterial("product.save-request", value: _sourceProduct.Details.Count);
         SaveProductFields();
         if (ProductValidation.Error(App.State, _sourceProduct) is { } error)
         {
+            TraceMaterial("product.save-blocked", outcome: "validation");
             await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Проверьте изделие"), Content = error, CloseButtonText = UiText.Get("Понятно") }.ShowAsync();
             return;
         }
@@ -692,10 +722,13 @@ public sealed partial class ProductWindow : Window
         }
 
         ProductSaved?.Invoke(savedProduct, _isNew);
+        TraceMaterial("product.save-dispatched", outcome: ProductSaved is null ? "no-handler" : "handler-returned",
+            value: savedProduct.Details.Count(detail => !string.IsNullOrEmpty(detail.MaterialId)));
         Close();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
+            TraceMaterial("product.save-error", outcome: ex.GetType().Name, value: ex.HResult);
             await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Не удалось сохранить"), Content = ex.Message, CloseButtonText = UiText.Get("Закрыть") }.ShowAsync();
         }
     }
@@ -862,7 +895,11 @@ public sealed partial class ProductWindow : Window
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(materialButton,UiText.Get("Материал детали ") + row.Detail.Name);
         Windows.Foundation.Point? materialPointer = null;
         materialButton.AddHandler(UIElement.PointerPressedEvent,
-            new PointerEventHandler((_, args) => materialPointer = args.GetCurrentPoint(Root).Position), true);
+            new PointerEventHandler((_, args) =>
+            {
+                materialPointer = args.GetCurrentPoint(Root).Position;
+                TraceMaterial("material-field.press", (border.Tag as DetailRow)?.Detail);
+            }), true);
         materialButton.KeyDown += (_, _) => materialPointer = null;
         materialButton.Click += async (_, _) =>
         {
@@ -1373,15 +1410,30 @@ public sealed partial class ProductWindow : Window
 
     private void MaterialOptionClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: MaterialPickerOption option }) return;
+        if (sender is not Button { DataContext: MaterialPickerOption option })
+        {
+            TraceMaterial("option.click", _materialTraceTarget, "missing-data-context");
+            return;
+        }
+        TraceMaterial("option.click", _materialTraceTarget, _chooseMaterial is null ? "missing-handler" : "dispatch");
         _chooseMaterial?.Invoke(option);
     }
 
     private async Task PickRowMaterialAsync(DetailRow row, Windows.Foundation.Point position)
     {
-        if (_materialPickerOpen || Root.XamlRoot is not { } root) return;
+        if (_materialPickerOpen || Root.XamlRoot is not { } root)
+        {
+            TraceMaterial("picker.open-blocked", row.Detail, _materialPickerOpen ? "already-open" : "no-root");
+            return;
+        }
+        _materialTraceTarget = row.Detail;
+        TraceMaterial("picker.open", row.Detail, row.Detail.IsGeneratedEdgeBand ? "generated-edge" : "detail");
         var scrollOffset = ProductScrollViewer.VerticalOffset;
         var closed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Finish(string reason, bool editorStillOpen = true)
+        {
+            if (closed.TrySetResult(editorStillOpen)) TraceMaterial("picker.close-request", row.Detail, reason);
+        }
         DetailRow? appliedRow = null;
         string? categoryToCreate = null;
         var panel = new Grid { RowSpacing = 8, Padding = new Thickness(12), TabFocusNavigation = KeyboardNavigationMode.Cycle };
@@ -1420,6 +1472,7 @@ public sealed partial class ProductWindow : Window
                 categories.Padding = new Thickness(0, 0, 0, bottom);
                 categories.UpdateLayout();
                 scroll.ChangeView(null, top, null, disableAnimation: true);
+                TraceMaterial("picker.align-header", row.Detail, value: (int)Math.Round(top));
             });
         }
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search,UiText.Get("Поиск материала по названию и категории"));
@@ -1461,6 +1514,7 @@ public sealed partial class ProductWindow : Window
                 EdgeBandingService.IsEdgeMaterial(option.Choice)).ToArray();
             var matches = choices.Where(option => UiTextSearch.Matches(search.Text, option.Name, option.Choice.Type,
                 option.Choice.Material.Group)).ToArray();
+            TraceMaterial("picker.filter", row.Detail, searching ? "search" : "all", matches.Length);
             categories.Children.Clear();
             var categoryNames = row.Detail.IsGeneratedEdgeBand ? new[] { "Кромка" }.AsEnumerable() : string.IsNullOrWhiteSpace(search.Text)
                 ? App.MaterialLibrary.GetGroups().Concat(choices.Select(option => option.Choice.Type)).Distinct().OrderBy(type => type)
@@ -1474,7 +1528,7 @@ public sealed partial class ProductWindow : Window
                 add.Click += (_, _) =>
                 {
                     categoryToCreate = categoryName;
-                    closed.TrySetResult(true);
+                    Finish("create-material");
                 };
                 var categoryContent = new StackPanel { Spacing = 4 };
                 categoryContent.Children.Add(add);
@@ -1487,6 +1541,7 @@ public sealed partial class ProductWindow : Window
                 var populated = false;
                 expander.Expanding += (_, _) =>
                 {
+                    if (!searching) TraceMaterial("picker.expand", row.Detail, "category", options.Count);
                     using var measurement = App.UiPerformance.Measure(UiWork.MaterialPickerExpand);
                     if (!searching) AlignExpandedHeader(expander);
                     if (populated) return;
@@ -1507,6 +1562,7 @@ public sealed partial class ProductWindow : Window
                         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(groupExpander, materialGroup.Key);
                         groupExpander.Expanding += (_, _) =>
                         {
+                            if (!searching) TraceMaterial("picker.expand", row.Detail, "group", groupOptions.Count);
                             groupExpander.Content ??= CreateOptionsList(groupOptions, $"{categoryName}: {materialGroup.Key}");
                             if (!searching) AlignExpandedHeader(groupExpander);
                         };
@@ -1521,21 +1577,27 @@ public sealed partial class ProductWindow : Window
         }
         void Select(MaterialPickerOption option)
         {
-            if (closed.Task.IsCompleted) return;
+            if (closed.Task.IsCompleted)
+            {
+                TraceMaterial("option.select-ignored", row.Detail, "already-closing");
+                return;
+            }
             filterTimer.Stop();
             scrollRequests.Begin();
             appliedRow = ApplyRowMaterial(row.Detail, option.Choice, out var error);
             if (error is not null)
             {
+                TraceMaterial("option.rejected", row.Detail);
                 errorText.Text = error;
                 errorText.Visibility = Visibility.Visible;
                 return;
             }
-            closed.TrySetResult(true);
+            Finish("applied");
         }
         filterTimer.Tick += (_, _) => { filterTimer.Stop(); Filter(); };
         search.TextChanged += (_, _) =>
         {
+            TraceMaterial("picker.search-edited", row.Detail, string.IsNullOrEmpty(search.Text) ? "empty" : "nonempty");
             filterTimer.Stop();
             filterTimer.Start();
         };
@@ -1553,7 +1615,11 @@ public sealed partial class ProductWindow : Window
             else if (e.Key == Windows.System.VirtualKey.Enter && !string.IsNullOrWhiteSpace(search.Text) && first?.Content is StackPanel group &&
                 FirstExpandedList(group) is { } matches &&
                 matches.Items.OfType<MaterialPickerOption>().FirstOrDefault() is { } option)
-            { Select(option); e.Handled = true; }
+            {
+                TraceMaterial("option.search-enter", row.Detail);
+                Select(option);
+                e.Handled = true;
+            }
         };
         var title = new TextBlock
         {
@@ -1561,12 +1627,12 @@ public sealed partial class ProductWindow : Window
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
         };
         var cancel = new Button { Content = UiText.Get("Отмена"), HorizontalAlignment = HorizontalAlignment.Right };
-        cancel.Click += (_, _) => closed.TrySetResult(true);
+        cancel.Click += (_, _) => Finish("cancel-button");
         panel.KeyDown += (_, e) =>
         {
             if (e.Key != Windows.System.VirtualKey.Escape) return;
             e.Handled = true;
-            closed.TrySetResult(true);
+            Finish("escape");
         };
         var results = new Grid();
         results.Children.Add(scroll);
@@ -1587,6 +1653,26 @@ public sealed partial class ProductWindow : Window
             HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top
         };
         var scrim = new Grid { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(82, 0, 0, 0)) };
+        void TracePointer(string action, PointerRoutedEventArgs args)
+        {
+            var target = "backdrop";
+            for (var node = args.OriginalSource as DependencyObject; node is not null && node != scrim;
+                node = VisualTreeHelper.GetParent(node))
+            {
+                if (node is Button { DataContext: MaterialPickerOption }) { target = "option-button"; break; }
+                if (node is Expander) { target = "category-or-group"; break; }
+                if (node is TextBox) { target = "search"; break; }
+                if (node == surface) { target = "panel"; break; }
+            }
+            TraceMaterial(action, row.Detail, target);
+        }
+        scrim.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, e) => TracePointer("picker.pointer-press", e)), true);
+        scrim.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler((_, e) => TracePointer("picker.pointer-release", e)), true);
+        scrim.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler((_, e) => TracePointer("picker.pointer-capture-lost", e)), true);
+        scroll.ViewChanged += (_, e) =>
+        {
+            if (!e.IsIntermediate) TraceMaterial("picker.view-settled", row.Detail, value: (int)Math.Round(scroll.VerticalOffset));
+        };
         scrim.Children.Add(surface);
         Grid.SetRowSpan(scrim, Root.RowDefinitions.Count);
         void Place()
@@ -1598,8 +1684,12 @@ public sealed partial class ProductWindow : Window
                 Math.Clamp(position.X + margin, margin, Math.Max(margin, Root.ActualWidth - surface.Width - margin)),
                 Math.Clamp(position.Y + margin, margin, Math.Max(margin, Root.ActualHeight - surface.Height - margin)), 0, 0);
         }
-        void Resize(object sender, SizeChangedEventArgs e) => Place();
-        void CloseWithEditor(object sender, WindowEventArgs e) => closed.TrySetResult(false);
+        void Resize(object sender, SizeChangedEventArgs e)
+        {
+            Place();
+            TraceMaterial("picker.reposition", row.Detail, "window-resized");
+        }
+        void CloseWithEditor(object sender, WindowEventArgs e) => Finish("editor-closed", false);
         _materialPickerOpen = true;
         _chooseMaterial = Select;
         try
@@ -1611,10 +1701,17 @@ public sealed partial class ProductWindow : Window
             Root.SizeChanged += Resize;
             Closed += CloseWithEditor;
             scrim.Loaded += (_, _) => search.Focus(FocusState.Programmatic);
-            bool editorStillOpen;
-            try { editorStillOpen = await closed.Task; }
+            var editorStillOpen = false;
+            try
+            {
+                editorStillOpen = await closed.Task;
+                // Move focus before removing the focused picker subtree; otherwise WinUI
+                // can fall back to the first input and scroll the editor to the top.
+                if (editorStillOpen) RestoreMaterialFocus(appliedRow ?? row, scrollOffset);
+            }
             finally
             {
+                TraceMaterial("picker.removed", row.Detail);
                 filterTimer.Stop();
                 Closed -= CloseWithEditor;
                 Root.SizeChanged -= Resize;
@@ -1642,6 +1739,12 @@ public sealed partial class ProductWindow : Window
             {
                 if (_materialFocusRequests.IsCurrent(focusRequest))
                     RestoreMaterialFocus(appliedRow ?? row, scrollOffset);
+                if (appliedRow is { } applied)
+                {
+                    var label = (applied.MaterialButton?.Content as Grid)?.Children.OfType<TextBlock>().FirstOrDefault();
+                    TraceMaterial("option.post-layout", applied.Detail, label is null ? "no-view" :
+                        label.Text == applied.SelectedMaterial?.Material.Name ? "label-matches" : "label-mismatch");
+                }
             });
         }
         finally
@@ -1670,14 +1773,17 @@ public sealed partial class ProductWindow : Window
     private DetailRow? ApplyRowMaterial(Detail detail, MaterialChoice choice, out string? error)
     {
         error = null;
+        TraceMaterial("option.apply-start", detail, string.IsNullOrEmpty(detail.MaterialId) ? "was-empty" : "had-material");
         var row = _detailRows.FirstOrDefault(candidate => ReferenceEquals(candidate.Detail, detail));
         if (row is null || !_sourceProduct.Details.Contains(detail))
         {
+            TraceMaterial("option.apply-blocked", detail, "detail-missing");
             error = UiText.Get("Деталь больше не доступна. Откройте список материалов заново.");
             return null;
         }
         if (App.State.FindMaterial(choice.Type, choice.Material.Id) is not { } currentMaterial)
         {
+            TraceMaterial("option.apply-blocked", detail, "material-missing");
             error = UiText.Get("Материал недоступен. Откройте список материалов заново.");
             return null;
         }
@@ -1686,22 +1792,29 @@ public sealed partial class ProductWindow : Window
         {
             try
             {
-                if (!EdgeBandingService.ReplaceGeneratedMaterial(App.State, _sourceProduct, row.Detail, choice)) return row;
+                if (!EdgeBandingService.ReplaceGeneratedMaterial(App.State, _sourceProduct, row.Detail, choice))
+                {
+                    TraceMaterial("option.apply-no-change", detail, "generated-edge");
+                    return row;
+                }
                 UpdateSummary();
                 var replacement = _detailRows.FirstOrDefault(item => item.Detail.IsGeneratedEdgeBand &&
                     item.Detail.MaterialId == choice.Material.Id && item.Detail.Type == choice.Type);
                 _selectedDetailRow = replacement ?? _selectedDetailRow;
                 UpdateDetailSelectionVisuals();
+                TraceMaterial("option.apply-end", replacement?.Detail ?? detail, replacement is null ? "replacement-view-missing" : "generated-edge");
                 return replacement;
             }
             catch (InvalidOperationException failure)
             {
+                TraceMaterial("option.apply-error", detail, failure.GetType().Name, failure.HResult);
                 error = UiText.Get(failure.Message);
                 return null;
             }
         }
         row.SelectedMaterial = choice;
         row.CommitMaterial();
+        TraceMaterial("option.model-committed", detail, detail.MaterialId == choice.Material.Id && detail.Type == choice.Type ? "matches" : "mismatch");
         var materialContent = row.MaterialButton?.Content as Grid;
         if (materialContent?.Children.OfType<TextBlock>().FirstOrDefault() is { } label)
             label.Text = choice.Material.Name;
@@ -1709,13 +1822,23 @@ public sealed partial class ProductWindow : Window
             _ = LoadMaterialTextureAsync(image, choice.Material.Texture);
         UpdateMaterialRowView(row);
         UpdateSummary();
+        TraceMaterial("option.apply-end", detail, row.MaterialButton is null ? "no-view" : "view-updated");
         return row;
     }
 
     private void RestoreMaterialFocus(DetailRow? row, double verticalOffset)
     {
-        if (row?.MaterialButton is not { IsLoaded: true } button || !button.Focus(FocusState.Programmatic)) return;
-        ProductScrollViewer.ChangeView(null, verticalOffset, null);
+        if (Root.XamlRoot is null) return;
+        var focused = row?.MaterialButton is { IsLoaded: true } button && button.Focus(FocusState.Programmatic);
+        if (!focused)
+        {
+            BackgroundFocusTarget.IsTabStop = true;
+            var fallbackFocused = BackgroundFocusTarget.Focus(FocusState.Programmatic);
+            if (!fallbackFocused) BackgroundFocusTarget.IsTabStop = false;
+            TraceMaterial("picker.restore-focus", row?.Detail, fallbackFocused ? "editor-fallback" : "focus-failed");
+        }
+        else TraceMaterial("picker.restore-focus", row?.Detail, "material-field");
+        ProductScrollViewer.ChangeView(null, verticalOffset, null, disableAnimation: true);
     }
 
     private void UpdateMaterialRowView(DetailRow row, bool updateHeaders = true)

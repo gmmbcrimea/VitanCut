@@ -39,6 +39,7 @@ public partial class App : Application
     public static AppState State { get; } = new(Paths);
     internal static UiPerformanceLog UiPerformance { get; } = new(Paths.LogsDirectory,
         Paths.IsDevelopment && Environment.GetEnvironmentVariable("VITANCUT_UI_PROFILE") == "1");
+    internal static MaterialPickerJournal MaterialPickerTrace { get; } = new(Paths.LogsDirectory);
     public static AppUpdateService Updates { get; } = new(Paths);
     public static CloudSyncService Cloud { get; } = new(State);
     public static PreferencesService Preferences { get; } = new(State);
@@ -49,6 +50,7 @@ public partial class App : Application
     public App()
     {
         UiPerformance.Trace(UiLifecycle.AppStart);
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => MaterialPickerTrace.Flush();
         if (UiPerformance.Enabled)
         {
             AppDomain.CurrentDomain.ProcessExit += (_, _) => UiPerformance.Trace(UiLifecycle.ProcessExit);
