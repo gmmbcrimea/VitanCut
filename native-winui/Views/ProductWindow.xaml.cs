@@ -493,9 +493,12 @@ public sealed partial class ProductWindow : Window
         var row = _detailRows[args.Index];
         if (host.Tag is DetailRowView existing)
         {
-            using var reuseMeasurement = App.UiPerformance.Measure(UiWork.ProductRowReuse);
-            existing.Unbind();
-            existing.Bind(row);
+            if (!ReferenceEquals(existing.Container.Tag, row))
+            {
+                using var reuseMeasurement = App.UiPerformance.Measure(UiWork.ProductRowReuse);
+                existing.Unbind();
+                existing.Bind(row);
+            }
             var preferences = App.Preferences.Current;
             if (existing.CompactMode != preferences.CompactMode || existing.AnimationsEnabled != preferences.AnimationsEnabled)
             {
@@ -859,8 +862,11 @@ public sealed partial class ProductWindow : Window
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(materialButton,UiText.Get("Материал детали ") + row.Detail.Name);
         materialButton.Click += (_, _) =>
         {
-            row.MaterialFlyout ??= CreateMaterialFlyout(row, materialButton);
-            row.MaterialFlyout.ShowAt(materialButton);
+            if (border.Tag is not DetailRow currentRow) return;
+            _detailBringRequests.Begin();
+            _materialFocusRequests.Begin();
+            currentRow.MaterialFlyout ??= CreateMaterialFlyout(currentRow, materialButton);
+            currentRow.MaterialFlyout.ShowAt(materialButton);
         };
         ToolTipService.SetToolTip(materialButton,row.SelectedMaterial?.Material.Name ?? "Выберите материал");
         Grid.SetColumn(materialButton, 1);
@@ -1390,7 +1396,13 @@ public sealed partial class ProductWindow : Window
             ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Auto);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(list, label);
             list.SelectedItem = options.FirstOrDefault(option => option.Choice == row.SelectedMaterial);
-            list.ItemClick += (_, e) => Select((MaterialPickerOption)e.ClickedItem);
+            // Keep the visible option alive from pointer press through ItemClick.
+            list.AddHandler(UIElement.PointerPressedEvent,
+                new PointerEventHandler((_, _) => filterTimer.Stop()), true);
+            list.ItemClick += (_, e) =>
+            {
+                if (e.ClickedItem is MaterialPickerOption option) Select(option);
+            };
             list.KeyDown += (_, e) =>
             {
                 if (e.Key == Windows.System.VirtualKey.Enter && list.SelectedItem is MaterialPickerOption option)
@@ -1427,12 +1439,14 @@ public sealed partial class ProductWindow : Window
                 CommandAppearance.Decorate(add);
                 add.Click += async (_, _) =>
                 {
+                    var root = button.XamlRoot;
+                    if (root is null) return;
                     flyout.Hide();
-                    var added = await MaterialCreateDialog.ShowAsync(this, button.XamlRoot, categoryName);
+                    var added = await MaterialCreateDialog.ShowAsync(this, root, categoryName);
                     if (added is null) return;
                     foreach (var materialChoices in _detailRows.Select(detailRow => detailRow.MaterialChoices).Distinct())
                         materialChoices.Add(added);
-                    SelectRowMaterial(row, button, added);
+                    SelectRowMaterial(row.Detail, added);
                     NotificationCenter.Publish(UiText.Get("Готово"), UiText.Get("Материал сохранён"));
                 };
                 var categoryContent = new StackPanel { Spacing = 4 };
@@ -1478,9 +1492,9 @@ public sealed partial class ProductWindow : Window
         }
         void Select(MaterialPickerOption option)
         {
-            if (!ReferenceEquals(row.MaterialButton, button) || row.Container is null) return;
+            filterTimer.Stop();
             flyout.Hide();
-            SelectRowMaterial(row, button, option.Choice);
+            SelectRowMaterial(row.Detail, option.Choice);
         }
         filterTimer.Tick += (_, _) => { filterTimer.Stop(); if (flyout.IsOpen) Filter(); };
         search.TextChanged += (_, _) =>
@@ -1536,8 +1550,11 @@ public sealed partial class ProductWindow : Window
                 $"{UnitLabel(choice.Material.Unit)} · {MaterialPricing.UnitCost(choice.Material):N2} {UiText.Get("руб.")}")).ToArray();
     }
 
-    private void SelectRowMaterial(DetailRow row, Button button, MaterialChoice choice)
+    private void SelectRowMaterial(Detail detail, MaterialChoice choice)
     {
+        // The row container can be recycled when closing the flyout or dialog.
+        var row = _detailRows.FirstOrDefault(candidate => ReferenceEquals(candidate.Detail, detail));
+        if (row is null) return;
         var focusRequest = _materialFocusRequests.Begin();
         var verticalOffset = ProductScrollViewer.VerticalOffset;
         if (row.Detail.IsGeneratedEdgeBand)
@@ -1553,8 +1570,7 @@ public sealed partial class ProductWindow : Window
                 ProductScrollViewer.DispatcherQueue.TryEnqueue(() =>
                 {
                     if (!_materialFocusRequests.IsCurrent(focusRequest)) return;
-                    replacement?.MaterialButton?.Focus(FocusState.Programmatic);
-                    ProductScrollViewer.ChangeView(null, verticalOffset, null);
+                    RestoreMaterialFocus(replacement, verticalOffset);
                 });
             }
             catch (InvalidOperationException error)
@@ -1565,18 +1581,24 @@ public sealed partial class ProductWindow : Window
         }
         row.SelectedMaterial = choice;
         row.CommitMaterial();
-        if (button.Content is Grid content && content.Children.OfType<TextBlock>().FirstOrDefault() is { } label)
+        var materialContent = row.MaterialButton?.Content as Grid;
+        if (materialContent?.Children.OfType<TextBlock>().FirstOrDefault() is { } label)
             label.Text = choice.Material.Name;
-        if (button.Content is Grid imageContent && imageContent.Children.OfType<Image>().FirstOrDefault() is { } image)
+        if (materialContent?.Children.OfType<Image>().FirstOrDefault() is { } image)
             _ = LoadMaterialTextureAsync(image, choice.Material.Texture);
         UpdateMaterialRowView(row);
         UpdateSummary();
         ProductScrollViewer.DispatcherQueue.TryEnqueue(() =>
         {
             if (!_materialFocusRequests.IsCurrent(focusRequest)) return;
-            button.Focus(FocusState.Programmatic);
-            ProductScrollViewer.ChangeView(null, verticalOffset, null);
+            RestoreMaterialFocus(row, verticalOffset);
         });
+    }
+
+    private void RestoreMaterialFocus(DetailRow? row, double verticalOffset)
+    {
+        if (row?.MaterialButton is not { IsLoaded: true } button || !button.Focus(FocusState.Programmatic)) return;
+        ProductScrollViewer.ChangeView(null, verticalOffset, null);
     }
 
     private void UpdateMaterialRowView(DetailRow row, bool updateHeaders = true)
@@ -1664,13 +1686,15 @@ public sealed partial class ProductWindow : Window
     private void ProductBackgroundTapped(object sender, TappedRoutedEventArgs e)
     {
         DetailRow? clickedRow = null;
-        for (var element = e.OriginalSource as DependencyObject; element is not null && element != Root;
-             element = VisualTreeHelper.GetParent(element))
+        var element = e.OriginalSource as DependencyObject;
+        for (; element is not null && element != Root; element = VisualTreeHelper.GetParent(element))
         {
             // Leave native input, buttons, popups and scrollbars in charge of their own focus.
             if (element is Control control && control is not ScrollViewer && control.GetType() != typeof(ContentControl)) return;
             if (element is Border { Tag: DetailRow row }) clickedRow = row;
         }
+        // Popup input can route here even though it is outside the editor's visual tree.
+        if (element != Root) return;
 
         if (FocusManager.GetFocusedElement(Root.XamlRoot) is TextBox or NumberBox)
         {
