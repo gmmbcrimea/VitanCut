@@ -157,12 +157,6 @@
         <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Section}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
       </Grid>
     </DataTemplate>
-    <DataTemplate x:Key="MaterialPickerTemplate">
-      <StackPanel Spacing="2" Padding="0,4">
-        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-        <TextBlock Text="{Binding Caption}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
-      </StackPanel>
-    </DataTemplate>
     <Style x:Key="UiButtonStyle" TargetType="Button">
       <Setter Property="FontSize" Value="{StaticResource UiBodySize}" />
       <Setter Property="MinHeight" Value="40" />

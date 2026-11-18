@@ -10,6 +10,17 @@
   </Window.SystemBackdrop>
 
   <Grid x:Name="Root" Background="{StaticResource PageSurfaceBrush}" SizeChanged="RootSizeChanged">
+    <Grid.Resources>
+      <DataTemplate x:Key="MaterialPickerTemplate">
+        <Button Click="MaterialOptionClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                Background="Transparent" BorderThickness="0" MinWidth="0" Padding="8,5">
+          <StackPanel Spacing="2">
+            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding Caption}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </Button>
+      </DataTemplate>
+    </Grid.Resources>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
