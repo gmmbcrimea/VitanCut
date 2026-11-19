@@ -9,6 +9,7 @@ internal static class ImageChecks
     [STAThread]
     private static async Task<int> Main()
     {
+        await ThumbnailChecks.RunAsync();
         var imagePath = Path.GetFullPath("native-winui/Assets/logo.png");
         var source = await File.ReadAllBytesAsync(imagePath);
         var sourceDimensions = await Dimensions(source);

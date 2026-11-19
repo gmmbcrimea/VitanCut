@@ -10,6 +10,11 @@ if (string.IsNullOrWhiteSpace(testRoot))
 var output = Path.Combine(Path.GetFullPath(testRoot), "VitanCut-checks-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(output);
 var checks = 0;
+Check(ImagePreviewSize.Pixels(56, 0, 1) == 56, "Thumbnail uses its actual display resolution instead of an intermediate 300px image");
+Check(ImagePreviewSize.Pixels(56, 0, 1.5) == 84 && ImagePreviewSize.Pixels(56, 0, 2) == 112, "Thumbnail resolution respects Windows display scaling");
+Check(ImagePreviewSize.Pixels(double.NaN, 40, 1.25) == 50, "Auto-sized previews use measured dimensions");
+Check(ImagePreviewSize.Pixels(double.NaN, 0, double.NaN) == 300, "Unmeasured previews have a safe fallback");
+Check(ImagePreviewSize.Pixels(5000, 0, 3) == 1024 && ImagePreviewSize.Pixels(0.1, 0, 1) == 1, "Preview pixel allocation is bounded");
 var projectRowProduct = new Product { Length = 900, Depth = 500, Height = 720, Qty = 3 };
 Check(projectRowProduct.DimensionsText == "900 × 500 × 720 мм" &&
     projectRowProduct.SizeText == "900 × 500 × 720 мм · 3 шт." && projectRowProduct.Qty == 3,

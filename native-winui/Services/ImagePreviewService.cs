@@ -2,6 +2,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using Windows.Storage.Streams;
 
 namespace VitanCut.WinUI.Services;
@@ -9,6 +11,8 @@ namespace VitanCut.WinUI.Services;
 public static class ImagePreviewService
 {
     private static readonly ConditionalWeakTable<Image, UiRequestGate> Requests = new();
+    private static readonly Dictionary<(string Source, uint Width, uint Height), Task<BitmapImage?>> Cache = [];
+    private static readonly SemaphoreSlim Resizers = new(2);
 
     public static Task<bool> SetAsync(Image image, string source) => LoadAsync(image, source, null, null);
 
@@ -25,28 +29,39 @@ public static class ImagePreviewService
         var gate = Requests.GetValue(image, _ => new UiRequestGate());
         var request = gate.Begin();
         bool Current() => gate.IsCurrent(request) && (isCurrent?.Invoke() ?? true);
+        if (!image.IsLoaded)
+        {
+            RoutedEventHandler? onLoaded = null;
+            onLoaded = async (_, _) =>
+            {
+                image.Loaded -= onLoaded;
+                if (Current()) await LoadAsync(image, source, onCurrentCompleted, isCurrent);
+            };
+            image.Loaded += onLoaded;
+        }
         BitmapImage? bitmap = null;
         try
         {
-            if (ProductImageData.Read(source) is { } bytes)
+            var scale = image.XamlRoot?.RasterizationScale ?? 1;
+            var width = ImagePreviewSize.Pixels(image.Width, image.ActualWidth, scale);
+            var height = ImagePreviewSize.Pixels(image.Height, image.ActualHeight, scale);
+            if (source.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
             {
-                // Downsample before WinUI renders the thumbnail at its final size.
-                if (await ImageResizeService.ResizeAsync(bytes, 300, 300) is { } resized && ProductImageData.Read(resized) is { } resizedBytes)
-                    bytes = resizedBytes;
-                if (!Current()) return false;
-                using var stream = new InMemoryRandomAccessStream();
-                using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
+                var key = (Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source))), width, height);
+                if (!Cache.TryGetValue(key, out var pending))
                 {
-                    writer.WriteBytes(bytes);
-                    await writer.StoreAsync();
+                    // Bound retained decoded images; identical rows share one in-flight resize.
+                    if (Cache.Count >= 64) Cache.Remove(Cache.Keys.First());
+                    Cache[key] = pending = CreateBitmapAsync(source, width, height);
                 }
-                stream.Seek(0);
-                bitmap = new BitmapImage();
-                await bitmap.SetSourceAsync(stream);
+                bitmap = await pending;
+                if (bitmap is null) Cache.Remove(key);
             }
+            else bitmap = await CreateBitmapAsync(source, width, height);
         }
         catch (Exception ex) when (ex is ArgumentException or System.Runtime.InteropServices.COMException or IOException)
         {
+            Cache.Clear();
             bitmap = null;
         }
         // Image and its visibility/status must belong to the same latest request.
@@ -62,5 +77,32 @@ public static class ImagePreviewService
         {
             return false;
         }
+    }
+
+    private static async Task<BitmapImage?> CreateBitmapAsync(string source, uint width, uint height)
+    {
+        await Resizers.WaitAsync();
+        byte[]? bytes;
+        try
+        {
+            bytes = await Task.Run(async () =>
+            {
+                if (ProductImageData.Read(source) is not { } original) return null;
+                var resized = await ImageResizeService.ResizeAsync(original, width, height);
+                return resized is null ? null : ProductImageData.Read(resized);
+            });
+        }
+        finally { Resizers.Release(); }
+        if (bytes is null) return null;
+        using var stream = new InMemoryRandomAccessStream();
+        using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
+        {
+            writer.WriteBytes(bytes);
+            await writer.StoreAsync();
+        }
+        stream.Seek(0);
+        var bitmap = new BitmapImage();
+        await bitmap.SetSourceAsync(stream);
+        return bitmap;
     }
 }

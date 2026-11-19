@@ -327,7 +327,7 @@ public sealed partial class ProductWindow : Window
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
         var file = await picker.PickSingleFileAsync();
         if (file is null) return;
-        var resized = await ImageResizeService.FromFileAsync(file.Path, 300, 300);
+        var resized = await ImageResizeService.FromFileAsync(file.Path, ImagePreviewSize.ImportLimit, ImagePreviewSize.ImportLimit);
         if (resized is null)
         {
             await new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = UiText.Get("Не удалось загрузить изображение"), Content = UiText.Get("Выберите корректное PNG или JPEG-изображение."), CloseButtonText = UiText.Get("Понятно") }.ShowAsync();
@@ -341,16 +341,6 @@ public sealed partial class ProductWindow : Window
     {
         var request = _imagePreviewRequests.Begin();
         var path = _sourceProduct.Image;
-        if (path.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) && ProductImageData.Read(path) is { } original)
-        {
-            var resized = await ImageResizeService.ResizeAsync(original, 300, 300);
-            if (!_imagePreviewRequests.IsCurrent(request) || _sourceProduct.Image != path) return;
-            if (!string.IsNullOrWhiteSpace(resized) && resized != path)
-            {
-                _sourceProduct.Image = resized;
-                path = resized;
-            }
-        }
         await ImagePreviewService.SetVisibleAsync(ProductImagePreview, path, loaded =>
         {
             if (!_imagePreviewRequests.IsCurrent(request) || _sourceProduct.Image != path) return;

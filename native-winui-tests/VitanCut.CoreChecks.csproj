@@ -61,6 +61,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../native-winui/Services/ProductImageData.cs" Link="Services/ProductImageData.cs" />
+    <Compile Include="../native-winui/Services/ImagePreviewSize.cs" Link="Services/ImagePreviewSize.cs" />
     <Compile Include="../native-winui/Services/FormulaEditing.cs" Link="Services/FormulaEditing.cs" />
     <Compile Include="../native-winui/Services/FormulaPresentation.cs" Link="Services/FormulaPresentation.cs" />
     <Compile Include="../native-winui/Services/ProductValidation.cs" Link="Services/ProductValidation.cs" />
