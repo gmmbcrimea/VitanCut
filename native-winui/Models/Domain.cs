@@ -3,6 +3,7 @@ namespace VitanCut.WinUI.Models;
 public sealed class Database
 {
     public List<string> Counterparties { get; set; } = ["Частный заказчик", "Дилер"];
+    public Dictionary<string, string> CounterpartyLogos { get; set; } = [];
     public List<string> ProductGroups { get; set; } = [];
     public List<string> MaterialGroups { get; set; } = ["ЛДСП", "Фурнитура", "Кромка", "Прочее"];
     public Dictionary<string, List<Material>> Materials { get; set; } = SeedMaterials();
@@ -79,9 +80,18 @@ public sealed class CutLayoutOverride
 public sealed class AppPreferences
 {
     public string Language { get; set; } = "ru";
+    public string MaterialPickerOrder { get; set; } = "alphabetical";
     public string Theme { get; set; } = "auto";
     public string AccentColor { get; set; } = "system";
-    public bool CompactMode { get; set; }
+    public bool CompactMode { get => InterfaceScale != "large"; set => InterfaceScale = value ? "normal" : "large"; }
+    public string InterfaceScale { get; set; } = "normal";
+    public bool MoreTransparency { get; set; }
+    public double AnimationSpeed { get; set; } = 1;
+    public double CursorRevealRadius { get; set; } = 1;
+    public string CutFileNameFormat { get; set; } = "project-date";
+    public string DetailingFileNameFormat { get; set; } = "project-date";
+    public string RemainderColor { get; set; } = "green";
+    public bool ContrastCutLines { get; set; }
     public bool AcrylicBackgroundEnabled { get; set; }
     public bool AnimationsEnabled { get; set; } = true;
     public bool CursorRevealEnabled { get; set; } = true;
@@ -143,6 +153,7 @@ public sealed class Detail
     public bool AllowRotation { get; set; } = true;
     public List<DetailEdgeBand> EdgeBands { get; set; } = [];
     public bool IsGeneratedEdgeBand { get; set; }
+    public bool IsGeneratedLeg { get; set; }
 
     public override string ToString() => $"{Name} · {LengthExpr} x {WidthExpr} · {Qty:0} шт.";
 }

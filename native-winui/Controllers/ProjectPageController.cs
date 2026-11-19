@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using VitanCut.WinUI.Models;
 using VitanCut.WinUI.Services;
+using VitanCut.WinUI.Controls;
 
 namespace VitanCut.WinUI.Controllers;
 
@@ -16,7 +17,7 @@ public sealed class ProjectPageController
     private readonly UIElement _emptyStatePanel;
     private readonly UIElement _projectPanel;
     private readonly TextBlock _title;
-    private readonly TextBlock _customer;
+    private readonly CounterpartyLabel _customer;
     private readonly TextBlock _address;
     private readonly TextBlock _area;
     private readonly TextBlock _materials;
@@ -34,7 +35,7 @@ public sealed class ProjectPageController
         UIElement emptyStatePanel,
         UIElement projectPanel,
         TextBlock title,
-        TextBlock customer,
+        CounterpartyLabel customer,
         TextBlock address,
         TextBlock area,
         TextBlock materials,
@@ -88,20 +89,23 @@ public sealed class ProjectPageController
         _customer.Text = project.Counterparty;
         _address.Text = project.Address;
 
+        _products.ItemsSource = null;
+        _products.ItemsSource = project.Products;
+        RefreshCalculations(project, payrollLabel);
+        _noProductsPanel.Visibility = project.Products.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _products.Visibility = project.Products.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        _noPayrollsPanel.Visibility = project.Payrolls.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _payrolls.Visibility = project.Payrolls.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    public void RefreshCalculations(Project project, Func<Payroll, string> payrollLabel)
+    {
         var totals = Calculator.Project(_state, project);
         _area.Text = Calculator.Number(totals.Area);
         _materials.Text = Calculator.Number(totals.ProductCost, 0);
         _payroll.Text = Calculator.Number(totals.Payroll, 0);
         _total.Text = Calculator.Number(totals.Cost, 0);
-
-        _products.ItemsSource = null;
-        _products.ItemsSource = project.Products;
-        _payrolls.ItemsSource = null;
         _payrolls.ItemsSource = project.Payrolls.Select(payroll => PayrollPresentation.Create(payroll, totals.Area)
             with { Title = payrollLabel(payroll) }).ToList();
-        _noProductsPanel.Visibility = project.Products.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        _products.Visibility = project.Products.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        _noPayrollsPanel.Visibility = project.Payrolls.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        _payrolls.Visibility = project.Payrolls.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 }

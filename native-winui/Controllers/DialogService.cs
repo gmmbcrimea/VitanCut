@@ -8,7 +8,7 @@ namespace VitanCut.WinUI.Controllers;
 /// <summary>
 /// Creates application dialogs from a single place and keeps them independent from MainWindow.
 /// </summary>
-public sealed class DialogService(Func<XamlRoot?> xamlRoot, CatalogService catalog)
+public sealed partial class DialogService(Func<XamlRoot?> xamlRoot, CatalogService catalog, Func<IntPtr> windowHandle)
 {
     public async Task<bool> ConfirmLanguageRestartAsync(string language)
     {
@@ -59,6 +59,7 @@ public sealed class DialogService(Func<XamlRoot?> xamlRoot, CatalogService catal
         {
             Header = UiText.Get("Заказчик"),
             IsEditable = true,
+            ItemTemplate = (DataTemplate)Application.Current.Resources["CounterpartyTemplate"],
             ItemsSource = catalog.GetCounterparties(),
             Text = project.Counterparty
         };

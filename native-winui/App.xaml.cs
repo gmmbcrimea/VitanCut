@@ -43,6 +43,8 @@ public partial class App : Application
     public static AppUpdateService Updates { get; } = new(Paths);
     public static CloudSyncService Cloud { get; } = new(State);
     public static PreferencesService Preferences { get; } = new(State);
+    internal static MaterialPickerHistory MaterialHistory { get; } = new(Path.Combine(Paths.DataRoot, "material-picker-history.json"));
+    internal static MaterialPickerHistory EdgeBandHistory { get; } = new(Path.Combine(Paths.DataRoot, "edge-banding-history.json"));
     public static ProjectService Projects { get; } = new(State);
     public static CatalogService Catalog { get; } = new(State);
     public static MaterialService MaterialLibrary { get; } = new(State);

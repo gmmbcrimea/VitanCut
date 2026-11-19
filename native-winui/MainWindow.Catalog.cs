@@ -5,11 +5,16 @@ using Microsoft.UI.Xaml.Media;
 using VitanCut.WinUI.Models;
 using VitanCut.WinUI.Services;
 using Windows.ApplicationModel.DataTransfer;
+using VitanCut.WinUI.Controls;
 
 namespace VitanCut.WinUI;
 
 public sealed partial class MainWindow
 {
+    private void CatalogCounterpartyLabelLoaded(object sender, RoutedEventArgs args)
+    {
+        if (sender is CounterpartyLabel label) label.ShowLogo = !_catalogPage.GroupMode;
+    }
     private const string CatalogDragFormat = "VitanCut.CatalogProductIds";
     private Border? _catalogDropHighlight;
     private readonly Dictionary<DependencyProperty, object> _catalogDropOriginalValues = [];
@@ -103,7 +108,7 @@ public sealed partial class MainWindow
                 content.Children.Add(image);
                 var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 3 };
                 labels.Children.Add(new TextBlock { Text = item.Product.Name, TextWrapping = TextWrapping.Wrap });
-                labels.Children.Add(new TextBlock { Text = item.Counterparty, Opacity = .7, TextWrapping = TextWrapping.Wrap });
+                labels.Children.Add(new CounterpartyLabel { Text = item.Counterparty, Opacity = .7, MaxLines = 0 });
                 Grid.SetColumn(labels, 1);
                 content.Children.Add(labels);
                 var info = new Button { Style = (Style)Application.Current.Resources["CatalogInfoButtonStyle"], DataContext = item, VerticalAlignment = VerticalAlignment.Center };
@@ -138,7 +143,8 @@ public sealed partial class MainWindow
             foreach (var group in products.GroupBy(item => selectedMode == 1 ? item.Counterparty : item.Product.Group?.Trim() ?? "", StringComparer.CurrentCultureIgnoreCase)
                 .OrderBy(group => group.Key.Length == 0).ThenBy(group => group.Key, StringComparer.CurrentCultureIgnoreCase))
             {
-                var expander = new Expander { Header = group.Key.Length == 0 ? UiText.Get("Без группы") : group.Key,
+                var header = group.Key.Length == 0 ? UiText.Get("Без группы") : group.Key;
+                var expander = new Expander { Header = selectedMode == 1 ? new CounterpartyLabel { Text = header } : (object)header,
                     HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
                 expander.Expanding += (_, _) => expander.Content ??= MakeList(group);
                 body.Children.Add(expander);
@@ -249,7 +255,8 @@ public sealed partial class MainWindow
         content.Children.Add(image);
         var group = string.IsNullOrWhiteSpace(item.Product.Group) ? UiText.Get("Без группы") : item.Product.Group;
         var created = item.Product.CreatedAt == DateTimeOffset.MinValue ? UiText.Get("Неизвестно") : item.Product.CreatedAt.ToLocalTime().ToString("d");
-        content.Children.Add(new TextBlock { Text = $"{UiText.Get("Заказчик")}: {item.Counterparty}\n{UiText.Get("Группа")}: {group}\n{UiText.Get("Дата создания")}: {created}", TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(new CounterpartyLabel { Text = item.Counterparty, Prefix = UiText.Get("Заказчик") + ": ", MaxLines = 0 });
+        content.Children.Add(new TextBlock { Text = $"{UiText.Get("Группа")}: {group}\n{UiText.Get("Дата создания")}: {created}", TextWrapping = TextWrapping.Wrap });
         content.Children.Add(new TextBlock { Text = UiText.Get("Деталировка"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         foreach (var detail in item.Product.Details.Take(12))
         {

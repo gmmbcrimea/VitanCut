@@ -167,6 +167,7 @@ public sealed partial class ProductWindow : Window
         _project = project;
         _isNew = product is null;
         _sourceProduct = CloneProduct(product ?? new Product());
+        LegDetails.RecognizeLegacy(App.State, _sourceProduct);
         _detailEditor = new ProductDetailEditor(App.State, _sourceProduct);
         _catalog = catalog;
         _catalogEditor = catalogEditor;
@@ -213,7 +214,8 @@ public sealed partial class ProductWindow : Window
         };
         Title = _isNew ? UiText.Get("Vitan-Cut - Добавить изделие") : $"Vitan-Cut - {_sourceProduct.Name}";
         TitleText.Text = _isNew ? UiText.Get("Добавить изделие") : _sourceProduct.Name;
-        SubtitleText.Text = $"{_project.Name} · {_project.Counterparty}";
+        SubtitleText.Prefix = _project.Name + " · ";
+        SubtitleText.Counterparty = _project.Counterparty;
         App.Preferences.Apply(this);
         ConfigureMinimumWindowSize();
 
@@ -369,6 +371,7 @@ public sealed partial class ProductWindow : Window
         _sourceProduct.LegHeight = copy.LegHeight;
         _sourceProduct.FixedSizes = copy.FixedSizes;
         _sourceProduct.Details = copy.Details;
+        LegDetails.RecognizeLegacy(App.State, _sourceProduct);
         _sourceProduct.SourceCatalogProductId = product.Id;
         FillProduct();
         UpdateSummary(reconcileRows: true);
@@ -405,18 +408,16 @@ public sealed partial class ProductWindow : Window
 
     private void EnsureLegDetail()
     {
-        var hasLeg = _sourceProduct.Details.Any(detail =>
-            App.State.FindMaterial(detail.Type, detail.MaterialId)?.Name.Contains("ножка", StringComparison.CurrentCultureIgnoreCase) == true);
-        if (hasLeg) return;
+        LegDetails.RecognizeLegacy(App.State, _sourceProduct);
+        if (_sourceProduct.Details.Any(detail => detail.IsGeneratedLeg)) return;
 
-        var match = App.State.Database.Materials
-            .SelectMany(group => group.Value.Select(material => new MaterialChoice(group.Key, material)))
-            .FirstOrDefault(choice => choice.Material.Name.Contains("ножка пластик", StringComparison.CurrentCultureIgnoreCase));
+        var match = App.MaterialHistory.Sort(App.State.MaterialChoices().Where(LegDetails.IsMaterial),
+            App.Preferences.Current.MaterialPickerOrder).FirstOrDefault();
 
         if (match is null)
         {
             var group = App.State.Database.Materials.Keys.FirstOrDefault(key => key.Contains("фурнит", StringComparison.CurrentCultureIgnoreCase)) ?? "Фурнитура";
-            var material = new Material { Name = "Ножка пластик", Unit = "pc", Cost = 0 };
+            var material = new Material { Name = "Ножка пластик", Group = LegDetails.Group, Unit = "pc", Cost = 0 };
             App.State.CommitMutation(() =>
             {
                 App.State.Database.Materials.TryAdd(group, []);
@@ -427,15 +428,7 @@ public sealed partial class ProductWindow : Window
             _ = ShowLegMaterialNoticeAsync();
         }
 
-        _sourceProduct.Details.Add(new Detail
-        {
-            Name = "Ножка",
-            Qty = 4,
-            Type = match.Type,
-            MaterialId = match.Material.Id,
-            LengthExpr = "высота ножки",
-            WidthExpr = "0"
-        });
+        _sourceProduct.Details.Add(LegDetails.Create(match));
     }
 
     private async Task ShowLegMaterialNoticeAsync()
@@ -569,6 +562,7 @@ public sealed partial class ProductWindow : Window
             WidthExpr = detail.WidthExpr,
             AllowRotation = detail.AllowRotation,
             IsGeneratedEdgeBand = detail.IsGeneratedEdgeBand,
+            IsGeneratedLeg = detail.IsGeneratedLeg,
             EdgeBands = detail.EdgeBands.Select(edge => new DetailEdgeBand { Side = edge.Side, Type = edge.Type, MaterialId = edge.MaterialId }).ToList()
         }).ToList()
     };

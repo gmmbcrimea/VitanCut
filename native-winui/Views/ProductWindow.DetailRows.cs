@@ -15,7 +15,7 @@ public sealed partial class ProductWindow
     private readonly ObservableCollection<DetailRow> _detailRows = [];
     private sealed record DetailRowView(Border Container, Action<DetailRow> Bind, Action Unbind)
     {
-        public bool CompactMode { get; set; } = App.Preferences.Current.CompactMode;
+        public string Scale { get; set; } = App.Preferences.Current.InterfaceScale;
         public bool AnimationsEnabled { get; set; } = App.Preferences.Current.AnimationsEnabled;
     }
     private DetailRow? _selectedDetailRow;
@@ -36,7 +36,7 @@ public sealed partial class ProductWindow
             UpdateDetailSelectionVisuals();
             UpdateDetailHeaders();
             if (DetailsRowsPanel.Layout is StackLayout layout)
-                layout.Spacing = App.Preferences.Current.CompactMode ? UiLayout.CompactGap(4) : 4;
+                layout.Spacing = InterfaceOptions.Gap(4, App.Preferences.Current.InterfaceScale);
             UpdateDetailColumns();
         }
     }
@@ -89,10 +89,10 @@ public sealed partial class ProductWindow
                 existing.Bind(row);
             }
             var preferences = App.Preferences.Current;
-            if (existing.CompactMode != preferences.CompactMode || existing.AnimationsEnabled != preferences.AnimationsEnabled)
+            if (existing.Scale != preferences.InterfaceScale || existing.AnimationsEnabled != preferences.AnimationsEnabled)
             {
                 ThemeService.ApplyLayout(existing.Container, preferences);
-                existing.CompactMode = preferences.CompactMode;
+                existing.Scale = preferences.InterfaceScale;
                 existing.AnimationsEnabled = preferences.AnimationsEnabled;
             }
         }
@@ -285,10 +285,12 @@ public sealed partial class ProductWindow
 
         var nameBox = new TextBox { Text = row.Detail.Name, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
         row.NameBox = nameBox;
+        nameBox.IsReadOnly = row.Detail.IsGeneratedLeg || row.Detail.IsGeneratedEdgeBand;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(nameBox,UiText.Get("Название детали"));
         nameBox.TextChanged += (_, _) =>
         {
-            if (rebinding || border.Tag is null || row.Detail.Name == nameBox.Text) return;
+            if (rebinding || border.Tag is null || row.Detail.IsGeneratedLeg || row.Detail.IsGeneratedEdgeBand ||
+                row.Detail.Name == nameBox.Text) return;
             row.Detail.Name = nameBox.Text;
             DetailRowChanged(nameBox, EventArgs.Empty);
         };
@@ -498,7 +500,7 @@ public sealed partial class ProductWindow
                 row.EdgeBandButton = edgeButton;
                 row.CalculationText = calculationText;
                 nameBox.Text = row.Detail.Name;
-                nameBox.IsReadOnly = row.Detail.IsGeneratedEdgeBand;
+                nameBox.IsReadOnly = row.Detail.IsGeneratedEdgeBand || row.Detail.IsGeneratedLeg;
                 qtyBox.Value = row.Detail.Qty <= 0 ? 1 : row.Detail.Qty;
                 foreach (var control in grid.Children.OfType<Control>()) control.IsEnabled = !row.Detail.IsGeneratedEdgeBand;
                 materialButton.IsEnabled = true;

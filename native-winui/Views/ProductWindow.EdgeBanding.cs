@@ -40,11 +40,12 @@ public sealed partial class ProductWindow
             if (ReferenceEquals(row.EdgeBandFlyout, flyout)) row.EdgeBandFlyout = null;
         };
         panel.Children.Add(new TextBlock { Text = row.Detail.Name, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        var choices = App.State.MaterialChoices().Where(EdgeBandingService.IsEdgeMaterial).ToList();
+        var choices = App.MaterialHistory.Sort(App.State.MaterialChoices().Where(EdgeBandingService.IsEdgeMaterial),
+            App.Preferences.Current.MaterialPickerOrder).ToList();
         var materials = new ComboBox { Header = UiText.Get("Материал кромки"), ItemsSource = choices, DisplayMemberPath = "Material.Name",
             HorizontalAlignment = HorizontalAlignment.Stretch, PlaceholderText = UiText.Get("Выберите кромку") };
         var current = row.Detail.EdgeBands.FirstOrDefault();
-        materials.SelectedItem = choices.FirstOrDefault(choice => choice.Material.Id == current?.MaterialId) ?? choices.FirstOrDefault();
+        materials.SelectedItem = App.EdgeBandHistory.Preferred(choices, current?.Type, current?.MaterialId);
         panel.Children.Add(materials);
         if (choices.Count == 0)
             panel.Children.Add(new TextBlock { Text = UiText.Get("Добавьте материал в категорию «Кромка» с единицей «пог. м»."), TextWrapping = TextWrapping.Wrap });
@@ -76,6 +77,11 @@ public sealed partial class ProductWindow
             {
                 if (!_detailEditor.Contains(row.Detail) || materials.SelectedItem is not MaterialChoice selected) return;
                 EdgeBandingService.SetSide(row.Detail, side, edgeButton.IsChecked == true ? selected : null);
+                if (edgeButton.IsChecked == true)
+                {
+                    App.MaterialHistory.Record(selected);
+                    App.EdgeBandHistory.Record(selected);
+                }
                 UpdateSummary();
                 PaintEdges();
             };
@@ -96,6 +102,8 @@ public sealed partial class ProductWindow
         {
             if (!_detailEditor.Contains(row.Detail) || materials.SelectedItem is not MaterialChoice selected) return;
             EdgeBandingService.ReplaceMaterial(row.Detail, selected);
+            App.MaterialHistory.Record(selected);
+            if (row.Detail.EdgeBands.Count > 0) App.EdgeBandHistory.Record(selected);
             UpdateSummary();
             PaintEdges();
         };

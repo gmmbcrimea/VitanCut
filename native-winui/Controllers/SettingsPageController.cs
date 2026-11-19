@@ -14,7 +14,7 @@ public sealed class SettingsPageController
     private readonly Grid _contentHost;
     private readonly ComboBox _theme;
     private readonly ComboBox _accent;
-    private readonly ToggleSwitch _compact;
+    private readonly Slider _scale;
     private readonly ToggleSwitch _animations;
     private readonly ComboBox _cutExportFormat;
     private readonly ComboBox _detailingExportFormat;
@@ -30,7 +30,7 @@ public sealed class SettingsPageController
         Grid contentHost,
         ComboBox theme,
         ComboBox accent,
-        ToggleSwitch compact,
+        Slider scale,
         ToggleSwitch animations,
         ComboBox cutExportFormat,
         ComboBox detailingExportFormat,
@@ -46,7 +46,7 @@ public sealed class SettingsPageController
         _theme = theme;
         _accent = accent;
         AccentPicker.Populate(_accent);
-        _compact = compact;
+        _scale = scale;
         _animations = animations;
         _cutExportFormat = cutExportFormat;
         _detailingExportFormat = detailingExportFormat;
@@ -63,7 +63,7 @@ public sealed class SettingsPageController
     {
         _theme.SelectedIndex = preferences.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
         AccentPicker.Select(_accent, preferences.AccentColor);
-        _compact.IsOn = preferences.CompactMode;
+        _scale.Value = preferences.InterfaceScale switch { "compact" => 0, "large" => 2, _ => 1 };
         _animations.IsOn = preferences.AnimationsEnabled;
         _cutExportFormat.SelectedIndex = preferences.CutExportFormat == "xlsx" ? 1 : 0;
         _detailingExportFormat.SelectedIndex = preferences.DetailingExportFormat == "xlsx" ? 1 : 0;
@@ -71,12 +71,17 @@ public sealed class SettingsPageController
         _cutGap.Value = preferences.CutGap;
     }
 
-    public void ApplyCompactMode(bool enabled) => _contentHost.Padding = enabled ? new Thickness(8, 4, 8, 8) : new Thickness(16, 8, 16, 16);
+    public void ApplyScale(string scale) => _contentHost.Padding = InterfaceOptions.Scale(scale) switch
+    {
+        "compact" => new Thickness(4, 2, 4, 4),
+        "large" => new Thickness(16, 8, 16, 16),
+        _ => new Thickness(8, 4, 8, 8)
+    };
 
     public void ApplyAnimations(bool enabled)
     {
         foreach (var page in _pages)
-            page.Transitions = enabled ? new TransitionCollection { new EntranceThemeTransition() } : new TransitionCollection();
+            page.Transitions = new TransitionCollection();
     }
 
     public void CommitCutLayout(PreferencesService preferences) =>

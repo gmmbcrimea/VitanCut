@@ -24,7 +24,7 @@ internal sealed class ProductEditorMotion
         if (!AllowsAnimations) return;
         var visual = ElementCompositionPreview.GetElementVisual(element);
         using var fade = visual.Compositor.CreateScalarKeyFrameAnimation();
-        fade.Duration = duration;
+        fade.Duration = Services.InterfaceOptions.Duration(duration, App.Preferences.Current.AnimationSpeed);
         fade.InsertKeyFrame(0, initialOpacity);
         fade.InsertKeyFrame(1, 1f);
         visual.StartAnimation("Opacity", fade);

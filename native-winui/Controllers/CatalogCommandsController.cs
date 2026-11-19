@@ -9,21 +9,20 @@ public sealed class CatalogCommandsController(CatalogService catalog, DialogServ
 {
     public async Task<string?> AddCounterpartyAsync()
     {
-        var name = await dialogs.PromptTextAsync("Добавить заказчика", "Название заказчика", "");
-        if (string.IsNullOrWhiteSpace(name)) return null;
-
-        catalog.AddCounterparty(name);
-        return name;
+        if (await dialogs.PromptCounterpartyAsync(null) is not { } edit) return null;
+        try { catalog.SaveCounterparty(null, edit.Name, edit.Logo); }
+        catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException)
+        { await dialogs.ShowMessageAsync("Не удалось сохранить", error.Message); return null; }
+        return edit.Name;
     }
 
     public async Task<string?> RenameCounterpartyAsync(string oldName)
     {
-        var newName = await dialogs.PromptTextAsync("Изменить заказчика", "Название заказчика", oldName);
-        if (string.IsNullOrWhiteSpace(newName) || string.Equals(oldName, newName, StringComparison.CurrentCultureIgnoreCase))
-            return null;
-
-        catalog.RenameCounterparty(oldName, newName);
-        return newName;
+        if (await dialogs.PromptCounterpartyAsync(oldName) is not { } edit) return null;
+        try { catalog.SaveCounterparty(oldName, edit.Name, edit.Logo); }
+        catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException)
+        { await dialogs.ShowMessageAsync("Не удалось сохранить", error.Message); return null; }
+        return edit.Name;
     }
 
     public async Task<bool> DeleteCounterpartyAsync(string name)

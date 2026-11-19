@@ -4,11 +4,15 @@ using Microsoft.UI.Xaml.Controls;
 using VitanCut.WinUI.Models;
 using VitanCut.WinUI.Services;
 using Windows.Graphics;
+using VitanCut.WinUI.Controllers;
+using WinRT.Interop;
 
 namespace VitanCut.WinUI.Views;
 
 public sealed partial class CreateProjectWindow : Window
 {
+    private bool _creatingCustomer;
+    private string? _lastCustomer;
     public event Action<Project>? ProjectCreated;
 
     public CreateProjectWindow(IEnumerable<string> customers)
@@ -41,12 +45,29 @@ public sealed partial class CreateProjectWindow : Window
         AppWindow.Resize(new SizeInt32(520, height));
     }
 
-    private void CustomerChanged(object sender, SelectionChangedEventArgs e)
+    private async void CustomerChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_creatingCustomer) return;
         var createNew = CustomerBox.SelectedItem is ComboBoxItem { Tag: "new-customer" };
-        NewCustomerBox.Visibility = createNew ? Visibility.Visible : Visibility.Collapsed;
-        if (createNew)
-            NewCustomerBox.DispatcherQueue.TryEnqueue(() => NewCustomerBox.Focus(FocusState.Programmatic));
+        NewCustomerBox.Visibility = Visibility.Collapsed;
+        if (!createNew) { _lastCustomer = CustomerBox.SelectedItem as string; return; }
+        _creatingCustomer = true;
+        var dialogs = new DialogService(() => Root.XamlRoot, App.Catalog, () => WindowNative.GetWindowHandle(this));
+        try
+        {
+            if (await new CatalogCommandsController(App.Catalog, dialogs).AddCounterpartyAsync() is { } name)
+            {
+                CustomerBox.Items.Insert(Math.Max(0, CustomerBox.Items.Count - 1), name);
+                _lastCustomer = name;
+            }
+        }
+        catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException)
+        { await dialogs.ShowMessageAsync("Не удалось сохранить", error.Message); }
+        finally
+        {
+            CustomerBox.SelectedItem = _lastCustomer;
+            _creatingCustomer = false;
+        }
     }
 
     private void CancelClick(object sender, RoutedEventArgs e) => Close();

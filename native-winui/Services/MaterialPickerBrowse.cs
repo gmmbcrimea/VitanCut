@@ -61,7 +61,7 @@ internal sealed class MaterialPickerBrowse
     private readonly MaterialPickerOption[] _options;
     private readonly string[] _categories;
     private readonly string _addLabel;
-    private readonly bool _edgeOnly;
+    private readonly bool _directOnly;
     private readonly Dictionary<MaterialPickerRowKey, bool> _browseExpansion = [];
     private readonly Dictionary<MaterialPickerRowKey, bool> _searchExpansion = [];
     private string _query = "";
@@ -72,11 +72,12 @@ internal sealed class MaterialPickerBrowse
     internal int MatchCount => _matches.Length;
 
     internal MaterialPickerBrowse(IEnumerable<MaterialPickerOption> options, IEnumerable<string> categories, string addLabel,
-        bool edgeOnly, string edgeCategory)
+        bool edgeOnly, string edgeCategory, bool legOnly = false)
     {
-        _edgeOnly = edgeOnly;
+        _directOnly = edgeOnly || legOnly;
         _addLabel = addLabel;
-        _options = options.Where(option => !edgeOnly || EdgeBandingService.IsEdgeMaterial(option.Choice))
+        _options = options.Where(option => (!edgeOnly || EdgeBandingService.IsEdgeMaterial(option.Choice)) &&
+                (!legOnly || LegDetails.IsMaterial(option.Choice)))
             .DistinctBy(option => (option.Choice.Type, option.Choice.Material.Id)).ToArray();
         _matches = _options;
         _categories = edgeOnly ? [edgeCategory] : categories.Concat(_options.Select(option => option.Choice.Type))
@@ -124,18 +125,24 @@ internal sealed class MaterialPickerBrowse
             row.SetExpanded(expanded);
             return expanded;
         }
-        foreach (var category in _categories)
+        if (_directOnly)
+        {
+            foreach (var option in _matches)
+                Add(MaterialPickerRowKind.Material, option.Choice.Type, option.Choice.Material.Id, option.Label, option);
+        }
+        else foreach (var category in _categories)
         {
             if (Searching && !sections.Contains(category)) continue;
             if (!Open(Add(MaterialPickerRowKind.Category, category, "", category))) continue;
             foreach (var group in sections[category].GroupBy(option => option.Choice.Material.Group.Trim(),
-                StringComparer.CurrentCultureIgnoreCase))
+                StringComparer.CurrentCultureIgnoreCase).OrderBy(group => group.Key.Length == 0)
+                .ThenBy(group => group.Key, StringComparer.CurrentCultureIgnoreCase))
             {
                 if (group.Key.Length > 0 && !Open(Add(MaterialPickerRowKind.Group, category, group.Key, group.Key))) continue;
                 foreach (var option in group)
                     Add(MaterialPickerRowKind.Material, category, option.Choice.Material.Id, option.Label, option);
             }
-            if (!_edgeOnly) Add(MaterialPickerRowKind.Add, category, "", _addLabel);
+            Add(MaterialPickerRowKind.Add, category, "", _addLabel);
         }
 
         // A toggle changes one contiguous range; keep its header and the other sections attached.

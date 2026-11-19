@@ -114,7 +114,7 @@ public sealed partial class MainWindow : Window
             MaterialUnitBox, MaterialCostBox, MaterialWasteAllowanceBox, MaterialPriceModeBox, MaterialRollLengthBox, MaterialSheetLengthBox, MaterialSheetWidthBox, MaterialPriceConversionError, MaterialTextureBox, MaterialEdgeBandingBox,
             MaterialSortBox);
         _catalogPage = new CatalogPageController(
-            App.Catalog, CustomersList, CustomerProjectsList, CustomerProjectsTitle, CustomerProjectsSubtitle);
+            App.Catalog, CustomersList, CustomerProjectsList, CustomerProjectsTitle, CustomerProjectsSubtitle, CatalogSidebarCount);
         _navigation = new NavigationController(
             ("projects", ProjectsPage, ProjectsTabButton, false),
             ("customers", CustomersPage, CustomersTabButton, false),
@@ -122,10 +122,10 @@ public sealed partial class MainWindow : Window
             ("catalog", CatalogPage, CatalogTabButton, false),
             ("settings", SettingsPage, SettingsTabButton, true));
         _settingsPage = new SettingsPageController(
-            ContentHost, ThemeBox, AccentBox, CompactModeSwitch, AnimationsSwitch, CutExportFormatBox, DetailingExportFormatBox, CutTrimBox, CutGapBox,
+            ContentHost, ThemeBox, AccentBox, InterfaceScaleSlider, AnimationsSwitch, CutExportFormatBox, DetailingExportFormatBox, CutTrimBox, CutGapBox,
             AppearancePanel, CuttingPanel, DetailingPanel, DatabasePanel,
             ProjectsPage, CustomersPage, MaterialsPage, CatalogPage, SettingsPage);
-        _dialogs = new DialogService(() => Root.XamlRoot, App.Catalog);
+        _dialogs = new DialogService(() => Root.XamlRoot, App.Catalog, () => WindowNative.GetWindowHandle(this));
         _childWindows = new OwnedWindowActivator(this);
         _productWindows = new ProductWindowCoordinator(_childWindows, App.Projects, App.Catalog);
         _reports = new ReportWindowCoordinator(_childWindows, App.State, App.Projects);
@@ -146,6 +146,13 @@ public sealed partial class MainWindow : Window
         App.Preferences.Apply(this);
         ApplyTitleBarForeground();
         Root.SizeChanged += (_, _) => UpdateResponsiveLayout();
+        Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(ProjectQuantityBackgroundPressed), true);
+        ProjectQuantityFocusTarget.LostFocus += (_, _) => ProjectQuantityFocusTarget.IsTabStop = false;
+        ProjectPanel.Loaded += (_, _) => QueueProjectWorkListLayout();
+        ProjectPanel.SizeChanged += (_, _) => QueueProjectWorkListLayout();
+        ProjectDetailPane.SizeChanged += (_, _) => QueueProjectWorkListLayout();
+        MetricsGrid.SizeChanged += (_, _) => QueueProjectWorkListLayout();
+        ProjectWorkListsGrid.SizeChanged += (_, _) => QueueProjectWorkListLayout();
         Root.Loaded += async (_, _) =>
         {
             UpdateResponsiveLayout();
@@ -176,10 +183,12 @@ public sealed partial class MainWindow : Window
 
     private static void ConfigureTopTab(Button button, Symbol symbol, string label)
     {
-        var content = new StackPanel { Orientation = Orientation.Vertical, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
-        content.Children.Add(new SymbolIcon { Symbol = symbol });
+        var content = new StackPanel { Orientation = Orientation.Vertical, Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        content.Children.Add(new SymbolIcon { Symbol = symbol, Width = 20, Height = 20 });
         content.Children.Add(new TextBlock { Text = UiText.Get(label), Style = (Style)Application.Current.Resources["CommandLabelStyle"], FontSize = 12,
-            MaxWidth = 76, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
+            MaxWidth = 76, LineHeight = 16, TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
         button.Content = content;
         ToolTipService.SetToolTip(button, UiText.Get(label));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, UiText.Get(label));
@@ -273,7 +282,7 @@ public sealed partial class MainWindow : Window
         _checkUpdatesButton.Content = UiText.Get("Проверить сейчас");
         _updateProgress.Visibility = Visibility.Collapsed;
         _updateDescription.Text = update.Message;
-        _updateNotes.Text = string.IsNullOrWhiteSpace(update.ReleaseNotes) ? UiText.Get("Что нового: описание пока не добавлено.") : UiText.Get("Что нового: ") + update.ReleaseNotes;
+        _updateNotes.Text = string.IsNullOrWhiteSpace(update.ReleaseNotes) ? UiText.Get("Что нового: описание пока не добавлено.") : UiText.Get("Что нового: ") + "\n" + update.ReleaseNotes;
         _updateNotes.Visibility = update.Availability == UpdateAvailability.Available ? Visibility.Visible : Visibility.Collapsed;
         switch (update.Availability)
         {
@@ -679,11 +688,16 @@ public sealed partial class MainWindow : Window
 
         if (list == ProductsList)
         {
+            var selected = ProductsList.SelectedItems.OfType<Product>().ToList();
+            var multiple = selected.Count > 1;
             Add("Добавить", () => AddProductClick(list, new RoutedEventArgs()));
+            ((MenuFlyoutItem)menu.Items.Last()).IsEnabled = !multiple;
             if (menuData is Product product && SelectedProject is { } project)
             {
                 Add("Изменить", () => OpenProductWindow(project, product));
-                Add("Удалить", async () => await DeleteProductAsync(project, product));
+                ((MenuFlyoutItem)menu.Items.Last()).IsEnabled = !multiple;
+                Add("Удалить", async () => await DeleteSelectedProjectProductsAsync(project,
+                    multiple ? selected : [product]));
             }
             return menu;
         }
@@ -812,6 +826,7 @@ public sealed partial class MainWindow : Window
         _projectPage.Render(SelectedProject, PayrollLabel);
         _loadingProjects = false;
         UpdateResponsiveLayout();
+        QueueProjectWorkListLayout();
     }
     private void AddProjectClick(object sender, RoutedEventArgs e)
     {
@@ -865,27 +880,20 @@ public sealed partial class MainWindow : Window
 
     private void ProductRowMenuClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement element || element.DataContext is not Product product || SelectedProject is not { } project) return;
-
-        var menu = new MenuFlyout();
-        var edit = new MenuFlyoutItem { Text = UiText.Get("Изменить") };
-        edit.Click += (_, _) => OpenProductWindow(project, product);
-        var remove = new MenuFlyoutItem { Text = UiText.Get("Удалить") };
-        remove.Click += async (_, _) => await DeleteProductAsync(project, product);
-        menu.Items.Add(edit);
-        menu.Items.Add(remove);
-        menu.ShowAt(element);
+        if (sender is not FrameworkElement { DataContext: Product product } element || SelectedProject is null) return;
+        if (!ProductsList.SelectedItems.Contains(product)) ProductsList.SelectedItem = product;
+        BuildContextMenu(ProductsList, product).ShowAt(element);
     }
     private void EditProductClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedProject is { } project && ProductsList.SelectedItem is Product product)
+        if (ProductsList.SelectedItems.Count == 1 && SelectedProject is { } project && ProductsList.SelectedItem is Product product)
             OpenProductWindow(project, product);
     }
 
     private async void DeleteProductClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedProject is { } project && ProductsList.SelectedItem is Product product)
-            await DeleteProductAsync(project, product);
+        if (SelectedProject is { } project)
+            await DeleteSelectedProjectProductsAsync(project, ProductsList.SelectedItems.OfType<Product>().ToList());
     }
 
     private async Task DeleteProductAsync(Project project, Product product)
@@ -1025,6 +1033,7 @@ public sealed partial class MainWindow : Window
 
     private void ProductsListDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
+        if (ProductsList.SelectedItems.Count != 1 || IsQuantityInput(e.OriginalSource as DependencyObject)) return;
         if (SelectedProject is not { } project || ProductsList.SelectedItem is not Product product) return;
         OpenProductWindow(project, product);
     }
@@ -1035,6 +1044,7 @@ public sealed partial class MainWindow : Window
         if (_catalogPage.GroupMode)
         {
             var customers = new ComboBox { ItemsSource = App.Catalog.GetCounterparties(), HorizontalAlignment = HorizontalAlignment.Stretch, SelectedIndex = 0 };
+            customers.ItemTemplate = (DataTemplate)Application.Current.Resources["CounterpartyTemplate"];
             var choice = await new ContentDialog { XamlRoot = Root.XamlRoot, Title = UiText.Get("Заказчик"), Content = customers,
                 PrimaryButtonText = UiText.Get("Добавить"), CloseButtonText = UiText.Get("Отмена") }.ShowAsync();
             if (choice != ContentDialogResult.Primary) return;
@@ -1045,7 +1055,7 @@ public sealed partial class MainWindow : Window
     }
 
     private void OpenCatalogProductWindow(string counterparty, Product? product) =>
-        _productWindows.OpenCatalogProduct(counterparty, product, _catalogPage.RenderProducts);
+        _productWindows.OpenCatalogProduct(counterparty, product, _catalogPage.RefreshSavedProducts);
 
     private void OpenProductWindow(Project project, Product? product) =>
         _productWindows.OpenProjectProduct(project, product, FillProjectCard);
@@ -1538,6 +1548,9 @@ public sealed partial class MainWindow : Window
         if (ThemeBox is null || AccentBox is null) return;
         _loadingSettings = true;
         _settingsPage.Load(App.Preferences.Current);
+        LoadAppearanceOptions();
+        MetricPayrollCurrencyIcon.Glyph = UiText.CurrencySymbol(UiText.Language);
+        MaterialPickerOrderBox.SelectedIndex = App.Preferences.Current.MaterialPickerOrder == "recent" ? 1 : 0;
         LanguageBox.SelectedItem = LanguageBox.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(item => item.Tag?.ToString() == UiText.NormalizeLanguage(App.Preferences.Current.Language));
         RefreshCloudSettings();
@@ -1547,6 +1560,12 @@ public sealed partial class MainWindow : Window
         _loadingSettings = false;
         ApplyCompactMode();
         ApplyAnimations();
+    }
+
+    private void MaterialPickerOrderChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingSettings || MaterialPickerOrderBox.SelectedItem is not ComboBoxItem item) return;
+        App.Preferences.SetMaterialPickerOrder(item.Tag?.ToString() ?? "alphabetical");
     }
 
     private async void LanguageChanged(object sender, SelectionChangedEventArgs e)
@@ -1578,10 +1597,10 @@ public sealed partial class MainWindow : Window
         ApplyTitleBarForeground();
     }
 
-    private void CompactModeToggled(object sender, RoutedEventArgs e)
+    private void InterfaceScaleChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
-        if (_loadingSettings) return;
-        App.Preferences.SetCompactMode(CompactModeSwitch.IsOn);
+        if (_loadingSettings || _settingsPage is null) return;
+        App.Preferences.SetInterfaceScale(InterfaceScaleSlider.Value switch { < .5 => "compact", > 1.5 => "large", _ => "normal" });
         ApplyCompactMode();
     }
 
@@ -1589,6 +1608,7 @@ public sealed partial class MainWindow : Window
     {
         if (_loadingSettings) return;
         App.Preferences.SetAnimationsEnabled(AnimationsSwitch.IsOn);
+        RefreshAppearanceControlStates();
         ApplyAnimations();
     }
 
@@ -1596,18 +1616,21 @@ public sealed partial class MainWindow : Window
     {
         if (_loadingSettings) return;
         App.Preferences.SetAcrylicBackgroundEnabled(AcrylicBackgroundSwitch.IsOn);
+        RefreshAppearanceControlStates();
     }
 
     private void CursorRevealToggled(object sender, RoutedEventArgs e)
     {
         if (_loadingSettings) return;
         App.Preferences.SetCursorRevealEnabled(CursorRevealSwitch.IsOn);
+        RefreshAppearanceControlStates();
     }
 
     private void CutColorClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string palette }) return;
         App.Preferences.SetCutPalette(palette);
+        RefreshRemainderColors();
     }
 
 
@@ -1632,7 +1655,7 @@ public sealed partial class MainWindow : Window
         if (_loadingSettings || DetailingExportFormatBox.SelectedItem is not ComboBoxItem item) return;
         App.Preferences.SetDetailingExportFormat(item.Tag?.ToString() ?? "pdf");
     }
-    private void ApplyCompactMode() => _settingsPage.ApplyCompactMode(App.Preferences.Current.CompactMode);
+    private void ApplyCompactMode() => _settingsPage.ApplyScale(App.Preferences.Current.InterfaceScale);
 
     private void ApplyAnimations() => _settingsPage.ApplyAnimations(App.Preferences.Current.AnimationsEnabled);
     private void SettingsSectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -1739,6 +1762,7 @@ public sealed partial class MainWindow : Window
 
     private void RefreshAfterCloudDatabaseLoad()
     {
+        App.Catalog.NotifyCounterpartyLogosChanged();
         var selectedId = SelectedProject?.Id;
         RefreshCustomers();
         RefreshProjects(select: selectedId is null ? null : App.State.Database.Projects.FirstOrDefault(project => project.Id == selectedId), allowAutoSelect: false);
@@ -1915,6 +1939,7 @@ public sealed partial class MainWindow : Window
         }
 
         var targetBox = new ComboBox { ItemsSource = targets, SelectedIndex = 0, MinWidth = 280 };
+        targetBox.ItemTemplate = (DataTemplate)Application.Current.Resources["CounterpartyTemplate"];
         var dialog = new ContentDialog
         {
             XamlRoot = Root.XamlRoot,
@@ -2060,7 +2085,8 @@ public sealed partial class MainWindow : Window
     private void UpdateResponsiveLayout()
     {
         _projectLayout.Update(SelectedProject is not null, _showingProjectListOnNarrow);
-        if (ProjectWorkListsGrid is not null)
+        if (ProjectWorkListsGrid is not null && ProjectPanel.IsLoaded && ProjectPanel.ActualHeight > 0 &&
+            ProjectPanel.Visibility == Visibility.Visible)
         {
             var stackLists = ProjectDetailPane.ActualWidth > 0 && ProjectDetailPane.ActualWidth < 850;
             ProjectWorkListsGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);

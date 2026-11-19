@@ -105,6 +105,7 @@ public sealed class AppState
         imported.Preferences ??= new AppPreferences();
         imported.Preferences.Theme = local.Theme;
         imported.Preferences.Language = local.Language;
+        imported.Preferences.MaterialPickerOrder = local.MaterialPickerOrder;
         imported.Preferences.AccentColor = local.AccentColor;
         imported.Preferences.CompactMode = local.CompactMode;
         imported.Preferences.AcrylicBackgroundEnabled = local.AcrylicBackgroundEnabled;
@@ -116,6 +117,7 @@ public sealed class AppState
         imported.Preferences.RotationDefaultsMigrated = local.RotationDefaultsMigrated;
         imported.Preferences.SystemThemeDefaultMigrated = local.SystemThemeDefaultMigrated;
         imported.Preferences.ThemeDefaultsVersion = local.ThemeDefaultsVersion;
+        InterfaceOptions.CopyLocal(local, imported.Preferences);
         try
         {
             Database = imported;
@@ -145,6 +147,8 @@ public sealed class AppState
         var imported = ReadDatabase(json);
         imported.Preferences ??= new AppPreferences();
         imported.Preferences.Language = Database.Preferences.Language;
+        imported.Preferences.MaterialPickerOrder = Database.Preferences.MaterialPickerOrder;
+        InterfaceOptions.CopyLocal(Database.Preferences, imported.Preferences);
         var previous = Database;
         try
         {
@@ -190,6 +194,10 @@ public sealed class AppState
     private void Normalize()
     {
         Database.Counterparties ??= ["Частный заказчик", "Дилер"];
+        Database.CounterpartyLogos = (Database.CounterpartyLogos ?? [])
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))
+            .GroupBy(pair => pair.Key.Trim(), StringComparer.CurrentCultureIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.CurrentCultureIgnoreCase);
         Database.ProductGroups = (Database.ProductGroups ?? []).Where(name => !string.IsNullOrWhiteSpace(name))
             .Select(name => name.Trim()).Distinct(StringComparer.CurrentCultureIgnoreCase).ToList();
         Database.MaterialGroups ??= ["ЛДСП", "Фурнитура", "Кромка", "Прочее"];
@@ -197,6 +205,12 @@ public sealed class AppState
         Database.Catalog ??= [];
         Database.Projects ??= [];
         Database.Preferences ??= new AppPreferences();
+        Database.Preferences.InterfaceScale = InterfaceOptions.Scale(Database.Preferences.InterfaceScale);
+        Database.Preferences.AnimationSpeed = InterfaceOptions.Speed(Database.Preferences.AnimationSpeed);
+        Database.Preferences.CursorRevealRadius = InterfaceOptions.Radius(Database.Preferences.CursorRevealRadius);
+        Database.Preferences.CutFileNameFormat = InterfaceOptions.FileNameFormat(Database.Preferences.CutFileNameFormat);
+        Database.Preferences.DetailingFileNameFormat = InterfaceOptions.FileNameFormat(Database.Preferences.DetailingFileNameFormat);
+        Database.Preferences.RemainderColor = InterfaceOptions.Remainder(Database.Preferences.CutPalette, Database.Preferences.RemainderColor);
         Database.Preferences.Theme = Database.Preferences.Theme is "light" or "dark" or "auto" ? Database.Preferences.Theme : "auto";
         if (Database.Preferences.ThemeDefaultsVersion < 1)
         {

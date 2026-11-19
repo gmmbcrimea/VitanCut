@@ -73,7 +73,7 @@ public sealed class NotificationOverlay : Grid
 
         _historyButton = new Button
         {
-            Content = new FontIcon { Glyph = "\uE7F4", FontSize = 17 },
+            Content = new FontIcon { Glyph = "\uEA8F", FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 17 },
             Tag = "icon-tool",
             Width = 42,
             Height = 42,
@@ -148,7 +148,7 @@ public sealed class NotificationOverlay : Grid
     {
         var version = ++_animationVersion;
         _animation?.Stop();
-        if (!App.Preferences.Current.AnimationsEnabled)
+        if (!App.Preferences.Current.AnimationsEnabled || !new Windows.UI.ViewManagement.UISettings().AnimationsEnabled)
         {
             _toast.Opacity = to;
             completed?.Invoke();
@@ -160,7 +160,7 @@ public sealed class NotificationOverlay : Grid
         {
             From = from,
             To = to,
-            Duration = new Duration(TimeSpan.FromMilliseconds(180)),
+            Duration = new Duration(InterfaceOptions.Duration(TimeSpan.FromMilliseconds(180), App.Preferences.Current.AnimationSpeed)),
             EnableDependentAnimation = true
         };
         animation.Completed += (_, _) =>

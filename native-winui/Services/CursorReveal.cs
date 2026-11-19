@@ -14,7 +14,7 @@ namespace VitanCut.WinUI.Services;
 
 internal sealed class CursorReveal : IDisposable
 {
-    private const float Radius = 100;
+    private float _radius = 100;
     private readonly Window _window;
     private readonly FrameworkElement _root;
     private readonly PointerEventHandler _moved;
@@ -54,8 +54,17 @@ internal sealed class CursorReveal : IDisposable
         _brush.EllipseRadius = new Vector2(.5f);
     }
 
-    public void Update(bool enabled)
+    public void Update(bool enabled, double radiusScale = 1)
     {
+        var radius = (float)(100 * InterfaceOptions.Radius(radiusScale));
+        if (_radius != radius)
+        {
+            _radius = radius;
+            ClearMasks();
+            _layoutDirty = true;
+            _light.InsertVector3("Position", new Vector3((float)_pointerPosition.X - _radius, (float)_pointerPosition.Y - _radius, 0));
+            QueueMaskRefresh();
+        }
         var accent = ((Microsoft.UI.Xaml.Media.SolidColorBrush)Application.Current.Resources["AppAccentBrush"]).Color;
         _brush.ColorStops[0].Color = _root.ActualTheme == ElementTheme.Dark
             ? Color.FromArgb(110, 230, 243, 255) : Color.FromArgb(90, accent.R, accent.G, accent.B);
@@ -109,7 +118,7 @@ internal sealed class CursorReveal : IDisposable
         if (Math.Abs(_pointerPosition.X - _maskPosition.X) > 32 || Math.Abs(_pointerPosition.Y - _maskPosition.Y) > 32)
             _layoutDirty = true;
         // One property drives every light sample. Hover targets never move or reparent the light.
-        _light.InsertVector3("Position", new Vector3((float)point.Position.X - Radius, (float)point.Position.Y - Radius, 0));
+        _light.InsertVector3("Position", new Vector3((float)point.Position.X - _radius, (float)point.Position.Y - _radius, 0));
         _visible = true;
         if (!_layoutDirty && _scrolling.Count == 0) _host.Opacity = 1;
         if (_layoutDirty) QueueMaskRefresh();
@@ -134,7 +143,7 @@ internal sealed class CursorReveal : IDisposable
         var backdrop = _root.ActualTheme == ElementTheme.Dark ? Color.FromArgb(255, 32, 32, 32) : Microsoft.UI.Colors.White;
         // Only edges within reach of the light need composition surfaces. The margin
         // covers pointer travel while a low-priority refresh is waiting in the queue.
-        const double reach = Radius + 64;
+        var reach = _radius + 64;
         _maskPosition = _pointerPosition;
         var lightViewport = Intersect(new Rect(0, 0, _root.ActualWidth, _root.ActualHeight),
             new Rect(_maskPosition.X - reach, _maskPosition.Y - reach, reach * 2, reach * 2));
@@ -182,7 +191,7 @@ internal sealed class CursorReveal : IDisposable
                 active.Add(surface);
                 if (!_masks.TryGetValue(surface, out var mask))
                 {
-                    mask = new LightMask(_brush, _light, _position);
+                    mask = new LightMask(_brush, _light, _position, _radius);
                     _masks.Add(surface, mask);
                     _host.Children.InsertAtTop(mask.Visual);
                 }
@@ -329,7 +338,7 @@ internal sealed class CursorReveal : IDisposable
         private float _lastRadius = -1;
         public ContainerVisual Visual { get; }
 
-        public LightMask(CompositionRadialGradientBrush brush, CompositionPropertySet light, ExpressionAnimation position)
+        public LightMask(CompositionRadialGradientBrush brush, CompositionPropertySet light, ExpressionAnimation position, float radius)
         {
             var compositor = brush.Compositor;
             _geometry = compositor.CreatePropertySet();
@@ -344,7 +353,7 @@ internal sealed class CursorReveal : IDisposable
             _edge.StrokeBrush = _edgeColor;
             _edge.StrokeThickness = 1.5f;
             _edgeVisual = compositor.CreateShapeVisual();
-            _edgeVisual.Size = new Vector2(Radius * 2);
+            _edgeVisual.Size = new Vector2(radius * 2);
             _edgeVisual.Shapes.Add(_edge);
             _surface = compositor.CreateVisualSurface();
             _surface.SourceVisual = _edgeVisual;
@@ -354,7 +363,7 @@ internal sealed class CursorReveal : IDisposable
             _maskBrush.Source = brush;
             _maskBrush.Mask = _edgeBrush;
             _sample = compositor.CreateSpriteVisual();
-            _sample.Size = new Vector2(Radius * 2);
+            _sample.Size = new Vector2(radius * 2);
             _sample.Brush = _maskBrush;
             _sample.StartAnimation("Offset", position);
             _viewportBounds = compositor.CreateRectangleGeometry();

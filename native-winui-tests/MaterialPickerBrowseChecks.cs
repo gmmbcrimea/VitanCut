@@ -50,8 +50,13 @@ internal static class MaterialPickerBrowseChecks
         check(browser.Rows.Any(row => row.Key is { Kind: MaterialPickerRowKind.Add, Category: "Empty" }),
             "Empty categories still allow creating a material");
         var edges = new MaterialPickerBrowse(options, [sheets], "Add material", true, edgeCategory);
-        edges.Toggle(edges.Rows.Single());
-        check(edges.Rows.Count == 2 && edges.Rows[1].Option == edge,
-            "The generated edge picker shows only valid linear edge materials and no add action");
+        check(edges.Rows.Count == 1 && edges.Rows[0].Option == edge,
+            "The generated edge picker immediately shows valid linear edge materials without category or add rows");
+        edges.Filter("missing");
+        check(edges.Rows.Count == 0 && edges.MatchCount == 0, "Restricted edge picker supports empty search results");
+        var leg = Entry("Hardware", "Adjustable leg", LegDetails.Group, "pc");
+        var legs = new MaterialPickerBrowse([.. options, leg], ["Hardware"], "Add", false, edgeCategory, legOnly: true);
+        check(legs.Rows.Count == 1 && legs.Rows[0].Option == leg,
+            "Automatic leg picker immediately shows only materials from the legs group");
     }
 }

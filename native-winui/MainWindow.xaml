@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:l10n="using:VitanCut.WinUI.Services"
     xmlns:models="using:VitanCut.WinUI.Models"
+    xmlns:controls="using:VitanCut.WinUI.Controls"
     Title="Расчёт мебели">
 
   <Window.SystemBackdrop>
@@ -24,6 +25,9 @@
       <ColumnDefinition Width="104" />
       <ColumnDefinition Width="*" />
     </Grid.ColumnDefinitions>
+    <Button x:Name="ProjectQuantityFocusTarget" Grid.Row="1" Grid.Column="1" Width="1" Height="1"
+            MinWidth="0" MinHeight="0" Padding="0" Opacity="0" IsTabStop="False"
+            HorizontalAlignment="Left" VerticalAlignment="Top"/>
 
     <Grid x:Name="AppTitleBar" Grid.ColumnSpan="2" Background="Transparent">
       <Grid.ColumnDefinitions>
@@ -122,7 +126,7 @@
                           <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Grid.Row="1" Text="{x:Bind Counterparty}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+                        <controls:CounterpartyLabel Grid.Row="1" Text="{x:Bind Counterparty}" Opacity="0.72" />
                         <TextBlock Grid.Row="2" Text="{x:Bind Address}" Opacity="0.56" TextTrimming="CharacterEllipsis" />
                       </Grid>
                     </DataTemplate>
@@ -179,7 +183,7 @@
 
                   <StackPanel Spacing="4">
                     <TextBlock x:Name="ProjectTitleText" FontSize="30" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock x:Name="ProjectCustomerText" FontSize="15" Opacity="0.82" />
+                    <controls:CounterpartyLabel x:Name="ProjectCustomerText" FontSize="15" Opacity="0.82" />
                     <TextBlock x:Name="ProjectAddressText" FontSize="15" Opacity="0.72" TextWrapping="Wrap" />
                   </StackPanel>
 
@@ -226,7 +230,7 @@
                   </Border>
                   <Border x:Name="MetricPayrollCard" Grid.Column="2" Style="{StaticResource MetricSurfaceStyle}" Padding="14" BorderBrush="{StaticResource MetricPayrollBrush}" BorderThickness="0,0,3,0">
                     <StackPanel>
-                      <Grid ColumnSpacing="8" MinHeight="32"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><SymbolIcon Symbol="Contact" Foreground="{StaticResource MetricPayrollBrush}"/><TextBlock Grid.Column="1" Text="Сумма ЗП" Style="{StaticResource MutedTextBlockStyle}" VerticalAlignment="Center"  l10n:UiLocalization.Properties="Text"/></Grid>
+                      <Grid ColumnSpacing="8" MinHeight="32"><Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><FontIcon x:Name="MetricPayrollCurrencyIcon" FontFamily="Segoe UI" FontSize="20" Foreground="{StaticResource MetricPayrollBrush}"/><TextBlock Grid.Column="1" Text="Сумма ЗП" Style="{StaticResource MutedTextBlockStyle}" VerticalAlignment="Center"  l10n:UiLocalization.Properties="Text"/></Grid>
                       <TextBlock x:Name="MetricPayrollText" FontSize="26" FontWeight="SemiBold" />
                       <TextBlock Text="руб." Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
                     </StackPanel>
@@ -253,6 +257,7 @@
                   <Grid x:Name="ProductsListViewport" Grid.Row="1" MinHeight="360">
                     <Border Style="{StaticResource ListSurfaceStyle}">
                       <ListView x:Name="ProductsList"
+                                SelectionMode="Extended" IsMultiSelectCheckBoxEnabled="False"
                                 MaxHeight="360"
                                 DoubleTapped="ProductsListDoubleTapped"
                                 RightTapped="ListViewRightTappedSelectItem"
@@ -277,19 +282,22 @@
                               <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="124" />
                               </Grid.ColumnDefinitions>
                               <Image Width="56" Height="56" Stretch="Uniform" Tag="{x:Bind Image}" Loaded="ProductThumbnailLoaded" />
                               <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
                                 <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{x:Bind DimensionsText}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
                               </StackPanel>
-                              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                <TextBlock Text="{x:Bind Qty}" FontWeight="SemiBold" />
-                                <TextBlock Text="шт." Opacity="0.72" l10n:UiLocalization.Properties="Text" />
+                              <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                <NumberBox Tag="{x:Bind}" Loaded="ProjectProductQuantityLoaded" ValueChanged="ProjectProductQuantityChanged"
+                                           LostFocus="ProjectProductQuantityLostFocus" Minimum="1" SmallChange="1"
+                                           Width="88" MinWidth="0" SpinButtonPlacementMode="Compact"
+                                           AutomationProperties.Name="Количество изделий" l10n:UiLocalization.Properties="AutomationProperties.Name"/>
+                                <TextBlock Text="шт." Opacity="0.72" VerticalAlignment="Center" l10n:UiLocalization.Properties="Text" />
                               </StackPanel>
-                              <TextBlock Grid.Column="3" Tag="{x:Bind}" Loaded="ProjectProductUnitCostLoaded"
+                              <TextBlock Grid.Column="2" Tag="{x:Bind}" Loaded="ProjectProductUnitCostLoaded"
                                          VerticalAlignment="Center" HorizontalAlignment="Right" TextAlignment="Right"
                                          FontWeight="SemiBold" MaxWidth="150" TextTrimming="CharacterEllipsis" />
                             </Grid>
@@ -384,14 +392,17 @@
               <RowDefinition Height="*" />
               <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <TextBlock x:Name="CatalogSidebarTitle" Text="Заказчики" Style="{StaticResource SectionTitleTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
+            <StackPanel Height="64" Spacing="4">
+              <TextBlock x:Name="CatalogSidebarTitle" Text="Заказчики" Style="{StaticResource SectionTitleTextBlockStyle}" l10n:UiLocalization.Properties="Text"/>
+              <TextBlock x:Name="CatalogSidebarCount" Style="{StaticResource MutedTextBlockStyle}"/>
+            </StackPanel>
             <Border Grid.Row="1" Style="{StaticResource ListSurfaceStyle}">
               <ListView x:Name="CustomersList" ItemContainerStyle="{StaticResource CatalogNavigationItemStyle}" SelectionChanged="CustomersSelectionChanged" RightTapped="ListViewRightTappedSelectItem" IsRightTapEnabled="True" AllowDrop="True" DragOver="CatalogTargetDragOver" DragLeave="CatalogTargetDragLeave" Drop="CatalogTargetDrop">
                 <ListView.ItemTemplate>
                   <DataTemplate>
                     <Grid MinHeight="36">
                       <Border Tag="catalog-drop-surface" BorderThickness="2" BorderBrush="Transparent" Background="Transparent" CornerRadius="4" IsHitTestVisible="False"/>
-                      <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                      <controls:CounterpartyLabel Text="{Binding}" VerticalAlignment="Center" Loaded="CatalogCounterpartyLabelLoaded"/>
                     </Grid>
                   </DataTemplate>
                 </ListView.ItemTemplate>
@@ -412,15 +423,15 @@
           </Grid>
         </Border>
         <Border x:Name="CatalogProductsPane" Grid.Row="1" Grid.Column="1" Style="{StaticResource PaneSurfaceStyle}">
-          <Grid Padding="20" RowSpacing="12">
+          <Grid Padding="16" RowSpacing="12">
             <Grid.RowDefinitions>
               <RowDefinition Height="Auto" />
               <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <Grid ColumnSpacing="12">
+            <Grid ColumnSpacing="12" Height="64">
               <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
               <StackPanel Spacing="4">
-                <TextBlock x:Name="CustomerProjectsTitle" Text="Изделия заказчика" Style="{StaticResource SectionTitleTextBlockStyle}" TextWrapping="Wrap"  l10n:UiLocalization.Properties="Text"/>
+                <controls:CounterpartyLabel x:Name="CustomerProjectsTitle" Text="Изделия заказчика" FontSize="24" MaxLines="1" l10n:UiLocalization.Properties="Text"/>
                 <TextBlock x:Name="CustomerProjectsSubtitle" Text="Выберите заказчика слева." Style="{StaticResource MutedTextBlockStyle}" TextWrapping="Wrap"  l10n:UiLocalization.Properties="Text"/>
               </StackPanel>
               <Button x:Name="AddCatalogProductButton" Grid.Column="1" VerticalAlignment="Top" Click="AddCatalogProductClick" Style="{StaticResource AccentButtonStyle}" AutomationProperties.Name="Добавить изделие в каталог" l10n:UiLocalization.Properties="AutomationProperties.Name">
@@ -443,7 +454,7 @@
                       <Image Width="56" Height="56" Stretch="Uniform" Tag="{x:Bind Product.Image}" Loaded="ProductThumbnailLoaded" />
                       <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                         <TextBlock Text="{x:Bind ProductName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{x:Bind CustomerName}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+                        <controls:CounterpartyLabel Text="{x:Bind CustomerName}" Opacity="0.72" />
                         <TextBlock Text="{x:Bind SizeText}" Opacity="0.56" TextTrimming="CharacterEllipsis" />
                       </StackPanel>
                       <Button Grid.Column="2" Style="{StaticResource CatalogInfoButtonStyle}" Click="CatalogProductInfoClick" VerticalAlignment="Center" ToolTipService.ToolTip="Справка об изделии" AutomationProperties.Name="Справка об изделии" l10n:UiLocalization.Properties="ToolTipService.ToolTip,AutomationProperties.Name">
@@ -653,6 +664,16 @@
 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="0"/></Grid.RowDefinitions>
 <StackPanel x:Name="SettingsLeftColumn" Spacing="16">
+<Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}">
+  <StackPanel Spacing="12">
+    <TextBlock Text="Карточка изделия" Style="{StaticResource CardTitleTextBlockStyle}" l10n:UiLocalization.Properties="Text"/>
+    <ComboBox x:Name="MaterialPickerOrderBox" Header="Сортировка в меню выбора материалов" HorizontalAlignment="Stretch"
+              SelectionChanged="MaterialPickerOrderChanged" l10n:UiLocalization.Properties="Header">
+      <ComboBoxItem Content="По алфавиту" Tag="alphabetical" l10n:UiLocalization.Properties="Content"/>
+      <ComboBoxItem Content="Последние использованные" Tag="recent" l10n:UiLocalization.Properties="Content"/>
+    </ComboBox>
+  </StackPanel>
+</Border>
 <StackPanel x:Name="AppearancePanel"><Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}"><StackPanel Spacing="12">
 <TextBlock Text="Настройки вида" Style="{StaticResource CardTitleTextBlockStyle}" l10n:UiLocalization.Properties="Text"/>
 <ComboBox x:Name="LanguageBox" Header="Язык интерфейса" HorizontalAlignment="Stretch" SelectionChanged="LanguageChanged" l10n:UiLocalization.Properties="Header">
@@ -665,13 +686,92 @@
 <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
 <ComboBox x:Name="ThemeBox" Header="Тема приложения" HorizontalAlignment="Stretch" SelectionChanged="ThemeChanged" SelectedIndex="-1" l10n:UiLocalization.Properties="Header"><ComboBoxItem Content="Системная" Tag="auto" l10n:UiLocalization.Properties="Content"/><ComboBoxItem Content="Светлая" Tag="light" l10n:UiLocalization.Properties="Content"/><ComboBoxItem Content="Тёмная" Tag="dark" l10n:UiLocalization.Properties="Content"/></ComboBox>
 <ComboBox x:Name="AccentBox" Grid.Column="1" Header="Акцентный цвет" HorizontalAlignment="Stretch" SelectionChanged="AccentChanged" l10n:UiLocalization.Properties="Header"/></Grid>
-<ToggleSwitch x:Name="CompactModeSwitch" Header="Компактный режим" Toggled="CompactModeToggled" l10n:UiLocalization.Properties="Header"/>
-<ToggleSwitch x:Name="AcrylicBackgroundSwitch" Header="Фон окна Acrylic" AutomationProperties.Name="Фон окна Acrylic" Toggled="AcrylicBackgroundToggled" l10n:UiLocalization.Properties="Header,AutomationProperties.Name"/>
-<ToggleSwitch x:Name="AnimationsSwitch" Header="Анимации интерфейса" Toggled="AnimationsToggled" l10n:UiLocalization.Properties="Header"/>
-<ToggleSwitch x:Name="CursorRevealSwitch" Header="Подсветка под курсором" Toggled="CursorRevealToggled" l10n:UiLocalization.Properties="Header"/>
+<StackPanel Spacing="4">
+  <TextBlock Text="Масштаб" l10n:UiLocalization.Properties="Text"/>
+  <Slider x:Name="InterfaceScaleSlider" Minimum="0" Maximum="2" StepFrequency="1" TickFrequency="1" TickPlacement="Outside"
+          Value="1" ValueChanged="InterfaceScaleChanged" AutomationProperties.Name="Масштаб" l10n:UiLocalization.Properties="AutomationProperties.Name"/>
+  <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <TextBlock Text="Компактный" l10n:UiLocalization.Properties="Text"/>
+    <TextBlock Grid.Column="1" Text="Обычный" HorizontalAlignment="Center" l10n:UiLocalization.Properties="Text"/>
+    <TextBlock Grid.Column="2" Text="Крупный" HorizontalAlignment="Right" l10n:UiLocalization.Properties="Text"/>
+  </Grid>
+</StackPanel>
+<Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+  <ToggleSwitch x:Name="AcrylicBackgroundSwitch" Header="Прозрачность интерфейса" Toggled="AcrylicBackgroundToggled" l10n:UiLocalization.Properties="Header"/>
+  <ToggleSwitch x:Name="MoreTransparencySwitch" Grid.Column="1" Header="Больше прозрачности" Toggled="MoreTransparencyToggled" l10n:UiLocalization.Properties="Header"/>
+</Grid>
+<Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+  <ToggleSwitch x:Name="AnimationsSwitch" Header="Анимации интерфейса" Toggled="AnimationsToggled" l10n:UiLocalization.Properties="Header"/>
+  <ComboBox x:Name="AnimationSpeedBox" Grid.Column="1" Header="Скорость анимации" HorizontalAlignment="Stretch" SelectionChanged="AnimationSpeedChanged" l10n:UiLocalization.Properties="Header">
+    <ComboBoxItem Content="0,25×" Tag="0.25"/><ComboBoxItem Content="0,5×" Tag="0.5"/><ComboBoxItem Content="1×" Tag="1"/><ComboBoxItem Content="2×" Tag="2"/>
+  </ComboBox>
+</Grid>
+<Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+  <ToggleSwitch x:Name="CursorRevealSwitch" Header="Подсветка под курсором" Toggled="CursorRevealToggled" l10n:UiLocalization.Properties="Header"/>
+  <ComboBox x:Name="CursorRevealRadiusBox" Grid.Column="1" Header="Радиус подсветки" HorizontalAlignment="Stretch" SelectionChanged="CursorRevealRadiusChanged" l10n:UiLocalization.Properties="Header">
+    <ComboBoxItem Content="0,5×" Tag="0.5"/><ComboBoxItem Content="1×" Tag="1"/><ComboBoxItem Content="2×" Tag="2"/>
+  </ComboBox>
+</Grid>
 </StackPanel></Border></StackPanel>
-<StackPanel x:Name="CuttingPanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}"><Grid ColumnSpacing="16"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><StackPanel Spacing="8"><TextBlock Text="Настройки раскроя" Style="{StaticResource CardTitleTextBlockStyle}" l10n:UiLocalization.Properties="Text"/><TextBlock Text="Формат экспорта раскроя" l10n:UiLocalization.Properties="Text"/><ComboBox x:Name="CutExportFormatBox" AutomationProperties.Name="Формат экспорта раскроя" SelectedIndex="0" SelectionChanged="CutExportFormatChanged" l10n:UiLocalization.Properties="AutomationProperties.Name"><ComboBoxItem Content="PDF — Документ (.pdf)" Tag="pdf" l10n:UiLocalization.Properties="Content"/><ComboBoxItem Content="Excel — Таблица (.xlsx)" Tag="xlsx" l10n:UiLocalization.Properties="Content"/></ComboBox><StackPanel Orientation="Horizontal" Spacing="12"><NumberBox x:Name="CutTrimBox" Header="Подрезка, мм" Width="150" Minimum="0" ValueChanged="CutLayoutOptionsChanged" l10n:UiLocalization.Properties="Header"/><NumberBox x:Name="CutGapBox" Header="Зазор, мм" Width="150" Minimum="0" ValueChanged="CutLayoutOptionsChanged" l10n:UiLocalization.Properties="Header"/></StackPanel></StackPanel><StackPanel Grid.Row="1" Spacing="8" Margin="0,12,0,0"><TextBlock Text="Цвета раскроя" l10n:UiLocalization.Properties="Text"/><StackPanel Orientation="Horizontal" Spacing="10"><Button Tag="blue" AutomationProperties.Name="Голубая палитра" ToolTipService.ToolTip="Голубая палитра" Click="CutColorClick" Width="42" Height="42" Background="#7FBBE8" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/><Button Tag="green" AutomationProperties.Name="Зелёная палитра" ToolTipService.ToolTip="Зелёная палитра" Click="CutColorClick" Width="42" Height="42" Background="#B6D983" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/><Button Tag="yellow" AutomationProperties.Name="Жёлтая палитра" ToolTipService.ToolTip="Жёлтая палитра" Click="CutColorClick" Width="42" Height="42" Background="#FFD166" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/><Button Tag="orange" AutomationProperties.Name="Оранжевая палитра" ToolTipService.ToolTip="Оранжевая палитра" Click="CutColorClick" Width="42" Height="42" Background="#EF8354" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/><Button Tag="purple" AutomationProperties.Name="Фиолетовая палитра" ToolTipService.ToolTip="Фиолетовая палитра" Click="CutColorClick" Width="42" Height="42" Background="#B487E8" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/></StackPanel></StackPanel></Grid></Border></StackPanel>
-<StackPanel x:Name="DetailingPanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Spacing="8"><TextBlock Text="Настройки деталировки" Style="{StaticResource CardTitleTextBlockStyle}" l10n:UiLocalization.Properties="Text"/><TextBlock Text="Формат экспорта деталировки" l10n:UiLocalization.Properties="Text"/><ComboBox x:Name="DetailingExportFormatBox" AutomationProperties.Name="Формат экспорта деталировки" SelectedIndex="0" SelectionChanged="DetailingExportFormatChanged" l10n:UiLocalization.Properties="AutomationProperties.Name"><ComboBoxItem Content="PDF — Документ (.pdf)" Tag="pdf" l10n:UiLocalization.Properties="Content"/><ComboBoxItem Content="Excel — Таблица (.xlsx)" Tag="xlsx" l10n:UiLocalization.Properties="Content"/></ComboBox></StackPanel><Grid Grid.Column="1"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Включать изображения" TextWrapping="Wrap" FontWeight="SemiBold" l10n:UiLocalization.Properties="Text"/><TextBlock Text="Добавлять изображения изделий в деталировку" Style="{StaticResource MutedTextBlockStyle}" l10n:UiLocalization.Properties="Text"/></StackPanel><ToggleSwitch x:Name="DetailingImagesSwitch" AutomationProperties.Name="Добавлять изображения в деталировку" Grid.Column="1" Toggled="DetailingImagesToggled"  l10n:UiLocalization.Properties="AutomationProperties.Name"/></Grid></Grid></Border></StackPanel>
+<StackPanel x:Name="CuttingPanel" Spacing="12">
+<Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}">
+<StackPanel Spacing="12">
+<TextBlock Text="Настройки раскроя" Style="{StaticResource CardTitleTextBlockStyle}" l10n:UiLocalization.Properties="Text"/>
+<Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+<ComboBox x:Name="CutExportFormatBox" Header="Формат экспорта раскроя" HorizontalAlignment="Stretch" SelectionChanged="CutExportFormatChanged" l10n:UiLocalization.Properties="Header">
+<ComboBoxItem Content="PDF — Документ (.pdf)" Tag="pdf"/><ComboBoxItem Content="Excel — Таблица (.xlsx)" Tag="xlsx"/>
+</ComboBox>
+<StackPanel Grid.Column="1"><ComboBox x:Name="CutFileNameFormatBox" Header="Формат имени файла" HorizontalAlignment="Stretch" SelectionChanged="CutFileNameFormatChanged" l10n:UiLocalization.Properties="Header">
+<ComboBoxItem Content="Проект, адрес, дата" Tag="project-address-date" l10n:UiLocalization.Properties="Content"/>
+<ComboBoxItem Content="Проект, дата" Tag="project-date" l10n:UiLocalization.Properties="Content"/>
+<ComboBoxItem Content="Адрес, дата" Tag="address-date" l10n:UiLocalization.Properties="Content"/>
+<ComboBoxItem Content="Проект, адрес" Tag="project-address" l10n:UiLocalization.Properties="Content"/>
+</ComboBox></StackPanel>
+</Grid>
+<Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+<NumberBox x:Name="CutTrimBox" Header="Подрезка, мм" Minimum="0" ValueChanged="CutLayoutOptionsChanged" l10n:UiLocalization.Properties="Header"/>
+<NumberBox x:Name="CutGapBox" Grid.Column="1" Header="Зазор, мм" Minimum="0" ValueChanged="CutLayoutOptionsChanged" l10n:UiLocalization.Properties="Header"/>
+</Grid>
+<Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+<StackPanel Spacing="8">
+<TextBlock Text="Цвета раскроя" l10n:UiLocalization.Properties="Text"/>
+<VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="42" ItemHeight="42" MaximumRowsOrColumns="3">
+<Button Tag="blue" AutomationProperties.Name="Голубая палитра" ToolTipService.ToolTip="Голубая палитра" Click="CutColorClick" Width="36" Height="36" MinWidth="0" Padding="0" Background="#7FBBE8" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/>
+<Button Tag="green" AutomationProperties.Name="Зелёная палитра" ToolTipService.ToolTip="Зелёная палитра" Click="CutColorClick" Width="36" Height="36" MinWidth="0" Padding="0" Background="#B6D983" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/>
+<Button Tag="yellow" AutomationProperties.Name="Жёлтая палитра" ToolTipService.ToolTip="Жёлтая палитра" Click="CutColorClick" Width="36" Height="36" MinWidth="0" Padding="0" Background="#FFD166" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/>
+<Button Tag="orange" AutomationProperties.Name="Оранжевая палитра" ToolTipService.ToolTip="Оранжевая палитра" Click="CutColorClick" Width="36" Height="36" MinWidth="0" Padding="0" Background="#EF8354" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/>
+<Button Tag="purple" AutomationProperties.Name="Фиолетовая палитра" ToolTipService.ToolTip="Фиолетовая палитра" Click="CutColorClick" Width="36" Height="36" MinWidth="0" Padding="0" Background="#B487E8" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/>
+</VariableSizedWrapGrid>
+</StackPanel>
+<StackPanel Grid.Column="1" Spacing="8">
+<TextBlock Text="Цвет полезных остатков" l10n:UiLocalization.Properties="Text"/>
+<StackPanel Orientation="Horizontal" Spacing="8">
+<Button x:Name="GreenRemainderButton" Tag="green" Background="#B6D983" Width="36" Height="36" MinWidth="0" Padding="0" Click="RemainderColorClick" AutomationProperties.Name="Зелёные остатки" ToolTipService.ToolTip="Зелёные остатки" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/>
+<Button x:Name="RedRemainderButton" Tag="red" Background="#EF8380" Width="36" Height="36" MinWidth="0" Padding="0" Click="RemainderColorClick" AutomationProperties.Name="Красные остатки" ToolTipService.ToolTip="Красные остатки" l10n:UiLocalization.Properties="AutomationProperties.Name,ToolTipService.ToolTip"/>
+</StackPanel>
+</StackPanel></Grid>
+<ToggleSwitch x:Name="ContrastCutLinesSwitch" Header="Контрастная линия реза" Toggled="ContrastCutLinesToggled" l10n:UiLocalization.Properties="Header"/>
+</StackPanel></Border></StackPanel>
+<StackPanel x:Name="DetailingPanel" Spacing="12">
+<Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}">
+<StackPanel Spacing="12">
+<TextBlock Text="Настройки деталировки" Style="{StaticResource CardTitleTextBlockStyle}" l10n:UiLocalization.Properties="Text"/>
+<Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+<ComboBox x:Name="DetailingExportFormatBox" Header="Формат экспорта деталировки" HorizontalAlignment="Stretch" SelectionChanged="DetailingExportFormatChanged" l10n:UiLocalization.Properties="Header">
+<ComboBoxItem Content="PDF — Документ (.pdf)" Tag="pdf"/><ComboBoxItem Content="Excel — Таблица (.xlsx)" Tag="xlsx"/>
+</ComboBox>
+<StackPanel Grid.Column="1"><ComboBox x:Name="DetailingFileNameFormatBox" Header="Формат имени файла" HorizontalAlignment="Stretch" SelectionChanged="DetailingFileNameFormatChanged" l10n:UiLocalization.Properties="Header">
+<ComboBoxItem Content="Проект, адрес, дата" Tag="project-address-date" l10n:UiLocalization.Properties="Content"/>
+<ComboBoxItem Content="Проект, дата" Tag="project-date" l10n:UiLocalization.Properties="Content"/>
+<ComboBoxItem Content="Адрес, дата" Tag="address-date" l10n:UiLocalization.Properties="Content"/>
+<ComboBoxItem Content="Проект, адрес" Tag="project-address" l10n:UiLocalization.Properties="Content"/>
+</ComboBox></StackPanel>
+</Grid>
+<Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+<StackPanel><TextBlock Text="Включать изображения" FontWeight="SemiBold" l10n:UiLocalization.Properties="Text"/><TextBlock Text="Добавлять изображения изделий в деталировку" TextWrapping="Wrap" Style="{StaticResource MutedTextBlockStyle}" l10n:UiLocalization.Properties="Text"/></StackPanel>
+<ToggleSwitch x:Name="DetailingImagesSwitch" Grid.Column="1" Toggled="DetailingImagesToggled" AutomationProperties.Name="Добавлять изображения в деталировку" l10n:UiLocalization.Properties="AutomationProperties.Name"/>
+</Grid>
+</StackPanel></Border></StackPanel>
 </StackPanel>
 <StackPanel x:Name="SettingsRightColumn" Grid.Column="1" Spacing="16">
 <StackPanel x:Name="DatabasePanel" Spacing="12"><Border Style="{StaticResource SettingsSectionStyle}" Padding="{StaticResource UiSectionPadding}"><Grid ColumnSpacing="12" RowSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><StackPanel Grid.ColumnSpan="2" Spacing="6"><TextBlock Text="База данных" Style="{StaticResource CardTitleTextBlockStyle}" l10n:UiLocalization.Properties="Text"/><TextBlock Text="Импорт и экспорт локальной базы в формате JSON" Style="{StaticResource MutedTextBlockStyle}" l10n:UiLocalization.Properties="Text"/></StackPanel><Button Grid.Row="1" Content="Импорт базы" Click="ImportDatabaseClick" MinWidth="0" HorizontalAlignment="Stretch" l10n:UiLocalization.Properties="Content"/><Button Grid.Row="1" Grid.Column="1" Content="Экспорт базы" Click="ExportDatabaseClick" MinWidth="0" HorizontalAlignment="Stretch" l10n:UiLocalization.Properties="Content"/></Grid></Border><Border x:Name="CloudCard" Background="#181818" BorderBrush="#303030" BorderThickness="1" CornerRadius="8" Padding="16"><StackPanel Spacing="18"><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Border x:Name="CloudIconSurface" Width="36" Height="36" Background="#3ECF8E" CornerRadius="9"><TextBlock Text="S" Foreground="#101010" FontWeight="SemiBold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel x:Name="CloudHeaderText" Grid.Column="1" Spacing="2"><TextBlock Text="supabase" Foreground="#F5F5F5" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="Облачная база Cutlist" Foreground="#AFAFAF" l10n:UiLocalization.Properties="Text"/></StackPanel></Grid><TextBlock x:Name="CloudDescription" Text="После входа приложение само подключает общее пространство Cutlist. Конфликт версий не перезаписывает данные." Foreground="#B8B8B8" TextWrapping="Wrap" l10n:UiLocalization.Properties="Text"/><Grid x:Name="CloudLoginGrid" ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="CloudEmailBox" Header="Email" PlaceholderText="name@company.ru" InputScope="EmailSmtpAddress"/><PasswordBox x:Name="CloudPasswordBox" Grid.Column="1" Header="Пароль" PasswordRevealMode="Peek" l10n:UiLocalization.Properties="Header"/><Button x:Name="CloudSignInButton" Grid.Column="2" Content="Войти" Background="#3ECF8E" Foreground="#101010" VerticalAlignment="Bottom" Click="CloudSignInClick" l10n:UiLocalization.Properties="Content"/></Grid><ProgressBar x:Name="CloudOperationProgress" Visibility="Collapsed" IsIndeterminate="False" AutomationProperties.Name="Синхронизация с облаком" l10n:UiLocalization.Properties="AutomationProperties.Name"/><Border x:Name="CloudStatusBadge" Background="#242424" BorderBrush="#3ECF8E" BorderThickness="1" CornerRadius="8" Padding="12,9"><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="Пространство" Foreground="#AFAFAF" l10n:UiLocalization.Properties="Text"/><TextBlock Text="Cutlist" Foreground="#F5F5F5" FontWeight="SemiBold"/></StackPanel></Border><StackPanel x:Name="CloudActionsPanel" Orientation="Horizontal" Spacing="8"><Button Content="Загрузить из облака" Click="DownloadCloudDatabaseClick" l10n:UiLocalization.Properties="Content"/><Button Content="Опубликовать изменения" Background="#3ECF8E" Foreground="#101010" Click="PublishCloudDatabaseClick" l10n:UiLocalization.Properties="Content"/></StackPanel><TextBlock x:Name="CloudSyncStatusText" AutomationProperties.LiveSetting="Polite" Foreground="#AFAFAF" TextWrapping="Wrap"/></StackPanel></Border><InfoBar x:Name="DatabaseInfoBar" IsOpen="False" IsClosable="True" /></StackPanel>

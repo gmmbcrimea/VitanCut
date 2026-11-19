@@ -262,7 +262,10 @@ public static class CuttingService
             products.Sum(product => product.Rows.Sum(row => row.Area)),
             products.Sum(product => product.Rows.Sum(row => row.Cost)),
             products.Sum(product => product.Rows.Sum(row => row.Qty)));
-        return new DetailingReport(Text(project.Name), Text(project.Counterparty), Text(project.Address), products, issues, summary, state.Database.Preferences.DetailingIncludeImages);
+        return new DetailingReport(Text(project.Name), Text(project.Counterparty), Text(project.Address), products, issues, summary, state.Database.Preferences.DetailingIncludeImages)
+        {
+            CounterpartyLogo = state.Database.CounterpartyLogos.GetValueOrDefault(project.Counterparty) ?? ""
+        };
     }
 
     public static DetailingReport FilterDetailingReportToDsp(DetailingReport report)
@@ -550,7 +553,10 @@ public sealed record CutGroup(string MaterialName, bool TextureDirection, double
 public sealed record CutSheet(int Number, double SheetLength, double SheetWidth, double Efficiency, List<CutPlacement> Placements);
 public sealed record CutPlacement(string ProductId, string DetailId, string ProductName, string DetailName, int DisplayNumber, string InstanceId, double BaseLength, double BaseWidth, double X, double Y, double Length, double Width, bool Rotated, bool AllowRotation);
 
-public sealed record DetailingReport(string ProjectName, string Counterparty, string Address, List<DetailingProduct> Products, List<DetailingIssue> Issues, DetailingSummary Summary, bool IncludeImages);
+public sealed record DetailingReport(string ProjectName, string Counterparty, string Address, List<DetailingProduct> Products, List<DetailingIssue> Issues, DetailingSummary Summary, bool IncludeImages)
+{
+    public string CounterpartyLogo { get; init; } = "";
+}
 public sealed record DetailingProduct(string Name, double Length, double Depth, double Height, double Qty, string Image, List<DetailingRow> Rows, List<DetailingFixedSize> FixedSizes, bool HasLegs, double LegHeight);
 public sealed record DetailingRow(string DetailName, string Type, string MaterialName, double Qty, double Length, double Width, double Usage, double Cost, double Area, string Issue, bool RotationLocked = false) { public bool HasIssue => !string.IsNullOrWhiteSpace(Issue); }
 public sealed record DetailingFixedSize(string Name, double Value);

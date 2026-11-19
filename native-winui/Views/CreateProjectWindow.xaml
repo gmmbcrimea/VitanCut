@@ -33,6 +33,7 @@
                Text="Новый проект"  l10n:UiLocalization.Properties="Header,Text"/>
 
       <ComboBox x:Name="CustomerBox"
+                ItemTemplate="{StaticResource CounterpartyTemplate}"
                 Grid.Row="2"
                 Header="Выбор заказчика"
                 PlaceholderText="Выберите заказчика"

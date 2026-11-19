@@ -56,7 +56,9 @@ public sealed partial class ReportWindow : Window
         ResetLayoutButton.Visibility = Visibility.Visible;
         Title = isAdditional ? UiText.Get("Расчёт мебели - Дополнительный раскрой") : UiText.Get("Расчёт мебели - Раскрой ДСП");
         TitleText.Text = isAdditional ? UiText.Get("Дополнительный раскрой") : UiText.Get("Раскрой ДСП");
-        SubtitleText.Text = $"{report.ProjectName} · {report.Counterparty} · {report.Address}";
+        SubtitleText.Prefix = report.ProjectName + " · ";
+        SubtitleText.Counterparty = report.Counterparty;
+        SubtitleText.Suffix = report.Address.Length > 0 ? " · " + report.Address : "";
         CutTools.Visibility = Visibility.Visible;
         AdditionalCutButton.Visibility = _openAdditionalCut is null ? Visibility.Collapsed : Visibility.Visible;
         ToolTipService.SetToolTip(SaveReportButton,UiText.Get("Сохранить раскрой"));
@@ -82,7 +84,9 @@ public sealed partial class ReportWindow : Window
         PrintReportButton.Click += PrintReportClick;
         Title = UiText.Get("Расчёт мебели - Деталировка");
         TitleText.Text = UiText.Get("Деталировка");
-        SubtitleText.Text = $"{report.ProjectName} · {report.Counterparty} · {report.Address}";
+        SubtitleText.Prefix = report.ProjectName + " · ";
+        SubtitleText.Counterparty = report.Counterparty;
+        SubtitleText.Suffix = report.Address.Length > 0 ? " · " + report.Address : "";
         HintText.Text = "";
         ToolTipService.SetToolTip(SaveReportButton,UiText.Get("Сохранить деталировку"));
         DetailingTools.Visibility = Visibility.Visible;
@@ -256,11 +260,12 @@ public sealed partial class ReportWindow : Window
         foreach (var remainder in CuttingMetrics.RemaindersForSheet(sheet, trim, gap, UsefulRemainderBox.Value))
         {
             var block = new Border { Width = remainder.Length * BaseCutScale, Height = remainder.Width * BaseCutScale,
-                Background = Brush("#DCEFD8"), BorderBrush = Brush("#4D7745"), BorderThickness = new Thickness(0.8),
+                Background = Brush(CutColors.RemainderFill(_cutReport?.Palette ?? "blue", App.Preferences.Current.RemainderColor)),
+                BorderBrush = Brush(CutColors.RemainderStroke(_cutReport?.Palette ?? "blue", App.Preferences.Current.RemainderColor)), BorderThickness = new Thickness(0.8),
                 IsHitTestVisible = false };
             if (block.Width >= 55 && block.Height >= 26)
                 block.Child = new TextBlock { Text = $"{N(remainder.Length)} × {N(remainder.Width)}", FontSize = 10,
-                    Foreground = Brush("#284823"), TextTrimming = TextTrimming.CharacterEllipsis,
+                    Foreground = Brush(CutColors.RemainderStroke(_cutReport?.Palette ?? "blue", App.Preferences.Current.RemainderColor)), TextTrimming = TextTrimming.CharacterEllipsis,
                     HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             Canvas.SetLeft(block, remainder.X * BaseCutScale); Canvas.SetTop(block, remainder.Y * BaseCutScale);
             canvas.Children.Add(block);
@@ -273,7 +278,7 @@ public sealed partial class ReportWindow : Window
         {
             var line = new Line
             {
-                Stroke = Brush(cut.IsTrim ? "#7C3AED" : "#596575"),
+                Stroke = Brush(CutColors.CutLine(App.Preferences.Current.ContrastCutLines)),
                 StrokeThickness = cut.IsTrim ? 1.4 : 0.8,
                 StrokeDashArray = new DoubleCollection { cut.IsTrim ? 2 : 3, cut.IsTrim ? 1 : 2 },
                 Opacity = cut.IsTrim ? .88 : .64,
@@ -469,7 +474,9 @@ public sealed partial class ReportWindow : Window
         {
             SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
             SuggestedFileName = ReportFileName.Create(UiText.Get(isCut ? "Раскрой" : "Деталировка"),
-                _cutReport?.ProjectName ?? _detailingReport?.ProjectName)
+                _cutReport?.ProjectName ?? _detailingReport?.ProjectName,
+                address: _cutReport?.Address ?? _detailingReport?.Address,
+                format: isCut ? App.Preferences.Current.CutFileNameFormat : App.Preferences.Current.DetailingFileNameFormat)
         };
         picker.FileTypeChoices.Add(format == "xlsx" ? "Excel" : "PDF", new List<string> { extension });
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));

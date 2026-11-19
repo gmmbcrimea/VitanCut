@@ -36,8 +36,11 @@ public sealed partial class ProductWindow
         var detail = row.Detail;
         _materialTraceTarget = detail;
         TraceMaterial("picker.open", detail, detail.IsGeneratedEdgeBand ? "generated-edge" : "detail");
-        var browse = new MaterialPickerBrowse(MaterialPickerOptions(), App.MaterialLibrary.GetGroups(),
-            UiText.Get("Добавить"), detail.IsGeneratedEdgeBand, "Кромка");
+        var options = MaterialPickerOptions().ToDictionary(option => (option.Choice.Type, option.Choice.Material.Id));
+        var sorted = App.MaterialHistory.Sort(options.Values.Select(option => option.Choice), App.Preferences.Current.MaterialPickerOrder)
+            .Select(choice => options[(choice.Type, choice.Material.Id)]);
+        var browse = new MaterialPickerBrowse(sorted, App.MaterialLibrary.GetGroups(),
+            UiText.Get("Добавить"), detail.IsGeneratedEdgeBand, "Кромка", detail.IsGeneratedLeg);
         TraceMaterial("picker.filter", detail, "all", browse.MatchCount);
 
         DetailRow? appliedRow = null;
@@ -168,6 +171,12 @@ public sealed partial class ProductWindow
             error = UiText.Get("Материал недоступен. Откройте список материалов заново.");
             return null;
         }
+        if (result.Status == MaterialEditStatus.InvalidLegMaterial)
+        {
+            error = UiText.Get("Выберите материал из группы «Ножки».");
+            TraceMaterial("option.apply-blocked", detail, "invalid-leg-material");
+            return null;
+        }
         if (!detail.IsGeneratedEdgeBand)
             TraceMaterial("option.model-committed", detail, detail.MaterialId == choice.Material.Id && detail.Type == choice.Type ? "matches" : "mismatch");
         if (result.Status == MaterialEditStatus.Applied) UpdateSummary();
@@ -177,6 +186,8 @@ public sealed partial class ProductWindow
             SelectDetailRow(row);
             UpdateMaterialRowView(row);
         }
+        App.MaterialHistory.Record(choice);
+        if (detail.IsGeneratedEdgeBand) App.EdgeBandHistory.Record(choice);
         TraceMaterial("option.apply-end", result.Target ?? detail, row?.MaterialButton is null ? "no-view" : "view-updated");
         return row;
     }

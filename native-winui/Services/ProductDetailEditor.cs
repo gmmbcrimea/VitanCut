@@ -33,6 +33,8 @@ internal sealed class ProductDetailEditor(AppState state, Product product)
         if (!Contains(target)) return new(MaterialEditStatus.MissingDetail);
         if (state.FindMaterial(choice.Type, choice.Material.Id) is not { } material)
             return new(MaterialEditStatus.MissingMaterial);
+        if (target.IsGeneratedLeg && !LegDetails.IsMaterial(new MaterialChoice(choice.Type, material)))
+            return new(MaterialEditStatus.InvalidLegMaterial);
 
         if (!target.IsGeneratedEdgeBand)
         {
@@ -69,6 +71,6 @@ internal sealed class ProductDetailEditor(AppState state, Product product)
     }
 }
 
-internal enum MaterialEditStatus { Applied, Unchanged, MissingDetail, MissingMaterial }
+internal enum MaterialEditStatus { Applied, Unchanged, MissingDetail, MissingMaterial, InvalidLegMaterial }
 
 internal readonly record struct MaterialEditResult(MaterialEditStatus Status, Detail? Target = null);

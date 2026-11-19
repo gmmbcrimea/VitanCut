@@ -163,6 +163,31 @@ public sealed class ProjectService(AppState state)
         });
     }
 
+    public void SetProductQuantity(Project project, string productId, double quantity)
+    {
+        if (!double.IsFinite(quantity) || quantity < 1 || quantity != Math.Floor(quantity))
+            throw new InvalidOperationException("Количество изделий должно быть целым положительным числом.");
+        project = Resolve(project);
+        var product = project.Products.FirstOrDefault(item => item.Id == productId)
+            ?? throw new InvalidOperationException("Изделие проекта уже удалено или изменено в облаке.");
+        if (product.Qty == quantity) return;
+        state.CommitMutation(() => { product.Qty = quantity; Touch(project); });
+    }
+
+    public void DeleteProducts(Project project, IEnumerable<string> productIds)
+    {
+        project = Resolve(project);
+        var ids = productIds.ToHashSet(StringComparer.Ordinal);
+        if (ids.Count == 0) return;
+        if (ids.Any(id => !project.Products.Any(product => product.Id == id)))
+            throw new InvalidOperationException("Изделие проекта уже удалено или изменено в облаке.");
+        state.CommitMutation(() =>
+        {
+            project.Products.RemoveAll(product => ids.Contains(product.Id));
+            Touch(project);
+        });
+    }
+
     public void AddPayroll(Project project, Payroll payroll)
     {
         project = Resolve(project);

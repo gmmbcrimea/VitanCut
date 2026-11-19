@@ -8,6 +8,33 @@ namespace VitanCut.WinUI.Services;
 /// </summary>
 public sealed class CatalogService(AppState state)
 {
+    public event Action? CounterpartyLogosChanged;
+    internal void NotifyCounterpartyLogosChanged() => CounterpartyLogosChanged?.Invoke();
+
+    public string LogoFor(string? name) => name is not null && state.Database.CounterpartyLogos.TryGetValue(name, out var logo) &&
+        logo.Length <= 65536 && logo.StartsWith("data:image/png;base64,", StringComparison.OrdinalIgnoreCase)
+        ? logo : "";
+
+    public void SaveCounterparty(string? previousName, string name, string logo)
+    {
+        name = name.Trim();
+        if (logo.Length > 0 && (logo.Length > 65536 || !logo.StartsWith("data:image/png;base64,", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(UiText.Get("Не удалось загрузить логотип."));
+        if (name.Length == 0) throw new InvalidOperationException(UiText.Get("Название заказчика"));
+        var old = previousName;
+        if (state.Database.Counterparties.Any(item => string.Equals(item, name, StringComparison.CurrentCultureIgnoreCase) &&
+            !string.Equals(item, old, StringComparison.CurrentCultureIgnoreCase)))
+            throw new InvalidOperationException(UiText.Get("Заказчик уже существует"));
+        state.CommitMutation(() =>
+        {
+            if (old is not null) RenameCounterpartyData(old, name);
+            else if (!state.Database.Counterparties.Contains(name, StringComparer.CurrentCultureIgnoreCase))
+                state.Database.Counterparties.Add(name);
+            state.Database.CounterpartyLogos.Remove(name);
+            if (logo.Length > 0) state.Database.CounterpartyLogos[name] = logo;
+        });
+        NotifyCounterpartyLogosChanged();
+    }
     public IReadOnlyList<string> GetCounterparties()
     {
         state.Database.Counterparties = state.Database.Counterparties
@@ -90,22 +117,30 @@ public sealed class CatalogService(AppState state)
     {
         if (string.IsNullOrWhiteSpace(newName)) return;
         newName = newName.Trim();
-        state.CommitMutation(() =>
+        state.CommitMutation(() => RenameCounterpartyData(oldName, newName));
+        NotifyCounterpartyLogosChanged();
+    }
+
+    private void RenameCounterpartyData(string oldName, string newName)
+    {
+        if (oldName == newName) return;
+        if (state.Database.CounterpartyLogos.Remove(oldName, out var logo))
         {
-            state.Database.Counterparties.RemoveAll(name => string.Equals(name, oldName, StringComparison.CurrentCultureIgnoreCase));
-            if (!state.Database.Counterparties.Contains(newName, StringComparer.CurrentCultureIgnoreCase))
-                state.Database.Counterparties.Add(newName);
-            foreach (var project in state.Database.Projects.Where(project => string.Equals(project.Counterparty, oldName, StringComparison.CurrentCultureIgnoreCase)))
-            {
-                project.Counterparty = newName;
-                project.UpdatedAt = DateTimeOffset.Now;
-            }
-            if (state.Database.Catalog.Remove(oldName, out var products))
-            {
-                if (!state.Database.Catalog.TryGetValue(newName, out var target)) state.Database.Catalog[newName] = products;
-                else target.AddRange(products);
-            }
-        });
+            if (!state.Database.CounterpartyLogos.ContainsKey(newName)) state.Database.CounterpartyLogos[newName] = logo;
+        }
+        state.Database.Counterparties.RemoveAll(name => string.Equals(name, oldName, StringComparison.CurrentCultureIgnoreCase));
+        if (!state.Database.Counterparties.Contains(newName, StringComparer.CurrentCultureIgnoreCase))
+            state.Database.Counterparties.Add(newName);
+        foreach (var project in state.Database.Projects.Where(project => string.Equals(project.Counterparty, oldName, StringComparison.CurrentCultureIgnoreCase)))
+        {
+            project.Counterparty = newName;
+            project.UpdatedAt = DateTimeOffset.Now;
+        }
+        if (state.Database.Catalog.Remove(oldName, out var products))
+        {
+            if (!state.Database.Catalog.TryGetValue(newName, out var target)) state.Database.Catalog[newName] = products;
+            else target.AddRange(products);
+        }
     }
 
     public void DeleteCounterparty(string name)
@@ -113,6 +148,7 @@ public sealed class CatalogService(AppState state)
         const string unassignedName = "Без заказчика";
         state.CommitMutation(() =>
         {
+            state.Database.CounterpartyLogos.Remove(name);
             state.Database.Counterparties.RemoveAll(item => string.Equals(item, name, StringComparison.CurrentCultureIgnoreCase));
             foreach (var project in state.Database.Projects.Where(project => string.Equals(project.Counterparty, name, StringComparison.CurrentCultureIgnoreCase)))
             {
@@ -127,6 +163,7 @@ public sealed class CatalogService(AppState state)
                 target.AddRange(catalogProducts);
             }
         });
+        NotifyCounterpartyLogosChanged();
     }
 
     public void SaveProduct(string counterparty, Product? previous, Product saved)

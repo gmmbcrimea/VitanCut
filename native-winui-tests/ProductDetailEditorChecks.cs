@@ -107,6 +107,32 @@ internal static class ProductDetailEditorChecks
         check(editor.MaterialFor(added)?.Material == updated,
             "Editor material lookup refreshes when the catalog revision changes");
 
+        var legMaterial = new Material { Name = "Adjustable leg", Unit = "pc", Group = LegDetails.Group };
+        var otherHardware = new Material { Name = "Handle", Unit = "pc" };
+        state.CommitMutation(() => state.Database.Materials["Hardware"] = [legMaterial, otherHardware]);
+        var legChoice = new MaterialChoice("Hardware", legMaterial);
+        var legDetail = LegDetails.Create(legChoice);
+        product.Details.Add(legDetail);
+        check(legDetail.IsGeneratedLeg && legDetail.Name == LegDetails.Name && legDetail.Qty == 4 &&
+            legDetail.LengthExpr == LegDetails.HeightExpression, "Automatic legs retain their identity and height formula");
+        check(editor.ApplyMaterial(legDetail, new MaterialChoice("Hardware", otherHardware)).Status ==
+            MaterialEditStatus.InvalidLegMaterial && legDetail.MaterialId == legMaterial.Id,
+            "Leg material enforcement rejects an unrelated catalog choice without changing the row");
+        check(editor.ApplyMaterial(legDetail, legChoice).Status == MaterialEditStatus.Applied,
+            "Automatic legs accept materials from the legs group");
+        var legacy = new Detail { Name = LegDetails.Name, MaterialId = legMaterial.Id, Type = "Hardware",
+            LengthExpr = LegDetails.HeightExpression, WidthExpr = "0" };
+        var manual = new Detail { Name = "Manual leg", MaterialId = legMaterial.Id, Type = "Hardware" };
+        var legacyProduct = new Product { HasLegs = true, Details = [legacy, manual] };
+        LegDetails.RecognizeLegacy(state, legacyProduct);
+        check(legacy.IsGeneratedLeg && !manual.IsGeneratedLeg,
+            "Legacy automatic legs are recognized without marking ordinary manually added details");
+        state.Save();
+        var savedState = new AppState();
+        savedState.Load(path);
+        check(savedState.Database.Projects[0].Products[0].Details.Single(detail => detail.Id == legDetail.Id).IsGeneratedLeg,
+            "The automatic leg marker survives database save and reload");
+
         var previewPath = Path.Combine(output, "product-detail-preview.json");
         var preview = new AppState();
         preview.Load(previewPath);

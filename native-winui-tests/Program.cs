@@ -32,6 +32,11 @@ await CloudHealthChecks.RunAsync(Check, output);
 MaterialPickerJournalChecks.Run(Check, output);
 ProductDetailEditorChecks.Run(Check, output);
 MaterialPickerBrowseChecks.Run(Check);
+MaterialPickerHistoryChecks.Run(Check, output);
+CatalogListUpdatesChecks.Run(Check);
+ProjectProductCommandsChecks.Run(Check, output);
+InterfaceOptionsChecks.Run(Check, output);
+CounterpartyLogoChecks.Run(Check, output);
 var windowSession = new WindowPlacementService(Path.Combine(output, "window-session.json"));
 Check(windowSession.Load() is null, "A missing window session keeps the default placement");
 var normalWindow = new WindowSessionState(-1500, 80, -400, 780, false);
@@ -1403,6 +1408,17 @@ ReportDocumentService.SavePdf(illustrated, Path.Combine(output, "illustrated.pdf
 ReportDocumentService.SaveXlsx(illustrated, Path.Combine(output, "illustrated.xlsx"));
 using (var book = new ClosedXML.Excel.XLWorkbook(Path.Combine(output, "illustrated.xlsx")))
     Check(book.Worksheets.Sum(sheet => sheet.Pictures.Count) == 1, "Embedded product image exported to XLSX");
+state.Database.CounterpartyLogos[project.Counterparty] = product.Image;
+var customerIllustrated = CuttingService.BuildDetailingReport(state, project);
+Check(customerIllustrated.CounterpartyLogo == product.Image &&
+    CuttingService.FilterDetailingReportToDsp(customerIllustrated).CounterpartyLogo == product.Image,
+    "Customer logo is captured by detailing reports and survives DSP filtering");
+ReportDocumentService.SavePdf(customerIllustrated, Path.Combine(output, "customer-logo.pdf"));
+ReportDocumentService.SaveXlsx(customerIllustrated, Path.Combine(output, "customer-logo.xlsx"));
+using (var book = new ClosedXML.Excel.XLWorkbook(Path.Combine(output, "customer-logo.xlsx")))
+    Check(book.Worksheets.Sum(sheet => sheet.Pictures.Count) == 2 &&
+        book.Worksheet(1).Cell(3, 1).GetString().Contains(project.Counterparty),
+        "Customer logo appears beside the customer name in Excel without removing the product picture");
 ReportDocumentService.SavePdf(cut with { Groups = [] }, Path.Combine(output, "empty.pdf"));
 Check(File.ReadAllBytes(Path.Combine(output, "cut.pdf")).AsSpan(0, 4).SequenceEqual("%PDF"u8), "PDF document generated");
 using (var book = new ClosedXML.Excel.XLWorkbook(Path.Combine(output, "cut.xlsx")))

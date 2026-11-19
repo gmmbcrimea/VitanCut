@@ -28,14 +28,15 @@ public sealed class NavigationController
             tab.Button.CornerRadius = new CornerRadius(8);
         }
 
-        if (!animationsEnabled)
+        if (!animationsEnabled || !new Windows.UI.ViewManagement.UISettings().AnimationsEnabled)
         {
             active.Page.Opacity = 1;
             return;
         }
 
         active.Page.Opacity = 0;
-        var animation = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(180)) };
+        var animation = new DoubleAnimation { To = 1, Duration = new Duration(
+            Services.InterfaceOptions.Duration(TimeSpan.FromMilliseconds(180), App.Preferences.Current.AnimationSpeed)) };
         Storyboard.SetTarget(animation, active.Page);
         Storyboard.SetTargetProperty(animation, "Opacity");
         var storyboard = new Storyboard();

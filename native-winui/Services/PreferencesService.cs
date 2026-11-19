@@ -10,6 +10,8 @@ public sealed class PreferencesService(AppState state)
     public event EventHandler? Changed;
 
     public void SetLanguage(string language) => Commit(() => Current.Language = UiText.NormalizeLanguage(language));
+    public void SetMaterialPickerOrder(string order) =>
+        Commit(() => Current.MaterialPickerOrder = MaterialPickerHistory.NormalizeOrder(order));
 
     public void SetTheme(string theme)
     {
@@ -31,6 +33,15 @@ public sealed class PreferencesService(AppState state)
         Commit(() => Current.AnimationsEnabled = value);
     }
 
+    public void SetInterfaceScale(string scale) => Commit(() => Current.InterfaceScale = InterfaceOptions.Scale(scale));
+    public void SetMoreTransparency(bool value) => Commit(() => Current.MoreTransparency = value);
+    public void SetAnimationSpeed(double speed) => Commit(() => Current.AnimationSpeed = InterfaceOptions.Speed(speed));
+    public void SetCursorRevealRadius(double radius) => Commit(() => Current.CursorRevealRadius = InterfaceOptions.Radius(radius));
+    public void SetCutFileNameFormat(string format) => Commit(() => Current.CutFileNameFormat = InterfaceOptions.FileNameFormat(format));
+    public void SetDetailingFileNameFormat(string format) => Commit(() => Current.DetailingFileNameFormat = InterfaceOptions.FileNameFormat(format));
+    public void SetRemainderColor(string color) => Commit(() => Current.RemainderColor = InterfaceOptions.Remainder(Current.CutPalette, color));
+    public void SetContrastCutLines(bool value) => Commit(() => Current.ContrastCutLines = value);
+
     public void SetAcrylicBackgroundEnabled(bool value)
     {
         Commit(() => Current.AcrylicBackgroundEnabled = value);
@@ -43,7 +54,11 @@ public sealed class PreferencesService(AppState state)
 
     public void SetCutPalette(string palette)
     {
-        Commit(() => Current.CutPalette = palette is "green" or "yellow" or "orange" or "purple" ? palette : "blue");
+        Commit(() =>
+        {
+            Current.CutPalette = palette is "green" or "yellow" or "orange" or "purple" ? palette : "blue";
+            Current.RemainderColor = InterfaceOptions.Remainder(Current.CutPalette, Current.RemainderColor);
+        });
     }
 
 

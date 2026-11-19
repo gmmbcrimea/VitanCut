@@ -126,7 +126,13 @@ public static class ReportDocumentService
         page.Header().Column(column =>
         {
             column.Item().Text("Деталировка").FontSize(20).SemiBold();
-            column.Item().Text($"{report.ProjectName} · {report.Counterparty} · {report.Address}").FontColor(Colors.Grey.Darken1);
+            column.Item().Text(text =>
+            {
+                text.Span(report.ProjectName + " · ").FontColor(Colors.Grey.Darken1);
+                if (ProductImageData.Read(report.CounterpartyLogo) is { } logo)
+                    text.Element().Width(13).Height(10).PaddingRight(3).Image(logo).FitArea();
+                text.Span($"{report.Counterparty} · {report.Address}").FontColor(Colors.Grey.Darken1);
+            });
         });
         page.Content().PaddingTop(14).Column(column =>
         {
@@ -218,6 +224,13 @@ public static class ReportDocumentService
     {
         var book = NewWorkbook("Деталировка", report.ProjectName, report.Counterparty);
         var sheet = book.Worksheet(1);
+        if (ProductImageData.Read(report.CounterpartyLogo) is { } logo)
+        {
+            using var stream = new MemoryStream(logo);
+            sheet.AddPicture(stream).MoveTo(sheet.Cell(3, 1), 2, 2).WithSize(16, 16);
+            sheet.Row(3).Height = 18;
+            sheet.Cell(3, 1).Style.Alignment.Indent = 3;
+        }
         var row = 5;
         WriteHeaders(sheet, row++, "Изделие", "Деталь", "Тип", "Материал", "Кол-во", "Длина", "Ширина", "Квадратура, м²", "Стоимость, руб.");
         foreach (var product in report.Products)

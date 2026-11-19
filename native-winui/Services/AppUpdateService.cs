@@ -196,8 +196,8 @@ public sealed class AppUpdateService
                 !line.StartsWith("New Contributors", StringComparison.OrdinalIgnoreCase) &&
                 !line.StartsWith("Новые участники", StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        var summary = string.Join(" · ", cleaned);
-        return summary.Length <= 480 ? summary : summary[..477].TrimEnd() + "...";
+        var summary = string.Join("\n", cleaned);
+        return summary.Length <= 4000 ? summary : summary[..3997].TrimEnd() + "...";
     }
 
     public async Task<bool> InstallAsync(AppUpdateInfo update, IProgress<UpdateDownloadProgress>? progress = null,

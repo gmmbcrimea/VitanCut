@@ -9,6 +9,13 @@ public static class UiText
 {
     public static string Language { get; set; } = "ru";
     public static string NormalizeLanguage(string? language) => language is "en" or "de" or "es" or "zh-Hans" ? language : "ru";
+    public static string CurrencySymbol(string? language) => NormalizeLanguage(language) switch
+    {
+        "en" => "$",
+        "de" or "es" => "\u20AC",
+        "zh-Hans" => "\u00A5",
+        _ => "\u20BD"
+    };
     private static readonly ConcurrentDictionary<string, Dictionary<string, string>> Catalogs = new();
     private static readonly ConcurrentDictionary<string, List<(Regex Pattern, string Translation)>> Templates = new();
     private static readonly Regex Placeholder = new(@"\{\d+(?:,[^}:]+)?(?::[^}]+)?\}");

@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:l10n="using:VitanCut.WinUI.Services"
+    xmlns:controls="using:VitanCut.WinUI.Controls"
     Title="Vitan-Cut - Изделие">
 
   <Window.SystemBackdrop>
@@ -25,7 +26,7 @@
       </Grid.ColumnDefinitions>
       <StackPanel Spacing="4">
         <TextBlock x:Name="TitleText" Text="Изделие" Style="{StaticResource SectionTitleTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
-        <TextBlock x:Name="SubtitleText" Text="Карточка изделия, размеры, фиксированные размеры и детали" Style="{StaticResource MutedTextBlockStyle}"  l10n:UiLocalization.Properties="Text"/>
+        <controls:CounterpartyLabel x:Name="SubtitleText" Foreground="{StaticResource AppTextBrush}" Opacity="0.72"/>
       </StackPanel>
       <Border Grid.Column="1"
               MinWidth="250"

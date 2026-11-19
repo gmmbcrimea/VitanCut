@@ -27,6 +27,7 @@ public static class ThemeService
     {
         var registration = Registrations.GetValue(window, static owner => new Registration(owner));
         ApplySurfaces(preferences);
+        UiAnimationSettings.Apply(preferences);
         ApplyAccent(preferences);
         if (window.Content is not FrameworkElement root) return;
 
@@ -65,14 +66,14 @@ public static class ThemeService
         private CursorReveal? _reveal;
         private bool _revealSuppressed;
         private bool _layoutInitialized;
-        private bool _compactMode;
+        private string? _scale;
         private bool _animationsEnabled;
 
         public bool NeedsLayout(AppPreferences preferences)
         {
-            var changed = !_layoutInitialized || _compactMode != preferences.CompactMode || _animationsEnabled != preferences.AnimationsEnabled;
+            var changed = !_layoutInitialized || _scale != preferences.InterfaceScale || _animationsEnabled != preferences.AnimationsEnabled;
             _layoutInitialized = true;
-            _compactMode = preferences.CompactMode;
+            _scale = preferences.InterfaceScale;
             _animationsEnabled = preferences.AnimationsEnabled;
             return changed;
         }
@@ -82,7 +83,7 @@ public static class ThemeService
             var enabled = !_revealSuppressed && preferences.CursorRevealEnabled && _system.AdvancedEffectsEnabled && !new AccessibilitySettings().HighContrast;
             if (_reveal is null && enabled && window.Content is FrameworkElement { XamlRoot: not null } root)
                 _reveal = new CursorReveal(window, root);
-            _reveal?.Update(enabled);
+            _reveal?.Update(enabled, InterfaceOptions.Radius(preferences.CursorRevealRadius));
         }
 
         public void SetCursorRevealSuppressed(Window window, bool suppressed)
@@ -143,16 +144,19 @@ public static class ThemeService
             (double)element.GetValue(OriginalColumnSpacingProperty),
             (double)element.GetValue(OriginalRowSpacingProperty));
     }
-    private static Thickness DensePadding(Thickness padding) => new(
-        UiLayout.CompactInset(padding.Left), UiLayout.CompactInset(padding.Top),
-        UiLayout.CompactInset(padding.Right), UiLayout.CompactInset(padding.Bottom));
+    private static Thickness ScalePadding(Thickness padding, string scale) => new(
+        InterfaceOptions.Inset(padding.Left, scale), InterfaceOptions.Inset(padding.Top, scale),
+        InterfaceOptions.Inset(padding.Right, scale), InterfaceOptions.Inset(padding.Bottom, scale));
     public static void ApplyLayout(FrameworkElement root, AppPreferences preferences)
     {
         var compact = preferences.CompactMode;
+        var scale = InterfaceOptions.Scale(preferences.InterfaceScale);
+        var dense = scale == "compact";
+        var controlHeight = InterfaceOptions.ControlHeight(scale);
         if (root is ScrollViewer scroll)
         {
             var original = OriginalMetrics(root, scroll.Padding);
-            scroll.Padding = compact ? DensePadding(original.Padding) : original.Padding;
+            scroll.Padding = ScalePadding(original.Padding, scale);
             if (scroll.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled)
                 scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             if (scroll.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled)
@@ -164,13 +168,17 @@ public static class ThemeService
         if (root is Button button)
         {
             if (button.Tag is "cut-tool" or "splitter" or "icon-tool") return;
-            button.MinHeight = compact ? 32 : 40;
-            button.Padding = compact ? new Thickness(8, 3, 8, 3) : new Thickness(16, 8, 16, 8);
+            if (button.Content is null && button.Width is > 0 and <= 42) return;
+            button.MinHeight = controlHeight;
+            button.Padding = dense ? new Thickness(6, 2, 6, 2) : compact ? new Thickness(8, 3, 8, 3) : new Thickness(16, 8, 16, 8);
             CommandAppearance.Decorate(button);
             if (button.Tag is "projects" or "customers" or "materials" or "catalog" or "settings")
             {
                 button.Padding = new Thickness(4);
-                button.Height = compact ? 60 : 76;
+                button.MinHeight = InterfaceOptions.NavigationHeight(scale);
+                button.Height = double.NaN;
+                if (button.Content is StackPanel navigationContent)
+                    navigationContent.Spacing = InterfaceOptions.NavigationGap(scale);
                 return;
             }
             if (button.Content is FrameworkElement buttonContent)
@@ -179,8 +187,8 @@ public static class ThemeService
         }
         if (root is TextBox text)
         {
-            text.MinHeight = compact ? 32 : 40;
-            text.Padding = compact ? new Thickness(8, 3, 8, 3) : new Thickness(12, 8, 12, 8);
+            text.MinHeight = controlHeight;
+            text.Padding = dense ? new Thickness(6, 2, 6, 2) : compact ? new Thickness(8, 3, 8, 3) : new Thickness(12, 8, 12, 8);
             if (text.Tag is "search-field") text.Padding = new Thickness(36, text.Padding.Top, text.Padding.Right, text.Padding.Bottom);
             return;
         }
@@ -192,7 +200,7 @@ public static class ThemeService
         if (root is NumberBox or ComboBox or ToggleSwitch or CheckBox or RadioButton)
         {
             if (root is Control control)
-                control.MinHeight = compact ? 32 : 40;
+                control.MinHeight = controlHeight;
             return;
         }
         if (root is Border { Shadow: ThemeShadow } elevated)
@@ -200,20 +208,20 @@ public static class ThemeService
         if (root is Border border)
         {
             var original = OriginalMetrics(root, border.Padding);
-            border.Padding = compact ? DensePadding(original.Padding) : original.Padding;
+            border.Padding = ScalePadding(original.Padding, scale);
         }
         if (root is Grid grid)
         {
             var original = OriginalMetrics(root, grid.Padding, columnSpacing: grid.ColumnSpacing, rowSpacing: grid.RowSpacing);
-            grid.Padding = compact ? DensePadding(original.Padding) : original.Padding;
-            grid.ColumnSpacing = compact ? UiLayout.CompactGap(original.ColumnSpacing) : original.ColumnSpacing;
-            grid.RowSpacing = compact ? UiLayout.CompactGap(original.RowSpacing) : original.RowSpacing;
+            grid.Padding = ScalePadding(original.Padding, scale);
+            grid.ColumnSpacing = InterfaceOptions.Gap(original.ColumnSpacing, scale);
+            grid.RowSpacing = InterfaceOptions.Gap(original.RowSpacing, scale);
         }
         if (root is StackPanel stack)
         {
             var original = OriginalMetrics(root, stack.Padding, stack.Spacing);
-            stack.Padding = compact ? DensePadding(original.Padding) : original.Padding;
-            stack.Spacing = compact ? UiLayout.CompactGap(original.Spacing) : original.Spacing;
+            stack.Padding = ScalePadding(original.Padding, scale);
+            stack.Spacing = InterfaceOptions.Gap(original.Spacing, scale);
         }
         if (root is Panel panel)
             panel.ChildrenTransitions = preferences.AnimationsEnabled ? null : new TransitionCollection();
@@ -247,14 +255,15 @@ public static class ThemeService
         var contrast = new AccessibilitySettings().HighContrast;
         var effects = system.AdvancedEffectsEnabled && !contrast;
         var transparent = BackdropPolicy.UseAcrylic(preferences.AcrylicBackgroundEnabled, effects, contrast);
+        var sectionsTransparent = transparent && preferences.MoreTransparency;
         var dark = preferences.Theme == "dark" || (preferences.Theme == "auto" && system.GetColorValue(UIColorType.Background).R < 80);
         var background = system.GetColorValue(UIColorType.Background);
         var foreground = system.GetColorValue(UIColorType.Foreground);
         SetBrush("PageSurfaceBrush", dark ? (effects ? "#E0111418" : "#111418") : (effects ? "#D8CCD5DE" : "#CCD5DE"));
-        SetBrush("PanelSurfaceBrush", dark ? (transparent ? "#602D3237" : "#2D3237") : (transparent ? "#70FFFFFF" : "#FFFFFF"));
+        SetBrush("PanelSurfaceBrush", dark ? (sectionsTransparent ? "#602D3237" : "#2D3237") : (sectionsTransparent ? "#70FFFFFF" : "#FFFFFF"));
         SetBrush("SidebarSurfaceBrush", dark ? (effects ? "#E820262C" : "#20262C") : (effects ? "#E8E3EAF0" : "#E3EAF0"));
-        SetBrush("SectionSurfaceBrush", dark ? "#20262C" : "#EDF1F5");
-        SetBrush("SoftPanelBrush", dark ? "#1C2227" : "#E5EBF0");
+        SetBrush("SectionSurfaceBrush", dark ? (sectionsTransparent ? "#7020262C" : "#20262C") : (sectionsTransparent ? "#70EDF1F5" : "#EDF1F5"));
+        SetBrush("SoftPanelBrush", dark ? (sectionsTransparent ? "#801C2227" : "#1C2227") : (sectionsTransparent ? "#80E5EBF0" : "#E5EBF0"));
         SetBrush("PanelStrokeBrush", dark ? "#708EA0AF" : "#70808B96");
         SetBrush("AppTextBrush", dark ? "#F2F5F7" : "#172025");
         SetBrush("UiDangerBrush", dark ? "#FFB4AB" : "#B42318");
@@ -272,9 +281,10 @@ public static class ThemeService
         foreach (var key in new[] { "ButtonBorderBrush", "TextControlBorderBrush" }) SetBrush(key, dark ? "#70D1E0E8" : "#70808B96");
         foreach (var key in new[] { "ButtonBorderBrushPointerOver", "TextControlBorderBrushPointerOver" }) SetBrush(key, dark ? "#80D1E0E8" : "#80808B96");
         SetGradient("GlassEdgeBrush", dark ? ["#A0DAEBF5", "#708EA0AF", "#508EA0AF", "#808EA0AF"] : ["#FFFFFFFF", "#80808B96", "#60808B96", "#C0FFFFFF"]);
-        SetGradient("MetricSurfaceBrush", dark ? ["#F84A545D", "#F0374048"] : ["#FFF5F8FA", "#FFE0E8EF"]);
-        SetGradient("PaneGlassBrush", dark ? (transparent ? ["#50383F46", "#40292E34"] : ["#F2383F46", "#F0292E34"])
-            : (transparent ? ["#60FFFFFF", "#50F4F7FA"] : ["#FEFFFFFF", "#F0F4F7FA"]));
+        SetGradient("MetricSurfaceBrush", dark ? (sectionsTransparent ? ["#704A545D", "#60374048"] : ["#F84A545D", "#F0374048"])
+            : (sectionsTransparent ? ["#70F5F8FA", "#60E0E8EF"] : ["#FFF5F8FA", "#FFE0E8EF"]));
+        SetGradient("PaneGlassBrush", dark ? (sectionsTransparent ? ["#50383F46", "#40292E34"] : ["#FF383F46", "#FF292E34"])
+            : (sectionsTransparent ? ["#60FFFFFF", "#50F4F7FA"] : ["#FFFFFFFF", "#FFF4F7FA"]));
         var acrylic = (AcrylicBrush)Application.Current.Resources["GlassChromeBrush"];
         acrylic.TintColor = ParseColor(dark ? "#24292D" : "#F4F7F9");
         acrylic.FallbackColor = contrast ? background : acrylic.TintColor;

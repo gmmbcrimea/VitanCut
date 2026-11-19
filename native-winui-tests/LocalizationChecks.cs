@@ -12,6 +12,10 @@ internal static class LocalizationChecks
         var expectedSave = new Dictionary<string, string> { ["en"] = "Save", ["de"] = "Speichern", ["es"] = "Guardar", ["zh-Hans"] = "保存" };
         var originalLanguage = UiText.Language;
         var originalCulture = CultureInfo.CurrentCulture;
+        check(UiText.CurrencySymbol("ru") == "\u20BD" && UiText.CurrencySymbol("en") == "$" &&
+            UiText.CurrencySymbol("de") == "\u20AC" && UiText.CurrencySymbol("es") == "\u20AC" &&
+            UiText.CurrencySymbol("zh-Hans") == "\u00A5" && UiText.CurrencySymbol(null) == "\u20BD",
+            "Payroll currency icon follows the active interface language with a Russian fallback");
         try
         {
             foreach (var (language, expected) in expectedSave)
